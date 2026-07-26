@@ -29,6 +29,9 @@ async def sync_page() -> None:
         with ui.row().classes("items-center gap-3 q-mb-md"):
             status_icon = ui.icon("", size="24px")
             status_label = ui.label("")
+            logout_btn = ui.button("Log out", icon="logout", on_click=lambda: _do_logout()).props(
+                "flat dense color=negative size=sm"
+            )
 
         def _refresh_status() -> None:
             ok = garmin_sync.tokens_exist()
@@ -36,11 +39,19 @@ async def sync_page() -> None:
                 f"name={'check_circle' if ok else 'error'} "
                 f"color={'positive' if ok else 'negative'}"
             )
-            status_label.text = (
-                "Garmin tokens cached — ready to sync"
-                if ok
-                else "Not authenticated — enter credentials below"
-            )
+            if ok:
+                logged_in_email = nicegui_app.storage.general.get("garmin_email", "")
+                status_label.text = (
+                    f"Logged in as {logged_in_email}" if logged_in_email else "Garmin tokens cached — ready to sync"
+                )
+            else:
+                status_label.text = "Not authenticated — enter credentials below"
+            logout_btn.set_visibility(ok)
+
+        def _do_logout() -> None:
+            garmin_sync.logout()
+            _refresh_status()
+            ui.notify("Logged out — tokens removed", type="info")
 
         _refresh_status()
 
@@ -59,8 +70,6 @@ async def sync_page() -> None:
                 ui.input(label="Password (not stored)", password=True, password_toggle_button=True)
                 .props("outlined dense style='width:280px'")
             )
-
-        auth_status = ui.label("").classes("text-caption text-grey-6")
 
         async def _do_authenticate() -> None:
             email = email_input.value.strip()
@@ -89,9 +98,11 @@ async def sync_page() -> None:
                 _refresh_status()
                 ui.notify("Authenticated successfully!", type="positive")
 
-        auth_btn = ui.button("Authenticate", icon="login", on_click=_do_authenticate).props(
-            "outlined color=primary"
-        )
+        with ui.row().classes("items-center gap-3"):
+            auth_btn = ui.button("Authenticate", icon="login", on_click=_do_authenticate).props(
+                "outlined color=primary"
+            )
+            auth_status = ui.label("").classes("text-caption text-grey-6")
 
     # ── MFA dialog ───────────────────────────────────────────────────────────
     with ui.dialog() as mfa_dialog, ui.card().classes("q-pa-lg"):
@@ -148,13 +159,6 @@ async def sync_page() -> None:
                 ui.input(label="Until (optional)", value="")
                 .props("outlined dense type=date style='width:180px'")
             )
-
-        # Progress log
-        progress_col = ui.column().classes("w-full gap-0 q-mb-md")
-        progress_col.set_visibility(False)
-
-        # Results card
-        result_box = ui.element("div").classes("w-full")
 
         async def _do_sync() -> None:
             if _sync_running[0]:
@@ -221,6 +225,13 @@ async def sync_page() -> None:
                 _render_result(result)
 
         sync_btn = ui.button("Sync", icon="sync", on_click=_do_sync).props("color=primary")
+
+        # Progress log
+        progress_col = ui.column().classes("w-full gap-0 q-mt-md")
+        progress_col.set_visibility(False)
+
+        # Results card
+        result_box = ui.element("div").classes("w-full")
 
     # ── Result renderer (called after sync completes) ─────────────────────────
 

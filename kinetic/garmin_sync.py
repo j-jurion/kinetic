@@ -24,11 +24,17 @@ def tokens_exist() -> bool:
     return (TOKEN_DIR / "garmin_tokens.json").exists()
 
 
+def logout() -> None:
+    """Remove cached Garmin tokens from disk."""
+    token_file = TOKEN_DIR / "garmin_tokens.json"
+    token_file.unlink(missing_ok=True)
+
+
 def _garmin_id_exists(garmin_activity_id: int) -> bool:
     with Session(engine) as session:
         return (
             session.exec(
-                select(Activity).where(
+                select(Activity.id).where(
                     Activity.garmin_activity_id == garmin_activity_id
                 )
             ).first()

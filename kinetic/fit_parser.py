@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -102,7 +102,7 @@ def _build_single_activity(
     if isinstance(start_time, str):
         start_time = datetime.fromisoformat(start_time)
 
-    activity_date = start_time or datetime.utcnow()
+    activity_date = start_time or datetime.now(timezone.utc)
     date_str = activity_date.strftime("%Y-%m-%d")
     if activity_name_hint:
         activity_name = f"{activity_name_hint} {date_str}"
@@ -180,7 +180,7 @@ def _build_multisport(
     first_start = sessions[0].get("start_time") if sessions else None
     if isinstance(first_start, str):
         first_start = datetime.fromisoformat(first_start)
-    activity_date = first_start or datetime.utcnow()
+    activity_date = first_start or datetime.now(timezone.utc)
     date_str = activity_date.strftime("%Y-%m-%d")
 
     sport_sessions = [s for s in sessions if str(s.get("sport", "")).lower() != "transition"]

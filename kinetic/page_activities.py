@@ -112,7 +112,7 @@ def _db_save_activity(activity_id: Optional[int], data: dict) -> dict:
             activity = session.get(Activity, activity_id)
             for k, v in data.items():
                 setattr(activity, k, v)
-            activity.updated_at = datetime.utcnow()
+            activity.updated_at = datetime.now(timezone.utc)
         else:
             activity = Activity(**data)
         session.add(activity)

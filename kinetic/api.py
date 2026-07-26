@@ -1,5 +1,5 @@
-from datetime import datetime
-from pathlib import Path
+import json
+from datetime import datetime, timezone
 from typing import Optional
 
 import aiofiles
@@ -11,11 +11,11 @@ from sqlmodel import Session, col, select
 
 from kinetic.database import engine
 from kinetic.fit_parser import parse_fit_file
+from kinetic.garmin_sync import UPLOAD_DIR
 from kinetic.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
 
 router = APIRouter()
 
-UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 
@@ -28,7 +28,6 @@ def get_activity_map(activity_id: int) -> HTMLResponse:
     if not activity or not activity.route_json:
         raise HTTPException(status_code=404, detail="No route data for this activity")
 
-    import json
     coords: list[list[float]] = json.loads(activity.route_json)
     lats = [c[0] for c in coords]
     lons = [c[1] for c in coords]
@@ -129,7 +128,7 @@ def update_activity(activity_id: int, data: ActivityUpdate) -> Activity:
             raise HTTPException(status_code=404, detail="Activity not found")
         for key, value in data.model_dump(exclude_unset=True).items():
             setattr(activity, key, value)
-        activity.updated_at = datetime.utcnow()
+        activity.updated_at = datetime.now(timezone.utc)
         session.add(activity)
         session.commit()
         session.refresh(activity)
@@ -162,7 +161,7 @@ async def upload_fit(file: UploadFile) -> Activity:
     async with aiofiles.open(dest, "wb") as f:
         await f.write(await file.read())
 
-    activity, laps, best_efforts = parse_fit_file(dest)
+    activity, laps, best_efforts, _children = parse_fit_file(dest)
 
     with Session(engine) as session:
         session.add(activity)
