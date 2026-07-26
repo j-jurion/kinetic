@@ -1,0 +1,15 @@
+Metadata-Version: 2.4
+Name: kinetic
+Version: 0.1.0
+Summary: Activity tracking web app
+Requires-Python: >=3.12
+Requires-Dist: nicegui>=2.0.0
+Requires-Dist: fastapi>=0.111.0
+Requires-Dist: sqlmodel>=0.0.19
+Requires-Dist: fitparse>=1.2.0
+Requires-Dist: uvicorn[standard]>=0.30.0
+Requires-Dist: python-multipart>=0.0.9
+Requires-Dist: plotly>=5.22.0
+Requires-Dist: pandas>=2.2.0
+Requires-Dist: aiofiles>=23.2.1
+Requires-Dist: httpx>=0.27.0

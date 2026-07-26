@@ -1,0 +1,15 @@
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+
+# Environment variables / secrets
+.env
+
+# IDE settings
+.vscode/
+.idea/
