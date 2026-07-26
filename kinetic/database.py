@@ -15,6 +15,9 @@ def create_db_and_tables() -> None:
         if "parent_id" not in existing:
             conn.execute(__import__('sqlalchemy').text("ALTER TABLE activity ADD COLUMN parent_id INTEGER REFERENCES activity(id)"))
             conn.commit()
+        if "garmin_activity_id" not in existing:
+            conn.execute(__import__('sqlalchemy').text("ALTER TABLE activity ADD COLUMN garmin_activity_id INTEGER"))
+            conn.commit()
 
 
 def get_session() -> Session:

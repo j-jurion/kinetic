@@ -9,7 +9,7 @@ from sqlmodel import col, select
 
 from kinetic.database import engine
 from kinetic.fit_parser import parse_fit_file
-from kinetic.models import Activity, ActivityFriend, ActivityKind, BestEffort, Friend, Lap, SportType
+from kinetic.models import Activity, ActivityFriend, ActivityKind, BestEffort, Friend, Lap, RaceResult, SportType
 from kinetic.ui_helpers import (
     KINDS,
     SPORT_COLORS,
@@ -28,13 +28,22 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 def _db_set_activity_friends(activity_id: int, friend_ids: list[int]) -> None:
     from sqlmodel import Session
     with Session(engine) as session:
-        existing = session.exec(
-            select(ActivityFriend).where(ActivityFriend.activity_id == activity_id)
-        ).all()
-        for link in existing:
-            session.delete(link)
-        for fid in friend_ids:
-            session.add(ActivityFriend(activity_id=activity_id, friend_id=fid))
+        # Collect all activity IDs to update: the activity itself + any children
+        child_ids = [
+            r.id for r in session.exec(
+                select(Activity).where(Activity.parent_id == activity_id)
+            ).all()
+        ]
+        target_ids = [activity_id, *child_ids]
+
+        for tid in target_ids:
+            existing = session.exec(
+                select(ActivityFriend).where(ActivityFriend.activity_id == tid)
+            ).all()
+            for link in existing:
+                session.delete(link)
+            for fid in friend_ids:
+                session.add(ActivityFriend(activity_id=tid, friend_id=fid))
         session.commit()
 
 
@@ -53,7 +62,25 @@ def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
             stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
             stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
         stmt = stmt.order_by(col(Activity.date).desc())
-        return [a.model_dump(mode='json') for a in session.exec(stmt).all()]
+        activities = session.exec(stmt).all()
+
+        activity_ids = [a.id for a in activities]
+        ids_with_result: set[int] = set()
+        if activity_ids:
+            ids_with_result = set(
+                session.exec(
+                    select(RaceResult.activity_id).where(
+                        col(RaceResult.activity_id).in_(activity_ids)
+                    )
+                ).all()
+            )
+
+        result = []
+        for a in activities:
+            d = a.model_dump(mode='json')
+            d['has_race_result'] = a.id in ids_with_result
+            result.append(d)
+        return result
 
 
 def _db_delete_activity(activity_id: int) -> None:
@@ -145,7 +172,10 @@ def activity_row(a: dict, on_refresh) -> None:
             ):
                 ui.icon(icon, size="28px").style(f"color: {SPORT_COLORS.get(sport, '#6b7280')}")
                 with ui.column().classes("gap-0"):
-                    ui.label(a.get("name", "Activity")).classes("text-weight-medium text-body1")
+                    with ui.row().classes("items-center gap-1"):
+                        ui.label(a.get("name", "Activity")).classes("text-weight-medium text-body1")
+                        if a.get("has_race_result"):
+                            ui.icon("emoji_events", size="14px").classes("text-amber-500")
                     ui.label(
                         f"{a.get('date', '')[:10]}  •  {a.get('kind', '').replace('_', ' ').title()}"
                     ).classes("text-caption text-grey-6")

@@ -157,13 +157,25 @@ def _build_single_activity(
     return activity, laps, best_efforts
 
 
+def _detect_multisport_type(sport_sessions: list[dict]) -> SportType:
+    sub_sports = {str(s.get("sport", "")).lower() for s in sport_sessions}
+    has_swim = "swimming" in sub_sports or "open_water_swimming" in sub_sports
+    has_cycle = "cycling" in sub_sports or "biking" in sub_sports
+    has_run = "running" in sub_sports
+    if has_swim and has_cycle and has_run:
+        return SportType.triathlon
+    if has_run and has_cycle and not has_swim:
+        return SportType.duathlon
+    return SportType.multisport
+
+
 def _build_multisport(
     fit_path: Path,
     sessions: list[dict],
     lap_records: list[dict],
     data_points: list[dict],
 ) -> tuple[Activity, list[Lap], list[BestEffort], list[tuple[Activity, list[Lap], list[BestEffort]]]]:
-    """Build a triathlon parent activity and its non-transition children."""
+    """Build a multisport parent activity and its non-transition children."""
     # Determine start time from the first session
     first_start = sessions[0].get("start_time") if sessions else None
     if isinstance(first_start, str):
@@ -173,6 +185,13 @@ def _build_multisport(
 
     sport_sessions = [s for s in sessions if str(s.get("sport", "")).lower() != "transition"]
 
+    parent_sport = _detect_multisport_type(sport_sessions)
+    activity_label = {
+        SportType.triathlon: "Triathlon",
+        SportType.duathlon: "Duathlon",
+        SportType.multisport: "Multisport",
+    }[parent_sport]
+
     total_time = sum(
         float(s.get("total_timer_time") or s.get("total_elapsed_time") or 0) for s in sessions
     )
@@ -181,8 +200,8 @@ def _build_multisport(
     total_cals = sum(int(s.get("total_calories") or 0) for s in sessions)
 
     parent = Activity(
-        name=f"Triathlon {date_str}",
-        sport=SportType.triathlon,
+        name=f"{activity_label} {date_str}",
+        sport=parent_sport,
         kind=ActivityKind.training,
         date=activity_date,
         duration_seconds=total_time,

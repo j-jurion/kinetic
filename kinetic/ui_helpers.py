@@ -1,8 +1,34 @@
 """Shared UI helpers, theme tokens and navigation."""
 from nicegui import ui
 
-SPORTS = ["running", "cycling", "swimming", "hiking", "walking", "triathlon", "strength", "yoga", "other"]
+SPORTS = ["running", "cycling", "swimming", "hiking", "walking", "triathlon", "duathlon", "multisport", "strength", "yoga", "other"]
 KINDS = ["race", "training", "easy", "social", "long_run", "tempo", "interval", "recovery", "other"]
+
+# SVG ring icons for multisport disciplines
+# Three rings (swim · bike · run)
+_TRIATHLON_ICON = (
+    "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+    "%3Ccircle cx='4' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='12' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='20' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
+    "%3C/svg%3E"
+)
+# Two rings (run · bike)
+_DUATHLON_ICON = (
+    "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+    "%3Ccircle cx='7' cy='12' r='5.5' fill='none' stroke='%23d946ef' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='12' r='5.5' fill='none' stroke='%23d946ef' stroke-width='1.8'/%3E"
+    "%3C/svg%3E"
+)
+# Four rings in a 2×2 grid (other multisport)
+_MULTISPORT_ICON = (
+    "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+    "%3Ccircle cx='7' cy='7' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='7' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='7' cy='17' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='17' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
+    "%3C/svg%3E"
+)
 
 SPORT_ICONS = {
     "running": "directions_run",
@@ -10,21 +36,25 @@ SPORT_ICONS = {
     "swimming": "pool",
     "hiking": "hiking",
     "walking": "directions_walk",
-    "triathlon": "sports",
+    "triathlon": _TRIATHLON_ICON,
+    "duathlon": _DUATHLON_ICON,
+    "multisport": _MULTISPORT_ICON,
     "strength": "fitness_center",
     "yoga": "self_improvement",
     "other": "sports",
 }
 
 SPORT_COLORS = {
-    "running": "#f97316",
-    "cycling": "#3b82f6",
-    "swimming": "#06b6d4",
-    "hiking": "#22c55e",
+    "running": "#830000",
+    "cycling": "#036627",
+    "swimming": "#3b82f6",
+    "hiking": "#aa7400",
     "walking": "#84cc16",
     "triathlon": "#8b5cf6",
+    "duathlon": "#d946ef",
+    "multisport": "#c37aac",
     "strength": "#ec4899",
-    "yoga": "#f59e0b",
+    "yoga": "#0bcaf5",
     "other": "#6b7280",
 }
 

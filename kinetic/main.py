@@ -12,6 +12,7 @@ from kinetic.page_activity_detail import activity_detail_page
 from kinetic.page_best_efforts import best_efforts_page
 from kinetic.page_friends import friends_page
 from kinetic.page_graphs import graphs_page
+from kinetic.page_sync import sync_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
@@ -69,6 +70,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
                 ("Friends", "people", "/friends"),
+                ("Sync", "sync", "/sync"),
             ]
             for label, icon, path in nav_items:
                 with ui.item(
@@ -127,6 +129,12 @@ async def page_friends_route():
     await _shell(title="Friends", dark_ref=dark_ref, content_fn=friends_page)
 
 
+@ui.page("/sync")
+async def page_sync_route():
+    dark_ref = []
+    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=sync_page)
+
+
 @ui.page("/activity/{activity_id}")
 async def page_activity_detail(activity_id: int):
     dark_ref = []
@@ -154,7 +162,7 @@ def main():
     )
 
     import uvicorn
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
+    uvicorn.run(fastapi_app, host="localhost", port=8080)
 
 
 if __name__ == "__main__":

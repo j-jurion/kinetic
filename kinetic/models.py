@@ -12,6 +12,8 @@ class SportType(str, Enum):
     hiking = "hiking"
     walking = "walking"
     triathlon = "triathlon"
+    duathlon = "duathlon"
+    multisport = "multisport"
     strength = "strength"
     yoga = "yoga"
     other = "other"
@@ -70,6 +72,8 @@ class Activity(SQLModel, table=True):
     route_json: Optional[str] = None
     # Parent activity id for multi-sport children (e.g. triathlon sub-sports)
     parent_id: Optional[int] = Field(default=None, foreign_key="activity.id", nullable=True)
+    # Garmin Connect activity ID for deduplication during sync
+    garmin_activity_id: Optional[int] = None
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -101,3 +105,37 @@ class BestEffort(SQLModel, table=True):
     duration_seconds: float
     date: datetime
     year: int
+
+
+# ── Race Results ──────────────────────────────────────────────────────────────
+
+class RaceResult(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    activity_id: int = Field(foreign_key="activity.id", unique=True)
+
+    official_time_seconds: Optional[float] = None
+    bib_number: Optional[str] = None
+    age_group: Optional[str] = None
+
+    overall_rank: Optional[int] = None
+    overall_total: Optional[int] = None
+    gender_rank: Optional[int] = None
+    gender_total: Optional[int] = None
+    age_group_rank: Optional[int] = None
+    age_group_total: Optional[int] = None
+
+    results_url: Optional[str] = None
+    notes: Optional[str] = None
+
+    splits: list["RaceResultSplit"] = Relationship(back_populates="race_result")
+
+
+class RaceResultSplit(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    race_result_id: int = Field(foreign_key="raceresult.id")
+    label: str
+    order: int
+    duration_seconds: Optional[float] = None
+    rank: Optional[int] = None
+
+    race_result: Optional[RaceResult] = Relationship(back_populates="splits")
