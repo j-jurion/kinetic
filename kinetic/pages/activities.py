@@ -1,5 +1,7 @@
 """Activities list page — all data access goes directly through the DB layer."""
-from datetime import datetime
+
+from datetime import datetime, timezone
+from functools import partial
 from pathlib import Path
 from typing import Optional
 
@@ -7,9 +9,18 @@ from loguru import logger
 from nicegui import events, run, ui
 from sqlmodel import col, select
 
-from kinetic.database import engine
+from kinetic.database import engine, require_id
 from kinetic.fit_parser import parse_fit_file
-from kinetic.models import Activity, ActivityFriend, ActivityKind, BestEffort, Friend, Lap, RaceResult, SportType
+from kinetic.models import (
+    Activity,
+    ActivityFriend,
+    ActivityKind,
+    BestEffort,
+    Friend,
+    Lap,
+    RaceResult,
+    SportType,
+)
 from kinetic.ui_helpers import (
     KINDS,
     SPORT_COLORS,
@@ -25,14 +36,15 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 # ── Direct DB helpers (sync — run in thread pool via nicegui.run.io_bound) ────
 
+
 def _db_set_activity_friends(activity_id: int, friend_ids: list[int]) -> None:
     from sqlmodel import Session
+
     with Session(engine) as session:
         # Collect all activity IDs to update: the activity itself + any children
         child_ids = [
-            r.id for r in session.exec(
-                select(Activity).where(Activity.parent_id == activity_id)
-            ).all()
+            r.id
+            for r in session.exec(select(Activity).where(Activity.parent_id == activity_id)).all()
         ]
         target_ids = [activity_id, *child_ids]
 
@@ -49,11 +61,13 @@ def _db_set_activity_friends(activity_id: int, friend_ids: list[int]) -> None:
 
 def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
     from sqlmodel import Session
+
     with Session(engine) as session:
         stmt = select(Activity)
         if sport:
-            # With a sport filter: show activities matching that sport (includes triathlon children).
-            # Triathlon parents have sport=triathlon so they won't appear under e.g. 'running'.
+            # With a sport filter: show activities matching that sport (includes triathlon
+            # children). Triathlon parents have sport=triathlon so they won't appear under
+            # e.g. 'running'.
             stmt = stmt.where(Activity.sport == SportType(sport))
         else:
             # No filter: show top-level activities only (no triathlon sub-sport children)
@@ -77,14 +91,15 @@ def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
 
         result = []
         for a in activities:
-            d = a.model_dump(mode='json')
-            d['has_race_result'] = a.id in ids_with_result
+            d = a.model_dump(mode="json")
+            d["has_race_result"] = a.id in ids_with_result
             result.append(d)
         return result
 
 
 def _db_delete_activity(activity_id: int) -> None:
     from sqlmodel import Session
+
     with Session(engine) as session:
         activity = session.get(Activity, activity_id)
         if not activity:
@@ -94,12 +109,16 @@ def _db_delete_activity(activity_id: int) -> None:
         for child in children:
             for lap in session.exec(select(Lap).where(Lap.activity_id == child.id)).all():
                 session.delete(lap)
-            for be in session.exec(select(BestEffort).where(BestEffort.activity_id == child.id)).all():
+            for be in session.exec(
+                select(BestEffort).where(BestEffort.activity_id == child.id)
+            ).all():
                 session.delete(be)
             session.delete(child)
         for lap in session.exec(select(Lap).where(Lap.activity_id == activity_id)).all():
             session.delete(lap)
-        for be in session.exec(select(BestEffort).where(BestEffort.activity_id == activity_id)).all():
+        for be in session.exec(
+            select(BestEffort).where(BestEffort.activity_id == activity_id)
+        ).all():
             session.delete(be)
         session.delete(activity)
         session.commit()
@@ -107,9 +126,13 @@ def _db_delete_activity(activity_id: int) -> None:
 
 def _db_save_activity(activity_id: Optional[int], data: dict) -> dict:
     from sqlmodel import Session
+
     with Session(engine) as session:
         if activity_id:
-            activity = session.get(Activity, activity_id)
+            existing = session.get(Activity, activity_id)
+            if existing is None:
+                raise ValueError(f"Activity {activity_id} not found")
+            activity = existing
             for k, v in data.items():
                 setattr(activity, k, v)
             activity.updated_at = datetime.now(timezone.utc)
@@ -118,7 +141,7 @@ def _db_save_activity(activity_id: Optional[int], data: dict) -> dict:
         session.add(activity)
         session.commit()
         session.refresh(activity)
-        return activity.model_dump(mode='json')
+        return activity.model_dump(mode="json")
 
 
 def _db_process_fit(file_bytes: bytes, filename: str) -> dict:
@@ -128,34 +151,38 @@ def _db_process_fit(file_bytes: bytes, filename: str) -> dict:
     activity, laps, best_efforts, children = parse_fit_file(dest)
 
     from sqlmodel import Session
+
     with Session(engine) as session:
         session.add(activity)
         session.commit()
         session.refresh(activity)
+        parent_id = require_id(activity.id)
         for lap in laps:
-            lap.activity_id = activity.id
+            lap.activity_id = parent_id
             session.add(lap)
         for be in best_efforts:
-            be.activity_id = activity.id
+            be.activity_id = parent_id
             session.add(be)
         # Save multi-sport children
         for child, child_laps, child_bes in children:
-            child.parent_id = activity.id
+            child.parent_id = parent_id
             session.add(child)
             session.commit()
             session.refresh(child)
+            child_id = require_id(child.id)
             for lap in child_laps:
-                lap.activity_id = child.id
+                lap.activity_id = child_id
                 session.add(lap)
             for be in child_bes:
-                be.activity_id = child.id
+                be.activity_id = child_id
                 session.add(be)
         session.commit()
         session.refresh(activity)
-        return activity.model_dump(mode='json')
+        return activity.model_dump(mode="json")
 
 
 # ── Activity row card ─────────────────────────────────────────────────────────
+
 
 def activity_row(a: dict, on_refresh) -> None:
     sport = a.get("sport", "other")
@@ -167,8 +194,10 @@ def activity_row(a: dict, on_refresh) -> None:
     with ui.card().classes("w-full q-pa-sm q-mb-sm hover:shadow-md transition-shadow"):
         with ui.row().classes("items-center no-wrap w-full gap-2"):
             # Clickable info + stats area
-            with ui.row().classes("items-center gap-3 flex-1 cursor-pointer").on(
-                "click", lambda: ui.navigate.to(f"/activity/{aid}")
+            with (
+                ui.row()
+                .classes("items-center gap-3 flex-1 cursor-pointer")
+                .on("click", lambda: ui.navigate.to(f"/activity/{aid}"))
             ):
                 ui.icon(icon, size="28px").style(f"color: {SPORT_COLORS.get(sport, '#6b7280')}")
                 with ui.column().classes("gap-0"):
@@ -177,13 +206,14 @@ def activity_row(a: dict, on_refresh) -> None:
                         if a.get("has_race_result"):
                             ui.icon("emoji_events", size="14px").classes("text-amber-500")
                     ui.label(
-                        f"{a.get('date', '')[:10]}  •  {a.get('kind', '').replace('_', ' ').title()}"
+                        f"{a.get('date', '')[:10]}  \u2022  "
+                        f"{a.get('kind', '').replace('_', ' ').title()}"
                     ).classes("text-caption text-grey-6")
 
                 with ui.row().classes("items-center gap-6 text-right ml-auto"):
                     if dist:
                         with ui.column().classes("gap-0 items-end"):
-                            ui.label(f"{dist/1000:.2f} km").classes("text-weight-medium")
+                            ui.label(f"{dist / 1000:.2f} km").classes("text-weight-medium")
                             ui.label("Distance").classes("text-caption text-grey-6")
                     with ui.column().classes("gap-0 items-end"):
                         ui.label(format_duration(dur)).classes("text-weight-medium")
@@ -199,8 +229,12 @@ def activity_row(a: dict, on_refresh) -> None:
 
             # Edit / delete — outside the clickable row so they don't navigate
             with ui.row().classes("gap-1 shrink-0"):
-                ui.button(icon="edit", on_click=lambda a=a: show_edit_dialog(a, on_refresh)).props("flat round dense size=sm")
-                ui.button(icon="delete", on_click=lambda a=a: confirm_delete(a, on_refresh)).props("flat round dense size=sm color=negative")
+                ui.button(
+                    icon="edit", on_click=partial(show_edit_dialog, a, on_refresh)
+                ).props("flat round dense size=sm")
+                ui.button(
+                    icon="delete", on_click=partial(confirm_delete, a, on_refresh)
+                ).props("flat round dense size=sm color=negative")
 
 
 def confirm_delete(activity: dict, on_refresh) -> None:
@@ -222,8 +256,12 @@ def confirm_delete(activity: dict, on_refresh) -> None:
 def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
     is_edit = activity is not None
     data = activity or {}
+    existing_id = data.get("id") if is_edit else None
 
-    with ui.dialog() as dialog, ui.card().classes("q-pa-md").style("min-width: 480px; max-width: 600px"):
+    with (
+        ui.dialog() as dialog,
+        ui.card().classes("q-pa-md").style("min-width: 480px; max-width: 600px"),
+    ):
         ui.label("Edit Activity" if is_edit else "Add Activity Manually").classes("text-h6 q-mb-md")
 
         name = ui.input("Name", value=data.get("name", "")).classes("w-full")
@@ -231,32 +269,50 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
         date_input = ui.input("Date & Time (YYYY-MM-DDTHH:MM)", value=date_val).classes("w-full")
 
         with ui.row().classes("w-full gap-3"):
-            sport_sel = ui.select(SPORTS, label="Sport", value=data.get("sport", "running")).classes("flex-1")
-            kind_sel = ui.select(KINDS, label="Kind", value=data.get("kind", "training")).classes("flex-1")
+            sport_sel = ui.select(
+                SPORTS, label="Sport", value=data.get("sport", "running")
+            ).classes("flex-1")
+            kind_sel = ui.select(KINDS, label="Kind", value=data.get("kind", "training")).classes(
+                "flex-1"
+            )
 
         with ui.row().classes("w-full gap-3"):
-            duration = ui.number("Duration (seconds)", value=data.get("duration_seconds", 0), min=0).classes("flex-1")
-            distance = ui.number("Distance (meters)", value=data.get("distance_meters") or 0, min=0).classes("flex-1")
+            duration = ui.number(
+                "Duration (seconds)", value=data.get("duration_seconds", 0), min=0
+            ).classes("flex-1")
+            distance = ui.number(
+                "Distance (meters)", value=data.get("distance_meters") or 0, min=0
+            ).classes("flex-1")
 
         with ui.row().classes("w-full gap-3"):
-            avg_hr = ui.number("Avg HR (bpm)", value=data.get("avg_heart_rate") or 0, min=0).classes("flex-1")
-            calories_inp = ui.number("Calories", value=data.get("calories") or 0, min=0).classes("flex-1")
+            avg_hr = ui.number(
+                "Avg HR (bpm)", value=data.get("avg_heart_rate") or 0, min=0
+            ).classes("flex-1")
+            calories_inp = ui.number("Calories", value=data.get("calories") or 0, min=0).classes(
+                "flex-1"
+            )
 
         with ui.row().classes("w-full gap-3"):
-            elev = ui.number("Elevation gain (m)", value=data.get("elevation_gain_meters") or 0, min=0).classes("flex-1")
-            avg_speed = ui.number("Avg speed (m/s)", value=data.get("avg_speed_ms") or 0, min=0, step=0.1).classes("flex-1")
+            elev = ui.number(
+                "Elevation gain (m)", value=data.get("elevation_gain_meters") or 0, min=0
+            ).classes("flex-1")
+            avg_speed = ui.number(
+                "Avg speed (m/s)", value=data.get("avg_speed_ms") or 0, min=0, step=0.1
+            ).classes("flex-1")
 
         notes = ui.textarea("Notes", value=data.get("notes") or "").classes("w-full")
 
         # ── Friends ───────────────────────────────────────────────────────────
         from sqlmodel import Session
+
         with Session(engine) as session:
             all_friends = session.exec(select(Friend)).all()
         friend_options = {f.id: f.name for f in all_friends}
         if is_edit and all_friends:
             with Session(engine) as session:
                 current_friend_ids = [
-                    link.friend_id for link in session.exec(
+                    link.friend_id
+                    for link in session.exec(
                         select(ActivityFriend).where(ActivityFriend.activity_id == data["id"])
                     ).all()
                 ]
@@ -270,14 +326,15 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
                 value=current_friend_ids,
                 clearable=True,
             ).classes("w-full")
-            if all_friends else None
+            if all_friends
+            else None
         )
 
         with ui.row().classes("justify-end gap-2 q-mt-md"):
             ui.button("Cancel", on_click=dialog.close).props("flat")
 
             async def do_save():
-                raw_date = date_input.value
+                raw_date = date_input.value or ""
                 iso_date = raw_date if "T" in raw_date else raw_date + "T00:00:00"
                 payload = {
                     "name": name.value,
@@ -295,14 +352,14 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
                 try:
                     saved = await run.io_bound(
                         _db_save_activity,
-                        activity["id"] if is_edit else None,
+                        existing_id,
                         payload,
                     )
                     if friends_sel is not None:
                         fids = friends_sel.value or []
                         if not isinstance(fids, list):
                             fids = [fids]
-                        target_id = saved.get("id")
+                        target_id = (saved or {}).get("id")
                         if target_id:
                             await run.io_bound(_db_set_activity_friends, target_id, fids)
                     ui.notify("Saved!", type="positive")
@@ -317,6 +374,7 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
 
 
 # ── Upload dialog ─────────────────────────────────────────────────────────────
+
 
 def show_upload_dialog(on_refresh) -> None:
     counts = {"ok": 0, "err": 0, "pending": 0}
@@ -380,9 +438,10 @@ def show_upload_dialog(on_refresh) -> None:
 
 # ── Main page ─────────────────────────────────────────────────────────────────
 
+
 async def activities_page() -> None:
-    sport_filter = {"value": None}
-    year_filter = {"value": None}
+    sport_filter: dict[str, Optional[str]] = {"value": None}
+    year_filter: dict[str, Optional[int]] = {"value": None}
 
     async def refresh():
         list_container.clear()
@@ -394,6 +453,7 @@ async def activities_page() -> None:
                 ui.label("No activities yet. Upload a .fit file or add one manually.").classes(
                     "text-grey-6 q-mt-lg text-center w-full"
                 )
+                return
             for a in activities:
                 activity_row(a, refresh)
 
@@ -417,18 +477,22 @@ async def activities_page() -> None:
                 value="All years",
                 label="Year",
                 on_change=lambda e: (
-                    year_filter.__setitem__("value", None if e.value == "All years" else int(e.value)),
+                    year_filter.__setitem__(
+                        "value", None if e.value == "All years" else int(e.value)
+                    ),
                     ui.timer(0, refresh, once=True),
                 ),
             ).classes("w-32")
 
             ui.button(
-                "Upload .fit", icon="upload_file",
+                "Upload .fit",
+                icon="upload_file",
                 on_click=lambda: show_upload_dialog(refresh),
             ).props("outline dense")
 
             ui.button(
-                "Add Manual", icon="add",
+                "Add Manual",
+                icon="add",
                 on_click=lambda: show_edit_dialog(None, refresh),
             ).props("color=primary dense")
 

@@ -1,4 +1,5 @@
 """Friends page."""
+
 from nicegui import run, ui
 from sqlmodel import Session, select
 
@@ -54,7 +55,9 @@ async def friends_page() -> None:
 
     with ui.row().classes("items-center justify-between w-full q-mb-md"):
         ui.label("Friends").classes("text-h5 text-weight-bold")
-        ui.button("+ Add Friend", icon="person_add", on_click=show_add_dialog).props("color=primary dense")
+        ui.button("+ Add Friend", icon="person_add", on_click=show_add_dialog).props(
+            "color=primary dense"
+        )
 
     list_col = ui.column().classes("w-full gap-3")
 
@@ -76,6 +79,8 @@ async def friends_page() -> None:
                             await run.io_bound(_db_delete_friend, fid)
                             await refresh()
 
-                        ui.button(icon="delete", on_click=do_delete).props("flat round dense size=sm color=negative")
+                        ui.button(icon="delete", on_click=do_delete).props(
+                            "flat round dense size=sm color=negative"
+                        )
 
     await refresh()

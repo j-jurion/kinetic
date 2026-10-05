@@ -17,6 +17,7 @@ dependencies = [
     "folium>=0.17.0",
     "garminconnect>=0.3.7",
     "curl_cffi>=0.7.0",
+    "loguru>=0.7.3",
 ]
 
 [tool.ruff]

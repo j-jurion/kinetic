@@ -1,7 +1,9 @@
 """Garmin Connect sync UI page."""
+
 from datetime import date, timedelta
 
-from nicegui import app as nicegui_app, run, ui
+from nicegui import app as nicegui_app
+from nicegui import run, ui
 from sqlmodel import Session, col, select
 
 from kinetic import garmin_sync
@@ -11,9 +13,7 @@ from kinetic.models import Activity
 
 def _latest_activity_date() -> date | None:
     with Session(engine) as session:
-        result = session.exec(
-            select(Activity.date).order_by(col(Activity.date).desc())
-        ).first()
+        result = session.exec(select(Activity.date).order_by(col(Activity.date).desc())).first()
         return result.date() if result else None
 
 
@@ -36,13 +36,14 @@ async def sync_page() -> None:
         def _refresh_status() -> None:
             ok = garmin_sync.tokens_exist()
             status_icon.props(
-                f"name={'check_circle' if ok else 'error'} "
-                f"color={'positive' if ok else 'negative'}"
+                f"name={'check_circle' if ok else 'error'} color={'positive' if ok else 'negative'}"
             )
             if ok:
                 logged_in_email = nicegui_app.storage.general.get("garmin_email", "")
                 status_label.text = (
-                    f"Logged in as {logged_in_email}" if logged_in_email else "Garmin tokens cached — ready to sync"
+                    f"Logged in as {logged_in_email}"
+                    if logged_in_email
+                    else "Garmin tokens cached — ready to sync"
                 )
             else:
                 status_label.text = "Not authenticated — enter credentials below"
@@ -59,20 +60,16 @@ async def sync_page() -> None:
         ui.separator().classes("q-my-sm")
 
         with ui.row().classes("items-start gap-4 flex-wrap"):
-            email_input = (
-                ui.input(
-                    label="Garmin email",
-                    value=stored_email,
-                )
-                .props("outlined dense clearable style='width:280px'")
-            )
-            pw_input = (
-                ui.input(label="Password (not stored)", password=True, password_toggle_button=True)
-                .props("outlined dense style='width:280px'")
-            )
+            email_input = ui.input(
+                label="Garmin email",
+                value=stored_email,
+            ).props("outlined dense clearable style='width:280px'")
+            pw_input = ui.input(
+                label="Password (not stored)", password=True, password_toggle_button=True
+            ).props("outlined dense style='width:280px'")
 
         async def _do_authenticate() -> None:
-            email = email_input.value.strip()
+            email = (email_input.value or "").strip()
             password = pw_input.value
             if not email or not password:
                 ui.notify("Email and password are required", type="negative")
@@ -88,7 +85,7 @@ async def sync_page() -> None:
                 ui.notify(str(exc), type="negative", timeout=8000)
                 return
             auth_btn.props(remove="loading")
-            if result.get("needs_mfa"):
+            if result and result.get("needs_mfa"):
                 _mfa_holder["client"] = result["_client"]
                 _mfa_holder["state"] = result["_state"]
                 auth_status.text = "MFA code required — check your authenticator app"
@@ -110,13 +107,12 @@ async def sync_page() -> None:
         ui.label(
             "Enter the 6-digit code from your authenticator app or the code sent via email/SMS."
         ).classes("text-body2 text-grey-7 q-mb-md")
-        mfa_input = (
-            ui.input(label="MFA code", placeholder="123456")
-            .props("outlined dense maxlength=8 style='width:200px'")
+        mfa_input = ui.input(label="MFA code", placeholder="123456").props(
+            "outlined dense maxlength=8 style='width:200px'"
         )
 
         async def _submit_mfa() -> None:
-            code = mfa_input.value.strip()
+            code = (mfa_input.value or "").strip()
             if not code:
                 return
             mfa_dialog.close()
@@ -145,19 +141,17 @@ async def sync_page() -> None:
         ui.separator().classes("q-my-sm")
 
         latest = await run.io_bound(_latest_activity_date)
-        default_since = (latest - timedelta(days=1)) if latest else (date.today() - timedelta(days=90))
+        default_since = (
+            (latest - timedelta(days=1)) if latest else (date.today() - timedelta(days=90))
+        )
 
         with ui.row().classes("items-center gap-4 q-mb-md flex-wrap"):
-            since_input = (
-                ui.input(
-                    label="Sync since",
-                    value=default_since.isoformat(),
-                )
-                .props("outlined dense type=date style='width:180px'")
-            )
-            until_input = (
-                ui.input(label="Until (optional)", value="")
-                .props("outlined dense type=date style='width:180px'")
+            since_input = ui.input(
+                label="Sync since",
+                value=default_since.isoformat(),
+            ).props("outlined dense type=date style='width:180px'")
+            until_input = ui.input(label="Until (optional)", value="").props(
+                "outlined dense type=date style='width:180px'"
             )
 
         async def _do_sync() -> None:
@@ -165,7 +159,7 @@ async def sync_page() -> None:
                 ui.notify("Sync already in progress", type="warning")
                 return
             if not garmin_sync.tokens_exist():
-                email = email_input.value.strip()
+                email = (email_input.value or "").strip()
                 password = pw_input.value
                 if not email or not password:
                     ui.notify(
@@ -177,8 +171,8 @@ async def sync_page() -> None:
                 email = nicegui_app.storage.general.get("garmin_email", "")
                 password = ""
 
-            since_str = since_input.value.strip()
-            until_str = until_input.value.strip()
+            since_str = (since_input.value or "").strip()
+            until_str = (until_input.value or "").strip()
             try:
                 since_date = date.fromisoformat(since_str)
                 until_date = date.fromisoformat(until_str) if until_str else None
@@ -222,7 +216,7 @@ async def sync_page() -> None:
             _sync_running[0] = False
 
             with result_box:
-                _render_result(result)
+                _render_result(result or {})
 
         sync_btn = ui.button("Sync", icon="sync", on_click=_do_sync).props("color=primary")
 

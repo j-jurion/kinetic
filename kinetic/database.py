@@ -14,12 +14,25 @@ def create_db_and_tables() -> None:
             conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN route_json TEXT"))
             conn.commit()
         if "parent_id" not in existing:
-            conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN parent_id INTEGER REFERENCES activity(id)"))
+            conn.execute(
+                sqlalchemy.text(
+                    "ALTER TABLE activity ADD COLUMN parent_id INTEGER REFERENCES activity(id)"
+                )
+            )
             conn.commit()
         if "garmin_activity_id" not in existing:
-            conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN garmin_activity_id INTEGER"))
+            conn.execute(
+                sqlalchemy.text("ALTER TABLE activity ADD COLUMN garmin_activity_id INTEGER")
+            )
             conn.commit()
 
 
 def get_session() -> Session:
     return Session(engine)
+
+
+def require_id(value: int | None) -> int:
+    """Narrow the primary key of a freshly committed row to a non-optional int."""
+    if value is None:
+        raise RuntimeError("Expected a persisted row with an assigned id")
+    return value

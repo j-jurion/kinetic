@@ -2,18 +2,22 @@
 
 Run with:  python -m kinetic.main
 """
+
+from functools import partial
+
 from fastapi import FastAPI
-from nicegui import app as nicegui_app, ui
+from nicegui import app as nicegui_app
+from nicegui import ui
 
 from kinetic.api import router
 from kinetic.database import create_db_and_tables
-from kinetic.page_activities import activities_page
-from kinetic.page_activity_detail import activity_detail_page
-from kinetic.page_best_efforts import best_efforts_page
-from kinetic.page_friends import friends_page
-from kinetic.page_graphs import graphs_page
-from kinetic.page_map import map_page
-from kinetic.page_sync import sync_page
+from kinetic.pages.activities import activities_page
+from kinetic.pages.activity_detail import activity_detail_page
+from kinetic.pages.best_efforts import best_efforts_page
+from kinetic.pages.friends import friends_page
+from kinetic.pages.graphs import graphs_page
+from kinetic.pages.map import map_page
+from kinetic.pages.sync import sync_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
@@ -24,7 +28,8 @@ fastapi_app.include_router(router, prefix="/api")
 GOOGLE_FONTS_LINK = (
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
     '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-    '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">'
+    '<link rel="stylesheet" href="https://fonts.googleapis.com/css2'
+    '?family=Inter:wght@300;400;500;600;700&display=swap">'
 )
 
 # Scoped to body text only — never override icon font families
@@ -57,7 +62,7 @@ body, .q-field, .q-btn, .q-card, .q-item, .q-label,
 
 async def _shell(title: str, dark_ref: list, content_fn):
     """Render the shared app shell with nav drawer + header + content."""
-    dark = ui.dark_mode(value=nicegui_app.storage.user.get('dark_mode', False))
+    dark = ui.dark_mode(value=nicegui_app.storage.user.get("dark_mode", False))
     dark_ref.append(dark)
 
     ui.add_head_html(GOOGLE_FONTS_LINK)
@@ -76,7 +81,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
             ]
             for label, icon, path in nav_items:
                 with ui.item(
-                    on_click=lambda p=path: ui.navigate.to(p),
+                    on_click=partial(ui.navigate.to, path),
                 ).classes("rounded-borders q-mb-xs cursor-pointer"):
                     with ui.item_section().props("avatar"):
                         ui.icon(icon).classes("text-grey-7")
@@ -90,12 +95,14 @@ async def _shell(title: str, dark_ref: list, content_fn):
             ui.separator().props("vertical").classes("q-mx-sm").style("height:20px; opacity:0.3")
             ui.label(title).classes("text-body1 text-weight-medium")
         with ui.row().classes("items-center gap-2"):
+
             def toggle_dark():
                 if dark.value:
                     dark.disable()
                 else:
                     dark.enable()
-                nicegui_app.storage.user['dark_mode'] = dark.value
+                nicegui_app.storage.user["dark_mode"] = dark.value
+
             ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense")
 
     with ui.page_sticky(position="top-right", x_offset=20, y_offset=70):
@@ -106,6 +113,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
 
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
+
 
 @ui.page("/")
 async def page_index():
@@ -155,6 +163,7 @@ async def page_activity_detail(activity_id: int):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
+
 @nicegui_app.on_startup
 async def startup():
     create_db_and_tables()
@@ -170,6 +179,7 @@ def main():
     )
 
     import uvicorn
+
     uvicorn.run(fastapi_app, host="localhost", port=8080)
 
 

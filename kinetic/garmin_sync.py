@@ -1,4 +1,5 @@
 """Garmin Connect sync: auth helpers and activity download/import logic."""
+
 import io
 import time
 import zipfile
@@ -10,7 +11,7 @@ from typing import Any
 from loguru import logger
 from sqlmodel import Session, select
 
-from kinetic.database import engine
+from kinetic.database import engine, require_id
 from kinetic.fit_parser import parse_fit_file
 from kinetic.models import Activity
 
@@ -34,15 +35,15 @@ def _garmin_id_exists(garmin_activity_id: int) -> bool:
     with Session(engine) as session:
         return (
             session.exec(
-                select(Activity.id).where(
-                    Activity.garmin_activity_id == garmin_activity_id
-                )
+                select(Activity.id).where(Activity.garmin_activity_id == garmin_activity_id)
             ).first()
             is not None
         )
 
 
-def _save_fit_and_import(garmin_activity_id: int, fit_bytes: bytes, garmin_name: str | None = None) -> None:
+def _save_fit_and_import(
+    garmin_activity_id: int, fit_bytes: bytes, garmin_name: str | None = None
+) -> None:
     """Write FIT bytes to uploads/ and import into the database."""
     UPLOAD_DIR.mkdir(exist_ok=True)
     fit_path = UPLOAD_DIR / f"garmin_{garmin_activity_id}.fit"
@@ -63,23 +64,25 @@ def _save_fit_and_import(garmin_activity_id: int, fit_bytes: bytes, garmin_name:
         session.commit()
         session.refresh(activity)
 
+        parent_id = require_id(activity.id)
         for lap in laps:
-            lap.activity_id = activity.id
+            lap.activity_id = parent_id
             session.add(lap)
         for be in best_efforts:
-            be.activity_id = activity.id
+            be.activity_id = parent_id
             session.add(be)
 
         for child, child_laps, child_bes, *_ in children:
-            child.parent_id = activity.id
+            child.parent_id = parent_id
             session.add(child)
             session.commit()
             session.refresh(child)
+            child_id = require_id(child.id)
             for lap in child_laps:
-                lap.activity_id = child.id
+                lap.activity_id = child_id
                 session.add(lap)
             for be in child_bes:
-                be.activity_id = child.id
+                be.activity_id = child_id
                 session.add(be)
 
         session.commit()
@@ -165,9 +168,7 @@ def sync_garmin_activities(
             garmin = login_with_tokens()
         else:
             if not email or not password:
-                raise RuntimeError(
-                    "No cached tokens. Provide email and password to authenticate."
-                )
+                raise RuntimeError("No cached tokens. Provide email and password to authenticate.")
             _cb("Logging in to Garmin Connect…")
             garmin = login_with_credentials(email, password)
     except GarminConnectAuthenticationError as exc:
@@ -179,9 +180,7 @@ def sync_garmin_activities(
     _cb(f"Fetching activity list {since.isoformat()} → {until_date.isoformat()}…")
 
     try:
-        activities = garmin.get_activities_by_date(
-            since.isoformat(), until_date.isoformat()
-        )
+        activities = garmin.get_activities_by_date(since.isoformat(), until_date.isoformat())
     except Exception as exc:
         raise RuntimeError(f"Failed to fetch activity list: {exc}") from exc
 
@@ -227,8 +226,5 @@ def sync_garmin_activities(
             logger.warning("Failed to sync garmin activity {}: {}", garmin_id, exc)
             errors.append(f"{act_name}: {exc}")
 
-    _cb(
-        f"Done. Imported {imported}, skipped {skipped}, "
-        f"errors {len(errors)}."
-    )
+    _cb(f"Done. Imported {imported}, skipped {skipped}, errors {len(errors)}.")
     return {"imported": imported, "skipped": skipped, "errors": errors}
