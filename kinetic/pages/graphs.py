@@ -1,4 +1,5 @@
 """Graphs page - monthly and yearly charts."""
+
 from datetime import datetime
 from typing import Optional
 
@@ -24,7 +25,13 @@ def _db_get_monthly(sport: Optional[str], year: Optional[int]) -> list[dict]:
     for a in activities:
         key = (a.date.year, a.date.month)
         if key not in monthly:
-            monthly[key] = {"year": key[0], "month": key[1], "count": 0, "distance_km": 0.0, "duration_hours": 0.0}
+            monthly[key] = {
+                "year": key[0],
+                "month": key[1],
+                "count": 0,
+                "distance_km": 0.0,
+                "duration_hours": 0.0,
+            }
         monthly[key]["count"] += 1
         monthly[key]["distance_km"] += (a.distance_meters or 0) / 1000
         monthly[key]["duration_hours"] += a.duration_seconds / 3600
@@ -54,22 +61,48 @@ def _db_get_activities_for_pie(sport: Optional[str]) -> list[dict]:
         if sport:
             stmt = stmt.where(Activity.sport == SportType(sport))
         return [
-            {"sport": a.sport, "distance_meters": a.distance_meters, "duration_seconds": a.duration_seconds}
+            {
+                "sport": a.sport,
+                "distance_meters": a.distance_meters,
+                "duration_seconds": a.duration_seconds,
+            }
             for a in session.exec(stmt).all()
         ]
 
 
-MONTH_NAMES = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+MONTH_NAMES = [
+    "",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+]
 
 
 METRIC_CONFIG: dict[str, dict] = {
-    "distance": {"field": "distance_km", "label": "Distance (km)", "fmt": ".1f", "unit": "km", "round": 1},
-    "count":    {"field": "count",       "label": "Activities",    "fmt": "d",   "unit": "",    "round": 0},
-    "time":     {"field": "duration_hours", "label": "Time (h)",   "fmt": ".1f", "unit": "h",  "round": 1},
+    "distance": {
+        "field": "distance_km",
+        "label": "Distance (km)",
+        "fmt": ".1f",
+        "unit": "km",
+        "round": 1,
+    },
+    "count": {"field": "count", "label": "Activities", "fmt": "d", "unit": "", "round": 0},
+    "time": {"field": "duration_hours", "label": "Time (h)", "fmt": ".1f", "unit": "h", "round": 1},
 }
 
 
-def build_monthly_chart(data: list[dict], sport: Optional[str], year: Optional[int], metric: str = "distance") -> go.Figure:
+def build_monthly_chart(
+    data: list[dict], sport: Optional[str], year: Optional[int], metric: str = "distance"
+) -> go.Figure:
     if not data:
         fig = go.Figure()
         fig.add_annotation(text="No data", x=0.5, y=0.5, showarrow=False, font=dict(size=16))
@@ -85,14 +118,16 @@ def build_monthly_chart(data: list[dict], sport: Optional[str], year: Optional[i
     sport_label = sport.title() if sport else "All Sports"
     year_label = f" ({year})" if year else ""
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=labels,
-        y=values,
-        name=mc["label"],
-        marker_color=color,
-        opacity=0.85,
-        hovertemplate=hover,
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=labels,
+            y=values,
+            name=mc["label"],
+            marker_color=color,
+            opacity=0.85,
+            hovertemplate=hover,
+        )
+    )
     fig.update_layout(
         title=f"Monthly {mc['label']} – {sport_label}{year_label}",
         xaxis_title="Month",
@@ -105,7 +140,9 @@ def build_monthly_chart(data: list[dict], sport: Optional[str], year: Optional[i
     return fig
 
 
-def build_yearly_chart(data: list[dict], sport: Optional[str], metric: str = "distance") -> go.Figure:
+def build_yearly_chart(
+    data: list[dict], sport: Optional[str], metric: str = "distance"
+) -> go.Figure:
     if not data:
         fig = go.Figure()
         fig.add_annotation(text="No data", x=0.5, y=0.5, showarrow=False, font=dict(size=16))
@@ -119,14 +156,16 @@ def build_yearly_chart(data: list[dict], sport: Optional[str], metric: str = "di
     hover = f"<b>%{{x}}</b><br>{mc['label']}: %{{y:{mc['fmt']}}}{unit}<extra></extra>"
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(
-        x=years,
-        y=values,
-        name=mc["label"],
-        marker_color=color,
-        opacity=0.85,
-        hovertemplate=hover,
-    ))
+    fig.add_trace(
+        go.Bar(
+            x=years,
+            y=values,
+            name=mc["label"],
+            marker_color=color,
+            opacity=0.85,
+            hovertemplate=hover,
+        )
+    )
     fig.update_layout(
         title=f"Yearly {mc['label']} – {sport.title() if sport else 'All Sports'}",
         xaxis_title="Year",
@@ -139,7 +178,9 @@ def build_yearly_chart(data: list[dict], sport: Optional[str], metric: str = "di
     return fig
 
 
-def build_sport_breakdown_chart(activities: list[dict], year: Optional[int], metric: str = "distance") -> go.Figure:
+def build_sport_breakdown_chart(
+    activities: list[dict], year: Optional[int], metric: str = "distance"
+) -> go.Figure:
     mc = METRIC_CONFIG[metric]
     totals: dict[str, float] = {}
     for a in activities:
@@ -159,15 +200,20 @@ def build_sport_breakdown_chart(activities: list[dict], year: Optional[int], met
 
     labels = list(totals.keys())
     values = [round(v, mc["round"]) for v in totals.values()]
-    colors = [SPORT_COLORS.get(l, "#6b7280") for l in labels]
+    colors = [SPORT_COLORS.get(name, "#6b7280") for name in labels]
     unit = f" {mc['unit']}" if mc["unit"] else ""
 
-    fig = go.Figure(go.Pie(
-        labels=[l.title() for l in labels],
-        values=values,
-        marker=dict(colors=colors),
-        hovertemplate=f"<b>%{{label}}</b><br>%{{value:{mc['fmt']}}}{unit} (%{{percent}})<extra></extra>",
-    ))
+    fig = go.Figure(
+        go.Pie(
+            labels=[name.title() for name in labels],
+            values=values,
+            marker=dict(colors=colors),
+            hovertemplate=(
+                f"<b>%{{label}}</b><br>%{{value:{mc['fmt']}}}{unit} "
+                "(%{percent})<extra></extra>"
+            ),
+        )
+    )
     fig.update_layout(
         title=f"{mc['label']} by Sport" + (f" ({year})" if year else ""),
         plot_bgcolor="rgba(0,0,0,0)",
@@ -179,17 +225,21 @@ def build_sport_breakdown_chart(activities: list[dict], year: Optional[int], met
 
 
 async def graphs_page() -> None:
-    sport_filter = {"value": None}
-    year_filter = {"value": None}
+    sport_filter: dict[str, Optional[str]] = {"value": None}
+    year_filter: dict[str, Optional[int]] = {"value": None}
     metric_filter = {"value": "distance"}
 
     async def refresh():
-        monthly_data = await run.io_bound(_db_get_monthly, sport_filter["value"], year_filter["value"])
-        yearly_data = await run.io_bound(_db_get_yearly, sport_filter["value"])
-        pie_data = await run.io_bound(_db_get_activities_for_pie, sport_filter["value"])
+        monthly_data = await run.io_bound(
+            _db_get_monthly, sport_filter["value"], year_filter["value"]
+        ) or []
+        yearly_data = await run.io_bound(_db_get_yearly, sport_filter["value"]) or []
+        pie_data = await run.io_bound(_db_get_activities_for_pie, sport_filter["value"]) or []
 
         chart_monthly.update_figure(
-            build_monthly_chart(monthly_data, sport_filter["value"], year_filter["value"], metric_filter["value"])
+            build_monthly_chart(
+                monthly_data, sport_filter["value"], year_filter["value"], metric_filter["value"]
+            )
         )
         chart_yearly.update_figure(
             build_yearly_chart(yearly_data, sport_filter["value"], metric_filter["value"])
@@ -216,7 +266,9 @@ async def graphs_page() -> None:
                 value="All years",
                 label="Year",
                 on_change=lambda e: (
-                    year_filter.__setitem__("value", None if e.value == "All years" else int(e.value)),
+                    year_filter.__setitem__(
+                        "value", None if e.value == "All years" else int(e.value)
+                    ),
                     ui.timer(0, refresh, once=True),
                 ),
             ).classes("w-32")

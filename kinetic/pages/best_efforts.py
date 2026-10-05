@@ -1,4 +1,5 @@
 """Best Efforts page."""
+
 from datetime import datetime
 from typing import Optional
 
@@ -17,7 +18,7 @@ def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict
             stmt = stmt.where(BestEffort.sport == SportType(sport))
         if year:
             stmt = stmt.where(BestEffort.year == year)
-        stmt = stmt.order_by(BestEffort.distance_meters, BestEffort.duration_seconds)
+        stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
         return [e.model_dump() for e in session.exec(stmt).all()]
 
 
@@ -44,20 +45,26 @@ def _stat_tile(label: str, value: str) -> None:
 
 
 async def best_efforts_page() -> None:
-    ui.add_head_html('<style>.best-efforts-table tbody td { cursor: pointer; }</style>')
+    ui.add_head_html("<style>.best-efforts-table tbody td { cursor: pointer; }</style>")
     sport_filter = {"value": "running"}
-    year_filter = {"value": None}
+    year_filter: dict[str, Optional[int]] = {"value": None}
 
     async def refresh():
         content_col.clear()
-        efforts = await run.io_bound(_db_get_best_efforts, sport_filter["value"], year_filter["value"])
-        summary = await run.io_bound(_db_get_activity_summary, sport_filter["value"], year_filter["value"])
+        efforts = await run.io_bound(
+            _db_get_best_efforts, sport_filter["value"], year_filter["value"]
+        )
+        summary = await run.io_bound(
+            _db_get_activity_summary, sport_filter["value"], year_filter["value"]
+        ) or {"count": 0, "distance_km": 0.0, "duration_seconds": 0.0}
 
         with content_col:
             if not efforts:
                 with ui.card().classes("w-full q-pa-lg text-center"):
                     ui.icon("emoji_events", size="48px").classes("text-grey-4")
-                    ui.label("No best efforts yet. Upload activities to see your records.").classes("text-grey-6 q-mt-sm")
+                    ui.label("No best efforts yet. Upload activities to see your records.").classes(
+                        "text-grey-6 q-mt-sm"
+                    )
             else:
                 grouped: dict[float, list[dict]] = {}
                 for e in efforts:
@@ -65,7 +72,7 @@ async def best_efforts_page() -> None:
                     grouped.setdefault(d, []).append(e)
 
                 for dist, dist_efforts in sorted(grouped.items()):
-                    label = DISTANCE_LABELS.get(dist, f"{dist/1000:.1f} km")
+                    label = DISTANCE_LABELS.get(dist, f"{dist / 1000:.1f} km")
                     best = dist_efforts[0]
                     color = SPORT_COLORS.get(sport_filter["value"] or "running", "#f97316")
 
@@ -75,9 +82,7 @@ async def best_efforts_page() -> None:
                             ui.chip(
                                 format_duration(best["duration_seconds"]),
                                 icon="emoji_events",
-                            ).props("dense outline").style(
-                                f"color: {color}; border-color: {color}"
-                            )
+                            ).props("dense outline").style(f"color: {color}; border-color: {color}")
 
                         cols = [
                             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
@@ -87,7 +92,7 @@ async def best_efforts_page() -> None:
                         ]
                         rows = [
                             {
-                                "rank": f"#{i+1}",
+                                "rank": f"#{i + 1}",
                                 "date": str(e["date"])[:10],
                                 "year": str(e["year"]),
                                 "time": format_duration(e["duration_seconds"]),
@@ -95,8 +100,15 @@ async def best_efforts_page() -> None:
                             }
                             for i, e in enumerate(dist_efforts[:10])
                         ]
-                        tbl = ui.table(columns=cols, rows=rows, row_key="rank").classes("w-full best-efforts-table").props("dense flat")
-                        tbl.on("rowClick", lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"))
+                        tbl = (
+                            ui.table(columns=cols, rows=rows, row_key="rank")
+                            .classes("w-full best-efforts-table")
+                            .props("dense flat")
+                        )
+                        tbl.on(
+                            "rowClick",
+                            lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"),
+                        )
 
             with ui.card().classes("w-full q-pa-md"):
                 ui.label("Activity Summary").classes("text-h6 text-weight-bold q-mb-sm")
@@ -123,7 +135,9 @@ async def best_efforts_page() -> None:
                 value="All years",
                 label="Year",
                 on_change=lambda e: (
-                    year_filter.__setitem__("value", None if e.value == "All years" else int(e.value)),
+                    year_filter.__setitem__(
+                        "value", None if e.value == "All years" else int(e.value)
+                    ),
                     ui.timer(0, refresh, once=True),
                 ),
             ).classes("w-32")

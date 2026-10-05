@@ -33,6 +33,7 @@ class ActivityKind(str, Enum):
 
 # ── Friends ─────────────────────────────────────────────────────────────────
 
+
 class Friend(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str
@@ -46,6 +47,7 @@ class ActivityFriend(SQLModel, table=True):
 
 
 # ── Activity ─────────────────────────────────────────────────────────────────
+
 
 class Activity(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -97,6 +99,7 @@ class Lap(SQLModel, table=True):
 
 # ── Best Efforts ──────────────────────────────────────────────────────────────
 
+
 class BestEffort(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     activity_id: int = Field(foreign_key="activity.id")
@@ -108,6 +111,7 @@ class BestEffort(SQLModel, table=True):
 
 
 # ── Race Results ──────────────────────────────────────────────────────────────
+
 
 class RaceResult(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

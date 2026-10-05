@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
+from kinetic.database import engine, require_id
 from kinetic.fit_parser import parse_fit_file
 from kinetic.garmin_sync import UPLOAD_DIR
 from kinetic.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
@@ -20,6 +20,7 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 # ── Route map endpoint ────────────────────────────────────────────────────────
+
 
 @router.get("/activity/{activity_id}/map", response_class=HTMLResponse)
 def get_activity_map(activity_id: int) -> HTMLResponse:
@@ -32,12 +33,18 @@ def get_activity_map(activity_id: int) -> HTMLResponse:
     lats = [c[0] for c in coords]
     lons = [c[1] for c in coords]
     bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
-    m = folium.Map(tiles="CartoDB positron")
+    # CARTO basemaps now require an API key; OpenStreetMap tiles stay key-free.
+    m = folium.Map(tiles="OpenStreetMap")
     m.fit_bounds(bounds, padding=(20, 20))
     folium.PolyLine(coords, color="#3b82f6", weight=3, opacity=0.85).add_to(m)
-    folium.Marker(coords[0], tooltip="Start", icon=folium.Icon(color="green", icon="play")).add_to(m)
-    folium.Marker(coords[-1], tooltip="Finish", icon=folium.Icon(color="red", icon="stop")).add_to(m)
+    folium.Marker(coords[0], tooltip="Start", icon=folium.Icon(color="green", icon="play")).add_to(
+        m
+    )
+    folium.Marker(coords[-1], tooltip="Finish", icon=folium.Icon(color="red", icon="stop")).add_to(
+        m
+    )
     return HTMLResponse(content=m.get_root().render())
+
 
 class ActivityCreate(BaseModel):
     name: str
@@ -82,6 +89,7 @@ class FriendCreate(BaseModel):
 
 # ── Activities ────────────────────────────────────────────────────────────────
 
+
 @router.get("/activities")
 def list_activities(
     sport: Optional[SportType] = None,
@@ -98,7 +106,7 @@ def list_activities(
             stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
             stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
         stmt = stmt.order_by(col(Activity.date).desc())
-        return session.exec(stmt).all()
+        return list(session.exec(stmt).all())
 
 
 @router.post("/activities", status_code=201)
@@ -144,13 +152,16 @@ def delete_activity(activity_id: int) -> None:
         # Delete related laps and best efforts
         for lap in session.exec(select(Lap).where(Lap.activity_id == activity_id)).all():
             session.delete(lap)
-        for be in session.exec(select(BestEffort).where(BestEffort.activity_id == activity_id)).all():
+        for be in session.exec(
+            select(BestEffort).where(BestEffort.activity_id == activity_id)
+        ).all():
             session.delete(be)
         session.delete(activity)
         session.commit()
 
 
 # ── FIT upload ────────────────────────────────────────────────────────────────
+
 
 @router.post("/activities/upload-fit", status_code=201)
 async def upload_fit(file: UploadFile) -> Activity:
@@ -168,12 +179,13 @@ async def upload_fit(file: UploadFile) -> Activity:
         session.commit()
         session.refresh(activity)
 
+        new_activity_id = require_id(activity.id)
         for lap in laps:
-            lap.activity_id = activity.id
+            lap.activity_id = new_activity_id
             session.add(lap)
 
         for be in best_efforts:
-            be.activity_id = activity.id
+            be.activity_id = new_activity_id
             session.add(be)
 
         session.commit()
@@ -183,13 +195,15 @@ async def upload_fit(file: UploadFile) -> Activity:
 
 # ── Laps ──────────────────────────────────────────────────────────────────────
 
+
 @router.get("/activities/{activity_id}/laps")
 def get_laps(activity_id: int) -> list[Lap]:
     with Session(engine) as session:
-        return session.exec(select(Lap).where(Lap.activity_id == activity_id)).all()
+        return list(session.exec(select(Lap).where(Lap.activity_id == activity_id)).all())
 
 
 # ── Best Efforts ──────────────────────────────────────────────────────────────
+
 
 @router.get("/best-efforts")
 def list_best_efforts(
@@ -202,16 +216,17 @@ def list_best_efforts(
             stmt = stmt.where(BestEffort.sport == sport)
         if year:
             stmt = stmt.where(BestEffort.year == year)
-        stmt = stmt.order_by(BestEffort.distance_meters, BestEffort.duration_seconds)
-        return session.exec(stmt).all()
+        stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
+        return list(session.exec(stmt).all())
 
 
 # ── Friends ───────────────────────────────────────────────────────────────────
 
+
 @router.get("/friends")
 def list_friends() -> list[Friend]:
     with Session(engine) as session:
-        return session.exec(select(Friend)).all()
+        return list(session.exec(select(Friend)).all())
 
 
 @router.post("/friends", status_code=201)
@@ -236,6 +251,7 @@ def delete_friend(friend_id: int) -> None:
 
 # ── Stats for charts ──────────────────────────────────────────────────────────
 
+
 @router.get("/stats/monthly")
 def monthly_stats(sport: Optional[SportType] = None, year: Optional[int] = None) -> list[dict]:
     """Returns aggregated distance/duration per month."""
@@ -252,7 +268,13 @@ def monthly_stats(sport: Optional[SportType] = None, year: Optional[int] = None)
     for a in activities:
         key = (a.date.year, a.date.month)
         if key not in monthly:
-            monthly[key] = {"year": key[0], "month": key[1], "count": 0, "distance_km": 0.0, "duration_hours": 0.0}
+            monthly[key] = {
+                "year": key[0],
+                "month": key[1],
+                "count": 0,
+                "distance_km": 0.0,
+                "duration_hours": 0.0,
+            }
         monthly[key]["count"] += 1
         monthly[key]["distance_km"] += (a.distance_meters or 0) / 1000
         monthly[key]["duration_hours"] += a.duration_seconds / 3600

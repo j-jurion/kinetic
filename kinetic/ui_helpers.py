@@ -1,7 +1,20 @@
 """Shared UI helpers, theme tokens and navigation."""
+
 from nicegui import ui
 
-SPORTS = ["running", "cycling", "swimming", "hiking", "walking", "triathlon", "duathlon", "multisport", "strength", "yoga", "other"]
+SPORTS = [
+    "running",
+    "cycling",
+    "swimming",
+    "hiking",
+    "walking",
+    "triathlon",
+    "duathlon",
+    "multisport",
+    "strength",
+    "yoga",
+    "other",
+]
 KINDS = ["race", "training", "easy", "social", "long_run", "tempo", "interval", "recovery", "other"]
 
 # SVG ring icons for multisport disciplines

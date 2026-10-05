@@ -1,9 +1,18 @@
 """Activity detail page."""
-from nicegui import run, ui
-from sqlmodel import Session, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, ActivityFriend, BestEffort, Friend, Lap, RaceResult, RaceResultSplit
+from nicegui import run, ui
+from sqlmodel import Session, col, select
+
+from kinetic.database import engine, require_id
+from kinetic.models import (
+    Activity,
+    ActivityFriend,
+    BestEffort,
+    Friend,
+    Lap,
+    RaceResult,
+    RaceResultSplit,
+)
 from kinetic.ui_helpers import (
     DISTANCE_LABELS,
     SPORT_COLORS,
@@ -19,12 +28,12 @@ def _db_get_activity_detail(activity_id: int) -> dict:
         if not activity:
             return {}
         laps = session.exec(
-            select(Lap).where(Lap.activity_id == activity_id).order_by(Lap.lap_number)
+            select(Lap).where(Lap.activity_id == activity_id).order_by(col(Lap.lap_number))
         ).all()
         best_efforts = session.exec(
             select(BestEffort)
             .where(BestEffort.activity_id == activity_id)
-            .order_by(BestEffort.distance_meters)
+            .order_by(col(BestEffort.distance_meters))
         ).all()
         # Multi-sport: fetch children (if parent) or siblings + parent (if child)
         children: list[dict] = []
@@ -32,7 +41,9 @@ def _db_get_activity_detail(activity_id: int) -> dict:
         if activity.parent_id is None:
             # Could be a triathlon parent — fetch children ordered by date
             raw_children = session.exec(
-                select(Activity).where(Activity.parent_id == activity_id).order_by(Activity.date)
+                select(Activity)
+                .where(Activity.parent_id == activity_id)
+                .order_by(col(Activity.date))
             ).all()
             children = [c.model_dump(mode="json") for c in raw_children]
         else:
@@ -52,7 +63,7 @@ def _db_get_activity_friends(activity_id: int) -> list[dict]:
     with Session(engine) as session:
         friends = session.exec(
             select(Friend)
-            .join(ActivityFriend, ActivityFriend.friend_id == Friend.id)
+            .join(ActivityFriend, col(ActivityFriend.friend_id) == Friend.id)
             .where(ActivityFriend.activity_id == activity_id)
         ).all()
         return [f.model_dump(mode="json") for f in friends]
@@ -80,6 +91,7 @@ def _db_remove_activity_friend(activity_id: int, friend_id: int) -> None:
 
 # ── Race result DB helpers ─────────────────────────────────────────────────────
 
+
 def _db_get_race_result(activity_id: int) -> dict | None:
     with Session(engine) as session:
         result = session.exec(
@@ -90,7 +102,7 @@ def _db_get_race_result(activity_id: int) -> dict | None:
         splits = session.exec(
             select(RaceResultSplit)
             .where(RaceResultSplit.race_result_id == result.id)
-            .order_by(RaceResultSplit.order)
+            .order_by(col(RaceResultSplit.order))
         ).all()
         return {
             **result.model_dump(mode="json"),
@@ -112,7 +124,7 @@ def _db_save_race_result(activity_id: int, data: dict, splits: list[dict]) -> No
             session.add(existing)
         session.commit()
         session.refresh(existing)
-        result_id = existing.id
+        result_id = require_id(existing.id)
 
         for s in session.exec(
             select(RaceResultSplit).where(RaceResultSplit.race_result_id == result_id)
@@ -120,13 +132,15 @@ def _db_save_race_result(activity_id: int, data: dict, splits: list[dict]) -> No
             session.delete(s)
 
         for i, split in enumerate(splits):
-            session.add(RaceResultSplit(
-                race_result_id=result_id,
-                label=split["label"],
-                order=i,
-                duration_seconds=split.get("duration_seconds"),
-                rank=split.get("rank"),
-            ))
+            session.add(
+                RaceResultSplit(
+                    race_result_id=result_id,
+                    label=split["label"],
+                    order=i,
+                    duration_seconds=split.get("duration_seconds"),
+                    rank=split.get("rank"),
+                )
+            )
         session.commit()
 
 
@@ -145,6 +159,7 @@ def _db_delete_race_result(activity_id: int) -> None:
 
 
 # ── Race result UI helpers ────────────────────────────────────────────────────
+
 
 def _format_time_input(seconds: float | None) -> str:
     if not seconds:
@@ -214,8 +229,11 @@ def _show_race_result_dialog(
         }
         splits_data = [SplitRow(label=lbl) for lbl in _defaults.get(sport, [])]
 
-    with ui.dialog() as dialog, ui.card().classes("q-pa-md").style(
-        "min-width: 520px; max-width: 680px; max-height: 90vh; overflow-y: auto"
+    with (
+        ui.dialog() as dialog,
+        ui.card()
+        .classes("q-pa-md")
+        .style("min-width: 520px; max-width: 680px; max-height: 90vh; overflow-y: auto"),
     ):
         ui.label("Race Results").classes("text-h6 q-mb-md")
 
@@ -237,16 +255,28 @@ def _show_race_result_dialog(
             ui.label("Total").classes("text-caption text-grey-6 text-center")
 
             ui.label("Overall").classes("text-body2")
-            overall_rank = ui.number(value=rr.get("overall_rank"), min=1, precision=0).style("max-width: 80px")
-            overall_total = ui.number(value=rr.get("overall_total"), min=1, precision=0).style("max-width: 80px")
+            overall_rank = ui.number(value=rr.get("overall_rank"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
+            overall_total = ui.number(value=rr.get("overall_total"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
 
             ui.label("Gender").classes("text-body2")
-            gender_rank = ui.number(value=rr.get("gender_rank"), min=1, precision=0).style("max-width: 80px")
-            gender_total = ui.number(value=rr.get("gender_total"), min=1, precision=0).style("max-width: 80px")
+            gender_rank = ui.number(value=rr.get("gender_rank"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
+            gender_total = ui.number(value=rr.get("gender_total"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
 
             ui.label("Age group").classes("text-body2")
-            ag_rank = ui.number(value=rr.get("age_group_rank"), min=1, precision=0).style("max-width: 80px")
-            ag_total = ui.number(value=rr.get("age_group_total"), min=1, precision=0).style("max-width: 80px")
+            ag_rank = ui.number(value=rr.get("age_group_rank"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
+            ag_total = ui.number(value=rr.get("age_group_total"), min=1, precision=0).style(
+                "max-width: 80px"
+            )
 
         ui.label("Splits").classes("text-caption text-grey-6 q-mt-md q-mb-xs")
         with ui.row().classes("gap-2 q-mb-xs"):
@@ -266,12 +296,14 @@ def _show_race_result_dialog(
                         splits_data.pop(i)
                         splits_ui.refresh()
 
-                    ui.button(icon="close", on_click=remove).props("flat round dense size=xs color=grey-6")
+                    ui.button(icon="close", on_click=remove).props(
+                        "flat round dense size=xs color=grey-6"
+                    )
 
         splits_ui()
-        ui.button("+ Add split", on_click=lambda: [splits_data.append(SplitRow()), splits_ui.refresh()]).props(
-            "flat dense size=sm color=primary"
-        ).classes("q-mt-xs")
+        ui.button(
+            "+ Add split", on_click=lambda: [splits_data.append(SplitRow()), splits_ui.refresh()]
+        ).props("flat dense size=sm color=primary").classes("q-mt-xs")
 
         results_url_input = ui.input(
             "Results URL", value=rr.get("results_url") or "", placeholder="https://..."
@@ -286,7 +318,7 @@ def _show_race_result_dialog(
                     return int(v) if v is not None else None
 
                 data = {
-                    "official_time_seconds": _parse_time_input(official_time.value),
+                    "official_time_seconds": _parse_time_input(official_time.value or ""),
                     "bib_number": bib.value or None,
                     "age_group": age_group.value or None,
                     "overall_rank": to_int(overall_rank.value),
@@ -371,7 +403,9 @@ def _render_race_results_card(
             if official_t:
                 with ui.row().classes("items-center gap-1"):
                     ui.icon("timer", size="16px").classes("text-grey-6")
-                    ui.label(f"Official: {format_duration(official_t)}").classes("text-weight-medium")
+                    ui.label(f"Official: {format_duration(official_t)}").classes(
+                        "text-weight-medium"
+                    )
                     if gps_dur and abs(gps_dur - official_t) > 5:
                         delta = int(abs(official_t - gps_dur))
                         label = "faster" if official_t < gps_dur else "slower"
@@ -442,7 +476,7 @@ def _stat_card(label: str, value: str, color: str = "#f97316") -> None:
 
 
 async def activity_detail_page(activity_id: int) -> None:
-    from kinetic.page_activities import confirm_delete, show_edit_dialog
+    from kinetic.pages.activities import confirm_delete, show_edit_dialog
 
     detail = await run.io_bound(_db_get_activity_detail, activity_id)
     if not detail:
@@ -473,10 +507,15 @@ async def activity_detail_page(activity_id: int) -> None:
         with ui.column().classes("gap-0 flex-1"):
             ui.label(a.get("name", "Activity")).classes("text-h5 text-weight-bold")
             ui.label(
-                f"{a.get('date', '')[:10]}  •  {a.get('kind', '').replace('_', ' ').title()}  •  {sport.title()}"
+                f"{a.get('date', '')[:10]}  \u2022  "
+                f"{a.get('kind', '').replace('_', ' ').title()}  \u2022  {sport.title()}"
             ).classes("text-caption text-grey-6")
-        ui.button(icon="edit", on_click=lambda: show_edit_dialog(a, on_refresh)).props("flat round dense")
-        ui.button(icon="delete", on_click=lambda: confirm_delete(a, on_refresh)).props("flat round dense color=negative")
+        ui.button(icon="edit", on_click=lambda: show_edit_dialog(a, on_refresh)).props(
+            "flat round dense"
+        )
+        ui.button(icon="delete", on_click=lambda: confirm_delete(a, on_refresh)).props(
+            "flat round dense color=negative"
+        )
 
     # ── Multi-sport navigation ─────────────────────────────────────────────────
     if parent:
@@ -501,19 +540,21 @@ async def activity_detail_page(activity_id: int) -> None:
                     child_dur = child.get("duration_seconds", 0)
                     label_parts = [child.get("name", child_sport.capitalize())]
                     if child_dist:
-                        label_parts.append(f"{child_dist/1000:.2f} km")
+                        label_parts.append(f"{child_dist / 1000:.2f} km")
                     if child_dur:
                         label_parts.append(format_duration(child_dur))
                     ui.button(
                         text=" · ".join(label_parts),
                         icon=child_icon,
                         on_click=lambda cid=child["id"]: ui.navigate.to(f"/activity/{cid}"),
-                    ).props("outline dense").style(f"color: {child_color}; border-color: {child_color}")
+                    ).props("outline dense").style(
+                        f"color: {child_color}; border-color: {child_color}"
+                    )
 
     # ── Stats ─────────────────────────────────────────────────────────────────
     with ui.row().classes("flex-wrap gap-3 q-mb-md"):
         if dist:
-            _stat_card("Distance", f"{dist/1000:.2f} km", color)
+            _stat_card("Distance", f"{dist / 1000:.2f} km", color)
         _stat_card("Duration", format_duration(dur), color)
         if dist and dur:
             _stat_card("Pace", format_pace(dist, dur), color)
@@ -569,38 +610,46 @@ async def activity_detail_page(activity_id: int) -> None:
         for lap in laps:
             ld = lap.get("distance_meters")
             lt = lap.get("duration_seconds")
-            rows.append({
-                "lap": lap["lap_number"],
-                "duration": format_duration(lt) if lt else "–",
-                "distance": f"{ld/1000:.2f} km" if ld else "–",
-                "pace": format_pace(ld, lt) if ld and lt else "–",
-                "hr": str(lap["avg_heart_rate"]) if lap.get("avg_heart_rate") else "–",
-                "elev": f"{lap['elevation_gain']:.0f} m" if lap.get("elevation_gain") else "–",
-            })
-        ui.table(columns=cols, rows=rows, row_key="lap").classes("w-full q-mb-md").props("flat bordered dense")
+            rows.append(
+                {
+                    "lap": lap["lap_number"],
+                    "duration": format_duration(lt) if lt else "–",
+                    "distance": f"{ld / 1000:.2f} km" if ld else "–",
+                    "pace": format_pace(ld, lt) if ld and lt else "–",
+                    "hr": str(lap["avg_heart_rate"]) if lap.get("avg_heart_rate") else "–",
+                    "elev": f"{lap['elevation_gain']:.0f} m" if lap.get("elevation_gain") else "–",
+                }
+            )
+        ui.table(columns=cols, rows=rows, row_key="lap").classes("w-full q-mb-md").props(
+            "flat bordered dense"
+        )
 
     # ── Best Efforts ──────────────────────────────────────────────────────────
     if best_efforts:
         ui.label("Best Efforts").classes("text-h6 text-weight-bold q-mb-sm")
         with ui.row().classes("flex-wrap gap-3"):
             for be in best_efforts:
-                label = DISTANCE_LABELS.get(be["distance_meters"], f"{be['distance_meters']/1000:.1f} km")
+                label = DISTANCE_LABELS.get(
+                    be["distance_meters"], f"{be['distance_meters'] / 1000:.1f} km"
+                )
                 with ui.card().classes("q-pa-sm text-center").style("min-width: 80px"):
                     ui.label(label).classes("text-caption text-grey-6")
-                    ui.label(format_duration(be["duration_seconds"])).classes("text-weight-bold text-body1")
+                    ui.label(format_duration(be["duration_seconds"])).classes(
+                        "text-weight-bold text-body1"
+                    )
                     bd = be.get("distance_meters")
                     bt = be.get("duration_seconds")
                     if bd and bt:
                         ui.label(format_pace(bd, bt)).classes("text-caption text-grey-6")
 
     # ── Friends ───────────────────────────────────────────────────────────────
-    all_friends = await run.io_bound(_db_get_all_friends)
+    all_friends = await run.io_bound(_db_get_all_friends) or []
 
     friends_col = ui.column().classes("w-full")
 
     async def render_friends() -> None:
         friends_col.clear()
-        current = await run.io_bound(_db_get_activity_friends, activity_id)
+        current = await run.io_bound(_db_get_activity_friends, activity_id) or []
         current_ids = {f["id"] for f in current}
         available = [f for f in all_friends if f["id"] not in current_ids]
 
@@ -615,20 +664,26 @@ async def activity_detail_page(activity_id: int) -> None:
                             await run.io_bound(_db_remove_activity_friend, activity_id, fid)
                             await render_friends()
 
-                        with ui.row().classes(
-                            "items-center gap-1 q-px-sm q-py-xs rounded-full"
-                        ).style("background: rgba(249,115,22,0.12)"):
+                        with (
+                            ui.row()
+                            .classes("items-center gap-1 q-px-sm q-py-xs rounded-full")
+                            .style("background: rgba(249,115,22,0.12)")
+                        ):
                             ui.label(f["name"]).classes("text-body2 text-weight-medium")
                             ui.button(icon="close", on_click=_remove).props(
                                 "flat round dense size=xs color=grey-6"
                             )
 
                 if available:
-                    sel = ui.select(
-                        options={f["id"]: f["name"] for f in available},
-                        label="Add friend",
-                        clearable=True,
-                    ).classes("q-mt-sm").style("min-width: 180px")
+                    sel = (
+                        ui.select(
+                            options={f["id"]: f["name"] for f in available},
+                            label="Add friend",
+                            clearable=True,
+                        )
+                        .classes("q-mt-sm")
+                        .style("min-width: 180px")
+                    )
 
                     async def _add() -> None:
                         if sel.value is not None:

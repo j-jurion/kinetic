@@ -1,9 +1,7 @@
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
-
-from loguru import logger
+from typing import Any, Optional
 
 from kinetic.models import Activity, ActivityKind, BestEffort, Lap, SportType
 
@@ -31,12 +29,14 @@ SPORT_MAP: dict[str, SportType] = {
 
 def _safe_val(record: dict, key: str) -> Optional[float | int | str | datetime]:
     v = record.get(key)
-    return v.value if hasattr(v, "value") else v
+    return getattr(v, "value", v)
 
 
 def parse_fit_file(
     fit_path: Path,
-) -> tuple[Activity, list[Lap], list[BestEffort], list[tuple[Activity, list[Lap], list[BestEffort]]]]:
+) -> tuple[
+    Activity, list[Lap], list[BestEffort], list[tuple[Activity, list[Lap], list[BestEffort]]]
+]:
     """Parse a .fit file.
 
     Returns (activity, laps, best_efforts, children).
@@ -57,6 +57,7 @@ def parse_fit_file(
     lap_records: list[dict] = []
     data_points: list[dict] = []
 
+    message: Any
     for message in fitfile.get_messages():
         msg_name = message.name
         record = {f.name: f for f in message.fields}
@@ -85,7 +86,10 @@ def parse_fit_file(
 
     # ── Single-sport path ─────────────────────────────────────────────────────
     session_data = sessions_data[-1] if sessions_data else {}
-    return (*_build_single_activity(fit_path, session_data, lap_records, data_points, activity_name_hint), [])
+    activity, laps, best_efforts = _build_single_activity(
+        fit_path, session_data, lap_records, data_points, activity_name_hint
+    )
+    return activity, laps, best_efforts, []
 
 
 def _build_single_activity(
@@ -109,7 +113,9 @@ def _build_single_activity(
     else:
         activity_name = f"{sport.value.capitalize()} {date_str}"
 
-    total_elapsed = session_data.get("total_elapsed_time") or session_data.get("total_timer_time") or 0
+    total_elapsed = (
+        session_data.get("total_elapsed_time") or session_data.get("total_timer_time") or 0
+    )
     distance_m = session_data.get("total_distance")
     elevation = session_data.get("total_ascent")
     avg_hr = session_data.get("avg_heart_rate")
@@ -142,9 +148,12 @@ def _build_single_activity(
     for i, lr in enumerate(lap_records):
         laps.append(
             Lap(
+                activity_id=0,  # filled after DB insert
                 lap_number=i + 1,
                 start_time=lr.get("start_time"),
-                duration_seconds=float(lr["total_elapsed_time"]) if lr.get("total_elapsed_time") else None,
+                duration_seconds=float(lr["total_elapsed_time"])
+                if lr.get("total_elapsed_time")
+                else None,
                 distance_meters=float(lr["total_distance"]) if lr.get("total_distance") else None,
                 avg_speed_ms=float(lr["avg_speed"]) if lr.get("avg_speed") else None,
                 avg_heart_rate=int(lr["avg_heart_rate"]) if lr.get("avg_heart_rate") else None,
@@ -174,7 +183,9 @@ def _build_multisport(
     sessions: list[dict],
     lap_records: list[dict],
     data_points: list[dict],
-) -> tuple[Activity, list[Lap], list[BestEffort], list[tuple[Activity, list[Lap], list[BestEffort]]]]:
+) -> tuple[
+    Activity, list[Lap], list[BestEffort], list[tuple[Activity, list[Lap], list[BestEffort]]]
+]:
     """Build a multisport parent activity and its non-transition children."""
     # Determine start time from the first session
     first_start = sessions[0].get("start_time") if sessions else None
@@ -233,12 +244,22 @@ def _build_multisport(
             kind=ActivityKind.training,
             date=start_time or activity_date,
             duration_seconds=duration,
-            distance_meters=float(session["total_distance"]) if session.get("total_distance") else None,
-            elevation_gain_meters=float(session["total_ascent"]) if session.get("total_ascent") else None,
-            avg_heart_rate=int(session["avg_heart_rate"]) if session.get("avg_heart_rate") else None,
-            max_heart_rate=int(session["max_heart_rate"]) if session.get("max_heart_rate") else None,
-            avg_speed_ms=float(session.get("enhanced_avg_speed") or session.get("avg_speed") or 0) or None,
-            avg_cadence=int(session.get("avg_running_cadence") or session.get("avg_cadence") or 0) or None,
+            distance_meters=float(session["total_distance"])
+            if session.get("total_distance")
+            else None,
+            elevation_gain_meters=float(session["total_ascent"])
+            if session.get("total_ascent")
+            else None,
+            avg_heart_rate=int(session["avg_heart_rate"])
+            if session.get("avg_heart_rate")
+            else None,
+            max_heart_rate=int(session["max_heart_rate"])
+            if session.get("max_heart_rate")
+            else None,
+            avg_speed_ms=float(session.get("enhanced_avg_speed") or session.get("avg_speed") or 0)
+            or None,
+            avg_cadence=int(session.get("avg_running_cadence") or session.get("avg_cadence") or 0)
+            or None,
             avg_power=int(session["avg_power"]) if session.get("avg_power") else None,
             calories=int(session["total_calories"]) if session.get("total_calories") else None,
             fit_file_path=str(fit_path),
@@ -249,7 +270,8 @@ def _build_multisport(
             end_ts = start_time.timestamp() + duration + 60
             start_ts = start_time.timestamp() - 5
             session_dps = [
-                dp for dp in data_points
+                dp
+                for dp in data_points
                 if dp.get("timestamp") and start_ts <= dp["timestamp"].timestamp() <= end_ts
             ]
         else:
@@ -268,7 +290,9 @@ def _attach_route(activity: Activity, data_points: list[dict]) -> None:
         lat = dp.get("position_lat")
         lon = dp.get("position_long")
         if lat is not None and lon is not None:
-            coords.append((round(lat * _SEMICIRCLES_TO_DEG, 6), round(lon * _SEMICIRCLES_TO_DEG, 6)))
+            coords.append(
+                (round(lat * _SEMICIRCLES_TO_DEG, 6), round(lon * _SEMICIRCLES_TO_DEG, 6))
+            )
     if coords:
         if len(coords) > 2000:
             step = len(coords) / 2000
