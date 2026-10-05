@@ -14,3 +14,7 @@ __pycache__/
 .vscode/
 .idea/
 .nicegui/
+
+# database files
+uploads/
+kinetic.db
