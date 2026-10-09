@@ -108,7 +108,7 @@ def parse_fit_file(
         elif msg_name == "record":
             data_points.append({k: _safe_val(record, k) for k in record})
 
-    if is_multisport and len(sessions_data) > 1:
+    if is_multisport or _is_multisport(sessions_data):
         return _build_multisport(fit_path, sessions_data, lap_records, data_points)
 
     # ── Single-sport path ─────────────────────────────────────────────────────
@@ -197,6 +197,22 @@ def _build_single_activity(
         )
     _attach_route(activity, data_points)
     return activity, laps, best_efforts
+
+
+def _is_multisport(sessions: list[dict]) -> bool:
+    """Whether the sessions describe one event made of several legs.
+
+    Watches only tag a file as ``auto_multi_sport`` when the built-in multisport mode is
+    used; starting each leg by hand produces a ``manual`` activity with one session per
+    leg, so the sessions themselves have to be inspected. A transition leg or two
+    different sports both mean multisport, while repeated sessions of the same sport
+    (a paused or resumed workout) do not.
+    """
+    sports = [str(s.get("sport", "")).lower() for s in sessions if s.get("sport")]
+    legs = [sport for sport in sports if sport != "transition"]
+    if len(legs) < 2:
+        return False
+    return len(set(legs)) > 1 or "transition" in sports
 
 
 def _detect_multisport_type(sport_sessions: list[dict]) -> SportType:
