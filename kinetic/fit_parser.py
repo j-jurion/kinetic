@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -29,6 +29,11 @@ SPORT_MAP: dict[str, SportType] = {
     "triathlon": SportType.triathlon,
     "strength_training": SportType.strength,
 }
+
+# A length faster than the 100 m freestyle world record (~2.13 m/s) is a device artifact
+_MAX_SWIM_SPEED_MS = 2.2
+# How far a measuring window may overshoot its target distance before it is unusable
+_MAX_OVERSHOOT = 0.05
 
 # FIT sub_sport values that refine the recorded sport
 SUB_SPORT_MAP: dict[tuple[str, str], SportType] = {
@@ -74,6 +79,7 @@ def parse_fit_file(
     activity_name_hint: str | None = None
     sessions_data: list[dict] = []
     lap_records: list[dict] = []
+    length_records: list[dict] = []
     data_points: list[dict] = []
 
     message: Any
@@ -97,6 +103,8 @@ def parse_fit_file(
                     activity_name_hint = str(name_val)
         elif msg_name == "lap":
             lap_records.append({k: _safe_val(record, k) for k in record})
+        elif msg_name == "length":
+            length_records.append({k: _safe_val(record, k) for k in record})
         elif msg_name == "record":
             data_points.append({k: _safe_val(record, k) for k in record})
 
@@ -106,7 +114,7 @@ def parse_fit_file(
     # ── Single-sport path ─────────────────────────────────────────────────────
     session_data = sessions_data[-1] if sessions_data else {}
     activity, laps, best_efforts = _build_single_activity(
-        fit_path, session_data, lap_records, data_points, activity_name_hint
+        fit_path, session_data, lap_records, data_points, activity_name_hint, length_records
     )
     return activity, laps, best_efforts, []
 
@@ -117,6 +125,7 @@ def _build_single_activity(
     lap_records: list[dict],
     data_points: list[dict],
     activity_name_hint: str | None,
+    length_records: Optional[list[dict]] = None,
 ) -> tuple[Activity, list[Lap], list[BestEffort]]:
     sport_raw = str(session_data.get("sport", "other")).lower()
     sport = resolve_sport(sport_raw, session_data.get("sub_sport"))
@@ -181,6 +190,11 @@ def _build_single_activity(
         )
 
     best_efforts = _extract_best_efforts(activity, data_points)
+    if not best_efforts and length_records:
+        # Pool swims keep no distance in the record stream — rebuild it from the lengths
+        best_efforts = best_efforts_from_segments(
+            activity, pool_swim_segments(length_records, session_data.get("pool_length"))
+        )
     _attach_route(activity, data_points)
     return activity, laps, best_efforts
 
@@ -319,8 +333,77 @@ def _attach_route(activity: Activity, data_points: list[dict]) -> None:
         activity.route_json = json.dumps(coords)
 
 
+def pool_swim_segments(
+    length_records: list[dict], pool_length: Optional[float]
+) -> list[list[dict]]:
+    """Rebuild (timestamp, cumulative distance) runs for a pool swim.
+
+    Pool swim files record distance per length instead of in the record stream, so the
+    series is reconstructed by adding one pool length per active length. Rest ("idle")
+    lengths advance the clock without adding distance, exactly as they should.
+
+    Watches sometimes split a length in two on a false turn, crediting a full length to a
+    few seconds of swimming. Such a length is dropped and ends the current run, so no
+    measuring window can span the stretch whose distance cannot be trusted.
+    """
+    if not pool_length or not length_records:
+        return []
+
+    def start_of(item: dict) -> Optional[datetime]:
+        value = item.get("start_time") or item.get("timestamp")
+        if isinstance(value, str):
+            return datetime.fromisoformat(value)
+        return value if isinstance(value, datetime) else None
+
+    ordered = sorted(
+        (item for item in length_records if start_of(item) is not None),
+        key=lambda item: start_of(item),  # type: ignore[arg-type, return-value]
+    )
+
+    segments: list[list[dict]] = []
+    current: list[dict] = []
+    distance = 0.0
+    for item in ordered:
+        start = start_of(item)
+        if start is None:
+            continue
+        elapsed = float(item.get("total_elapsed_time") or item.get("total_timer_time") or 0)
+        active = str(item.get("length_type", "")).lower() == "active"
+        if active and (elapsed <= 0 or float(pool_length) / elapsed > _MAX_SWIM_SPEED_MS):
+            if len(current) > 1:
+                segments.append(current)
+            current, distance = [], 0.0
+            continue
+        if not current:
+            current.append({"timestamp": start, "distance": 0.0})
+        if active:
+            distance += float(pool_length)
+        current.append({"timestamp": start + timedelta(seconds=elapsed), "distance": distance})
+    if len(current) > 1:
+        segments.append(current)
+    return segments
+
+
+def best_efforts_from_segments(
+    activity: Activity, segments: list[list[dict]]
+) -> list[BestEffort]:
+    """Fastest effort per distance across several independent runs of data points."""
+    best: dict[float, BestEffort] = {}
+    for segment in segments:
+        for effort in _extract_best_efforts(activity, segment):
+            current = best.get(effort.distance_meters)
+            if current is None or effort.duration_seconds < current.duration_seconds:
+                best[effort.distance_meters] = effort
+    return [best[distance] for distance in sorted(best)]
+
+
 def _extract_best_efforts(activity: Activity, data_points: list[dict]) -> list[BestEffort]:
-    """Sliding window best-effort extraction from GPS records."""
+    """Sliding window best-effort extraction from a (timestamp, distance) series.
+
+    A window that overshoots the target by more than `_MAX_OVERSHOOT` is skipped: its
+    split time cannot be derived, which happens across data gaps and in pools whose
+    length does not divide the target distance.
+    """
     target_distances = BEST_EFFORT_DISTANCES.get(activity.sport, [])
     if not target_distances or not data_points:
         return []
@@ -342,6 +425,8 @@ def _extract_best_efforts(activity: Activity, data_points: list[dict]) -> list[B
         return []
 
     efforts: list[BestEffort] = []
+    # Open-water GPS drifts badly; reject windows no swimmer could have swum
+    max_speed = _MAX_SWIM_SPEED_MS if activity.sport == SportType.swimming else None
     for target_dist in target_distances:
         best_time: Optional[float] = None
         j = 0
@@ -350,8 +435,13 @@ def _extract_best_efforts(activity: Activity, data_points: list[dict]) -> list[B
                 j += 1
             if j >= len(distances):
                 break
+            covered = distances[j] - distances[i]
+            if covered > target_dist * (1 + _MAX_OVERSHOOT):
+                continue
             elapsed = timestamps[j] - timestamps[i]
-            if elapsed > 0 and (best_time is None or elapsed < best_time):
+            if elapsed <= 0 or (max_speed and covered / elapsed > max_speed):
+                continue
+            if best_time is None or elapsed < best_time:
                 best_time = elapsed
 
         if best_time is not None:

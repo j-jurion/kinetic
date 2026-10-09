@@ -19,10 +19,16 @@ from kinetic.pages.top_activities import (
 from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
-    DISTANCE_LABELS,
+    add_medal_cell,
     add_multisport_cell,
+    add_year_medal_cell,
+    distance_label,
     format_date,
+    format_distance,
     format_duration,
+    mark_year_bests,
+    medal_column,
+    medal_row_fields,
     multisport_row_fields,
     resolve_sports,
     sport_color,
@@ -78,7 +84,7 @@ def _db_get_activity_summary(sport: Optional[str], year: Optional[int]) -> dict:
         activities = session.exec(stmt).all()
     return {
         "count": len(activities),
-        "distance_km": sum((a.distance_meters or 0) for a in activities) / 1000,
+        "distance_meters": sum((a.distance_meters or 0) for a in activities),
         "duration_seconds": sum(a.duration_seconds for a in activities),
     }
 
@@ -104,7 +110,7 @@ async def best_efforts_page() -> None:
         )
         summary = await run.io_bound(
             _db_get_activity_summary, sport_filter["value"], year_filter["value"]
-        ) or {"count": 0, "distance_km": 0.0, "duration_seconds": 0.0}
+        ) or {"count": 0, "distance_meters": 0.0, "duration_seconds": 0.0}
 
         with content_col:
             color = sport_color(sport_filter["value"])
@@ -120,7 +126,7 @@ async def best_efforts_page() -> None:
                     grouped.setdefault(d, []).append(e)
 
                 for dist, dist_efforts in sorted(grouped.items()):
-                    label = DISTANCE_LABELS.get(dist, f"{dist / 1000:.1f} km")
+                    label = distance_label(dist, sport_filter["value"])
                     best = dist_efforts[0]
 
                     with ui.card().classes("w-full q-pa-md"):
@@ -146,6 +152,7 @@ async def best_efforts_page() -> None:
 
                         cols = [
                             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
+                            medal_column(),
                             {"name": "date", "label": "Date", "field": "date", "align": "left"},
                             {
                                 "name": "activity",
@@ -156,6 +163,7 @@ async def best_efforts_page() -> None:
                             {"name": "year", "label": "Year", "field": "year", "align": "left"},
                             {"name": "time", "label": "Time", "field": "time", "align": "right"},
                         ]
+                        year_bests = mark_year_bests([e["year"] for e in dist_efforts])
                         rows = [
                             {
                                 "rank": f"#{i + 1}",
@@ -165,6 +173,7 @@ async def best_efforts_page() -> None:
                                 "time": format_duration(e["duration_seconds"]),
                                 "activity_id": e["activity_id"],
                                 **multisport_row_fields(e.get("parent_sport")),
+                                **medal_row_fields(i + 1, year_bests[i]),
                             }
                             for i, e in enumerate(dist_efforts[:10])
                         ]
@@ -174,6 +183,8 @@ async def best_efforts_page() -> None:
                             .props("dense flat")
                         )
                         add_multisport_cell(tbl)
+                        add_medal_cell(tbl)
+                        add_year_medal_cell(tbl, "year")
                         tbl.on(
                             "rowClick",
                             lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"),
@@ -215,7 +226,10 @@ async def best_efforts_page() -> None:
                 ui.label("Activity Summary").classes("text-h6 text-weight-bold q-mb-sm")
                 with ui.row().classes("gap-8"):
                     _stat_tile("Total Activities", str(summary["count"]))
-                    _stat_tile("Total Distance", f"{summary['distance_km']:.0f} km")
+                    _stat_tile(
+                        "Total Distance",
+                        format_distance(summary["distance_meters"], sport_filter["value"]),
+                    )
                     _stat_tile("Total Time", format_duration(summary["duration_seconds"]))
 
     # ── toolbar ──

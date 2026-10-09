@@ -14,8 +14,10 @@ from kinetic.ui_helpers import (
     ALL_RUNNING,
     add_multisport_cell,
     format_date,
+    format_distance,
     format_duration,
     format_pace,
+    is_swimming,
     multisport_row_fields,
     resolve_sports,
     sport_filter_options,
@@ -24,12 +26,14 @@ from kinetic.ui_helpers import (
 )
 
 
-def _format_elevation(value: float) -> str:
+def _format_elevation(value: float, sport: Optional[str] = None) -> str:
     return f"{value:.0f} m"
 
 
-def _format_distance(value: float) -> str:
-    return f"{value / 1000:.2f} km"
+def _format_total_distance(value: float, sport: Optional[str] = None) -> str:
+    if is_swimming(sport):
+        return f"{value:.0f} m"
+    return f"{value / 1000:.0f} km"
 
 
 TOP_METRICS: dict[str, dict[str, Any]] = {
@@ -49,10 +53,10 @@ TOP_METRICS: dict[str, dict[str, Any]] = {
         "page_title": "Longest activities",
         "field": "distance_meters",
         "column": "Distance",
-        "format": _format_distance,
+        "format": format_distance,
         "best_label": "Longest",
         "total_label": "Total distance",
-        "format_total": lambda value: f"{value / 1000:.0f} km",
+        "format_total": _format_total_distance,
         "icon": "straighten",
     },
 }
@@ -127,7 +131,6 @@ def top_table_columns(metric: str, compact: bool) -> list[dict]:
             "align": "left",
             "sortable": True,
         },
-        {"name": "sport", "label": "Sport", "field": "sport", "align": "left"},
         value_col,
         {
             "name": "other",
@@ -157,20 +160,20 @@ def top_table_rows(metric: str, activities: list[dict]) -> list[dict]:
         other_value = activity[other_config["field"]]
         distance = activity.get("distance_meters")
         duration = activity.get("duration_seconds") or 0
+        sport = activity.get("sport")
         rows.append(
             {
                 "rank": f"#{index + 1}",
                 "date": format_date(activity["date"]),
                 "date_iso": str(activity["date"])[:10],
                 "activity": activity["name"],
-                "sport": sport_label(activity["sport"]),
-                "value": config["format"](value),
+                "value": config["format"](value, sport),
                 "value_raw": value,
-                "other": other_config["format"](other_value) if other_value else "–",
+                "other": other_config["format"](other_value, sport) if other_value else "–",
                 "other_raw": other_value or 0,
                 "duration": format_duration(duration),
                 "duration_seconds": duration,
-                "pace": format_pace(distance, duration) if distance and duration else "–",
+                "pace": format_pace(distance, duration, sport) if distance and duration else "–",
                 "activity_id": activity["id"],
                 **multisport_row_fields(activity.get("parent_sport")),
             }
@@ -243,12 +246,17 @@ async def top_activities_page(
                 return
 
             values = [a[config["field"]] or 0 for a in activities]
+            selected = sport_filter["value"]
             with ui.card().classes("w-full q-pa-md"):
                 with ui.row().classes("gap-8 justify-around w-full"):
                     _stat_tile("Activities", str(len(activities)))
-                    _stat_tile(config["best_label"], config["format"](max(values)))
-                    _stat_tile("Average", config["format"](sum(values) / len(values)))
-                    _stat_tile(config["total_label"], config["format_total"](sum(values)))
+                    _stat_tile(config["best_label"], config["format"](max(values), selected))
+                    _stat_tile(
+                        "Average", config["format"](sum(values) / len(values), selected)
+                    )
+                    _stat_tile(
+                        config["total_label"], config["format_total"](sum(values), selected)
+                    )
 
             with ui.card().classes("w-full q-pa-md"):
                 render_top_table(metric, activities, compact=False)

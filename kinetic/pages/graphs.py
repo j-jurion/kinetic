@@ -11,6 +11,7 @@ from kinetic.database import engine
 from kinetic.models import Activity, SportType
 from kinetic.ui_helpers import (
     ALL_SPORTS,
+    is_swimming,
     resolve_sports,
     sport_color,
     sport_filter_options,
@@ -103,10 +104,20 @@ METRIC_CONFIG: dict[str, dict] = {
         "fmt": ".1f",
         "unit": "km",
         "round": 1,
+        "scale": 1,
     },
     "count": {"field": "count", "label": "Activities", "fmt": "d", "unit": "", "round": 0},
     "time": {"field": "duration_hours", "label": "Time (h)", "fmt": ".1f", "unit": "h", "round": 1},
 }
+
+
+def metric_config(metric: str, sport: Optional[str]) -> dict:
+    """Metric settings, switched to metres when only swimming is selected."""
+    config = {"scale": 1, **METRIC_CONFIG[metric]}
+    if metric == "distance" and is_swimming(sport):
+        return {**config, "label": "Distance (m)", "fmt": ".0f", "unit": "m", "round": 0,
+                "scale": 1000}
+    return config
 
 
 def build_monthly_chart(
@@ -117,9 +128,9 @@ def build_monthly_chart(
         fig.add_annotation(text="No data", x=0.5, y=0.5, showarrow=False, font=dict(size=16))
         return fig
 
-    mc = METRIC_CONFIG[metric]
+    mc = metric_config(metric, sport)
     labels = [f"{MONTH_NAMES[d['month']]} {d['year']}" for d in data]
-    values = [round(d[mc["field"]], mc["round"]) for d in data]
+    values = [round(d[mc["field"]] * mc["scale"], mc["round"]) for d in data]
     color = sport_color(sport)
     unit = f" {mc['unit']}" if mc["unit"] else ""
     hover = f"<b>%{{x}}</b><br>{mc['label']}: %{{y:{mc['fmt']}}}{unit}<extra></extra>"
@@ -157,9 +168,9 @@ def build_yearly_chart(
         fig.add_annotation(text="No data", x=0.5, y=0.5, showarrow=False, font=dict(size=16))
         return fig
 
-    mc = METRIC_CONFIG[metric]
+    mc = metric_config(metric, sport)
     years = [str(d["year"]) for d in data]
-    values = [round(d[mc["field"]], mc["round"]) for d in data]
+    values = [round(d[mc["field"]] * mc["scale"], mc["round"]) for d in data]
     color = sport_color(sport)
     unit = f" {mc['unit']}" if mc["unit"] else ""
     hover = f"<b>%{{x}}</b><br>{mc['label']}: %{{y:{mc['fmt']}}}{unit}<extra></extra>"
@@ -188,9 +199,12 @@ def build_yearly_chart(
 
 
 def build_sport_breakdown_chart(
-    activities: list[dict], year: Optional[int], metric: str = "distance"
+    activities: list[dict],
+    year: Optional[int],
+    metric: str = "distance",
+    sport: Optional[str] = None,
 ) -> go.Figure:
-    mc = METRIC_CONFIG[metric]
+    mc = metric_config(metric, sport)
     totals: dict[str, float] = {}
     for a in activities:
         s = a.get("sport", "other")
@@ -208,7 +222,7 @@ def build_sport_breakdown_chart(
         return fig
 
     labels = list(totals.keys())
-    values = [round(v, mc["round"]) for v in totals.values()]
+    values = [round(v * mc["scale"], mc["round"]) for v in totals.values()]
     colors = [sport_color(name, "#6b7280") for name in labels]
     unit = f" {mc['unit']}" if mc["unit"] else ""
 
@@ -254,7 +268,9 @@ async def graphs_page() -> None:
             build_yearly_chart(yearly_data, sport_filter["value"], metric_filter["value"])
         )
         chart_pie.update_figure(
-            build_sport_breakdown_chart(pie_data, year_filter["value"], metric_filter["value"])
+            build_sport_breakdown_chart(
+                pie_data, year_filter["value"], metric_filter["value"], sport_filter["value"]
+            )
         )
 
     # ── toolbar ──

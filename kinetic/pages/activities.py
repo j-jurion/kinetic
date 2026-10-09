@@ -30,9 +30,10 @@ from kinetic.ui_helpers import (
     SPORTS,
     format_date,
     format_datetime,
+    format_distance,
     format_duration,
     format_pace,
-    multisport_badge,
+    multisport_marker,
     parse_date_input,
     resolve_sports,
     sport_filter_options,
@@ -215,7 +216,7 @@ def activity_row(a: dict, on_refresh) -> None:
                 with ui.column().classes("gap-0"):
                     with ui.row().classes("items-center gap-1"):
                         ui.label(a.get("name", "Activity")).classes("text-weight-medium text-body1")
-                        multisport_badge(a.get("parent_sport"))
+                        multisport_marker(a.get("parent_sport"))
                         if a.get("has_race_result"):
                             ui.icon("emoji_events", size="14px").classes("text-amber-500")
                     ui.label(
@@ -226,14 +227,14 @@ def activity_row(a: dict, on_refresh) -> None:
                 with ui.row().classes("items-center gap-6 text-right ml-auto"):
                     if dist:
                         with ui.column().classes("gap-0 items-end"):
-                            ui.label(f"{dist / 1000:.2f} km").classes("text-weight-medium")
+                            ui.label(format_distance(dist, sport)).classes("text-weight-medium")
                             ui.label("Distance").classes("text-caption text-grey-6")
                     with ui.column().classes("gap-0 items-end"):
                         ui.label(format_duration(dur)).classes("text-weight-medium")
                         ui.label("Duration").classes("text-caption text-grey-6")
                     if dist and dur:
                         with ui.column().classes("gap-0 items-end"):
-                            ui.label(format_pace(dist, dur)).classes("text-weight-medium")
+                            ui.label(format_pace(dist, dur, sport)).classes("text-weight-medium")
                             ui.label("Pace").classes("text-caption text-grey-6")
                     if a.get("avg_heart_rate"):
                         with ui.column().classes("gap-0 items-end"):

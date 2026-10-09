@@ -14,10 +14,11 @@ from kinetic.models import (
     RaceResultSplit,
 )
 from kinetic.ui_helpers import (
-    DISTANCE_LABELS,
     SPORT_COLORS,
     SPORT_ICONS,
+    distance_label,
     format_date,
+    format_distance,
     format_duration,
     format_pace,
     sport_label,
@@ -542,7 +543,7 @@ async def activity_detail_page(activity_id: int) -> None:
                     child_dur = child.get("duration_seconds", 0)
                     label_parts = [child.get("name", child_sport.capitalize())]
                     if child_dist:
-                        label_parts.append(f"{child_dist / 1000:.2f} km")
+                        label_parts.append(format_distance(child_dist, child_sport))
                     if child_dur:
                         label_parts.append(format_duration(child_dur))
                     ui.button(
@@ -556,10 +557,10 @@ async def activity_detail_page(activity_id: int) -> None:
     # ── Stats ─────────────────────────────────────────────────────────────────
     with ui.row().classes("flex-wrap gap-3 q-mb-md"):
         if dist:
-            _stat_card("Distance", f"{dist / 1000:.2f} km", color)
+            _stat_card("Distance", format_distance(dist, sport), color)
         _stat_card("Duration", format_duration(dur), color)
         if dist and dur:
-            _stat_card("Pace", format_pace(dist, dur), color)
+            _stat_card("Pace", format_pace(dist, dur, sport), color)
         if a.get("avg_heart_rate"):
             _stat_card("Avg HR", f"{a['avg_heart_rate']} bpm", "#ef4444")
         if a.get("max_heart_rate"):
@@ -616,8 +617,8 @@ async def activity_detail_page(activity_id: int) -> None:
                 {
                     "lap": lap["lap_number"],
                     "duration": format_duration(lt) if lt else "–",
-                    "distance": f"{ld / 1000:.2f} km" if ld else "–",
-                    "pace": format_pace(ld, lt) if ld and lt else "–",
+                    "distance": format_distance(ld, sport) if ld else "–",
+                    "pace": format_pace(ld, lt, sport) if ld and lt else "–",
                     "hr": str(lap["avg_heart_rate"]) if lap.get("avg_heart_rate") else "–",
                     "elev": f"{lap['elevation_gain']:.0f} m" if lap.get("elevation_gain") else "–",
                 }
@@ -631,9 +632,7 @@ async def activity_detail_page(activity_id: int) -> None:
         ui.label("Best Efforts").classes("text-h6 text-weight-bold q-mb-sm")
         with ui.row().classes("flex-wrap gap-3"):
             for be in best_efforts:
-                label = DISTANCE_LABELS.get(
-                    be["distance_meters"], f"{be['distance_meters'] / 1000:.1f} km"
-                )
+                label = distance_label(be["distance_meters"], be.get("sport", sport))
                 with ui.card().classes("q-pa-sm text-center").style("min-width: 80px"):
                     ui.label(label).classes("text-caption text-grey-6")
                     ui.label(format_duration(be["duration_seconds"])).classes(
@@ -642,7 +641,7 @@ async def activity_detail_page(activity_id: int) -> None:
                     bd = be.get("distance_meters")
                     bt = be.get("duration_seconds")
                     if bd and bt:
-                        ui.label(format_pace(bd, bt)).classes("text-caption text-grey-6")
+                        ui.label(format_pace(bd, bt, sport)).classes("text-caption text-grey-6")
 
     # ── Friends ───────────────────────────────────────────────────────────────
     all_friends = await run.io_bound(_db_get_all_friends) or []
