@@ -95,10 +95,12 @@ SPORT_COLORS = {
 
 # Filter groups: a single option that selects several sports at once
 ALL_RUNNING = "all_running"
+ALL_MULTISPORT = "all_multisport"
 SPORT_GROUPS: dict[str, list[str]] = {
     ALL_RUNNING: ["running", "trail_running"],
+    ALL_MULTISPORT: ["triathlon", "duathlon", "multisport"],
 }
-SPORT_GROUP_LABELS = {ALL_RUNNING: "All running"}
+SPORT_GROUP_LABELS = {ALL_RUNNING: "All running", ALL_MULTISPORT: "All multisport"}
 ALL_SPORTS = ""
 
 DISTANCE_LABELS: dict[float, str] = {
@@ -238,3 +240,38 @@ def sport_chip(sport: str) -> None:
     color = SPORT_COLORS.get(sport, "#6b7280")
     icon = SPORT_ICONS.get(sport, "sports")
     ui.chip(sport_label(sport), icon=icon, color=color).props("outline dense")
+
+
+# Table cell that appends a badge when the activity is a leg of a multisport event
+_MULTISPORT_CELL = (
+    '<q-td :props="props">{{ props.row.activity }}'
+    '<q-badge v-if="props.row.multisport" outline align="middle" class="q-ml-sm"'
+    ' :style="`color: ${props.row.multisport_color};'
+    ' border-color: ${props.row.multisport_color}`">'
+    "{{ props.row.multisport }}</q-badge></q-td>"
+)
+
+
+def add_multisport_cell(table: ui.table, column: str = "activity") -> None:
+    """Show which multisport event an activity belongs to, next to its name."""
+    table.add_slot(f"body-cell-{column}", _MULTISPORT_CELL)
+
+
+def multisport_row_fields(parent_sport: Optional[str]) -> dict[str, str]:
+    """Row keys consumed by `add_multisport_cell`."""
+    if not parent_sport:
+        return {"multisport": "", "multisport_color": ""}
+    return {
+        "multisport": sport_label(parent_sport),
+        "multisport_color": sport_color(parent_sport),
+    }
+
+
+def multisport_badge(parent_sport: Optional[str]) -> None:
+    """The same marker as `add_multisport_cell`, for non-table layouts."""
+    if not parent_sport:
+        return
+    color = sport_color(parent_sport)
+    ui.badge(sport_label(parent_sport)).props("outline align=middle").style(
+        f"color: {color}; border-color: {color}"
+    )

@@ -10,14 +10,24 @@ from sqlmodel import Session, col, select
 
 from kinetic.database import engine
 from kinetic.models import Activity, BestEffort, SportType
+from kinetic.pages.top_activities import (
+    TOP_METRICS,
+    db_get_top_activities,
+    render_top_table,
+    top_activities_url,
+)
+from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
     DISTANCE_LABELS,
+    add_multisport_cell,
     format_date,
     format_duration,
+    multisport_row_fields,
     resolve_sports,
     sport_color,
     sport_filter_options,
+    sport_label,
 )
 
 
@@ -44,9 +54,15 @@ def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
+        results = session.exec(stmt).all()
+        parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
         return [
-            {**effort.model_dump(), "activity_name": activity.name}
-            for effort, activity in session.exec(stmt).all()
+            {
+                **effort.model_dump(),
+                "activity_name": activity.name,
+                "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
+            }
+            for effort, activity in results
         ]
 
 
@@ -74,7 +90,10 @@ def _stat_tile(label: str, value: str) -> None:
 
 
 async def best_efforts_page() -> None:
-    ui.add_head_html("<style>.best-efforts-table tbody td { cursor: pointer; }</style>")
+    ui.add_head_html(
+        "<style>.best-efforts-table tbody td, .top-activities-table tbody td"
+        " { cursor: pointer; }</style>"
+    )
     sport_filter = {"value": ALL_RUNNING}
     year_filter: dict[str, Optional[int]] = {"value": None}
 
@@ -88,12 +107,12 @@ async def best_efforts_page() -> None:
         ) or {"count": 0, "distance_km": 0.0, "duration_seconds": 0.0}
 
         with content_col:
+            color = sport_color(sport_filter["value"])
             if not efforts:
+                selection = sport_label(sport_filter["value"] or ALL_RUNNING).lower()
                 with ui.card().classes("w-full q-pa-lg text-center"):
                     ui.icon("emoji_events", size="48px").classes("text-grey-4")
-                    ui.label("No best efforts yet. Upload activities to see your records.").classes(
-                        "text-grey-6 q-mt-sm"
-                    )
+                    ui.label(f"No {selection} records yet.").classes("text-grey-6 q-mt-sm")
             else:
                 grouped: dict[float, list[dict]] = {}
                 for e in efforts:
@@ -103,7 +122,6 @@ async def best_efforts_page() -> None:
                 for dist, dist_efforts in sorted(grouped.items()):
                     label = DISTANCE_LABELS.get(dist, f"{dist / 1000:.1f} km")
                     best = dist_efforts[0]
-                    color = sport_color(sport_filter["value"])
 
                     with ui.card().classes("w-full q-pa-md"):
                         with ui.row().classes("items-center justify-between w-full q-mb-sm"):
@@ -146,6 +164,7 @@ async def best_efforts_page() -> None:
                                 "year": str(e["year"]),
                                 "time": format_duration(e["duration_seconds"]),
                                 "activity_id": e["activity_id"],
+                                **multisport_row_fields(e.get("parent_sport")),
                             }
                             for i, e in enumerate(dist_efforts[:10])
                         ]
@@ -154,10 +173,43 @@ async def best_efforts_page() -> None:
                             .classes("w-full best-efforts-table")
                             .props("dense flat")
                         )
+                        add_multisport_cell(tbl)
                         tbl.on(
                             "rowClick",
                             lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"),
                         )
+
+            for metric in TOP_METRICS:
+                top = await run.io_bound(
+                    db_get_top_activities,
+                    metric,
+                    sport_filter["value"],
+                    year_filter["value"],
+                )
+                if not top:
+                    continue
+                config = TOP_METRICS[metric]
+                with ui.card().classes("w-full q-pa-md"):
+                    with ui.row().classes("items-center justify-between w-full q-mb-sm"):
+                        ui.label(config["card_title"]).classes("text-h6 text-weight-bold")
+                        with ui.row().classes("items-center gap-2"):
+                            ui.chip(
+                                config["format"](top[0][config["field"]] or 0),
+                                icon=config["icon"],
+                            ).props("dense outline").style(
+                                f"color: {color}; border-color: {color}"
+                            )
+                            ui.button(
+                                f"All activities ({len(top)})",
+                                icon="format_list_bulleted",
+                                on_click=partial(
+                                    ui.navigate.to,
+                                    top_activities_url(
+                                        metric, sport_filter["value"], year_filter["value"]
+                                    ),
+                                ),
+                            ).props("flat dense no-caps color=primary")
+                    render_top_table(metric, top[:10], compact=True)
 
             with ui.card().classes("w-full q-pa-md"):
                 ui.label("Activity Summary").classes("text-h6 text-weight-bold q-mb-sm")

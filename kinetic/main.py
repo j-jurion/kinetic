@@ -19,6 +19,7 @@ from kinetic.pages.friends import friends_page
 from kinetic.pages.graphs import graphs_page
 from kinetic.pages.map import map_page
 from kinetic.pages.sync import sync_page
+from kinetic.pages.top_activities import top_activities_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
@@ -138,6 +139,17 @@ async def page_graphs():
 async def page_best_efforts():
     dark_ref = []
     await _shell(title="Best Efforts", dark_ref=dark_ref, content_fn=best_efforts_page)
+
+
+@ui.page("/best-efforts/top/{metric}")
+async def page_top_activities(metric: str, sport: str = "", year: str = ""):
+    dark_ref = []
+    year_value = int(year) if year.isdigit() else None
+    await _shell(
+        title="Best Efforts",
+        dark_ref=dark_ref,
+        content_fn=lambda: top_activities_page(metric, sport or None, year_value),
+    )
 
 
 @ui.page("/best-efforts/{distance}")

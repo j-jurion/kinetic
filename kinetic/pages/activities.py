@@ -21,6 +21,7 @@ from kinetic.models import (
     RaceResult,
     SportType,
 )
+from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_SPORTS,
     KINDS,
@@ -31,6 +32,7 @@ from kinetic.ui_helpers import (
     format_datetime,
     format_duration,
     format_pace,
+    multisport_badge,
     parse_date_input,
     resolve_sports,
     sport_filter_options,
@@ -98,9 +100,11 @@ def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
             )
 
         result = []
+        parents = multisport_parent_sports(session, (a.parent_id for a in activities))
         for a in activities:
             d = a.model_dump(mode="json")
             d["has_race_result"] = a.id in ids_with_result
+            d["parent_sport"] = parents.get(a.parent_id) if a.parent_id else None
             result.append(d)
         return result
 
@@ -211,6 +215,7 @@ def activity_row(a: dict, on_refresh) -> None:
                 with ui.column().classes("gap-0"):
                     with ui.row().classes("items-center gap-1"):
                         ui.label(a.get("name", "Activity")).classes("text-weight-medium text-body1")
+                        multisport_badge(a.get("parent_sport"))
                         if a.get("has_race_result"):
                             ui.icon("emoji_events", size="14px").classes("text-amber-500")
                     ui.label(

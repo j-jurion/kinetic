@@ -13,7 +13,7 @@ _RUNNING_DISTANCES = [1000, 5000, 10000, 15000, 30000, 21097.5, 42195]
 BEST_EFFORT_DISTANCES: dict[SportType, list[float]] = {
     SportType.running: _RUNNING_DISTANCES,
     SportType.trail_running: _RUNNING_DISTANCES,
-    SportType.cycling: [1000, 5000, 10000, 20000, 40000, 100000],
+    SportType.cycling: [1000, 5000, 10000, 20000, 40000, 50000, 100000],
     SportType.swimming: [100, 200, 400, 800, 1500, 3000],
 }
 

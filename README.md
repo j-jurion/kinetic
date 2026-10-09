@@ -8,10 +8,13 @@ Activity tracking web app built with NiceGUI + FastAPI.
 - Edit and delete activities
 - Sport types: Running, Trail Running, Cycling, Swimming, Hiking, Walking, Triathlon, Strength, Yoga
 - Trail runs are detected from the `.fit` sub-sport; an "All running" filter covers road + trail
+- Triathlon/duathlon legs count towards their own sport's records and are labelled with the
+  event they belong to; an "All multisport" filter covers triathlon, duathlon and multisport
 - Activity kinds: Race, Training, Easy, Social, Long Run, Tempo, Interval, Recovery
 - Monthly & yearly distance charts with sport filter
 - Sport breakdown pie chart
 - Best efforts per distance per sport per year
+- Most elevation and longest activity rankings (top 10, with a full sortable table)
 - Dedicated page listing every attempt at a given distance, with progression chart
 - Friends management
 - Dark / light mode toggle

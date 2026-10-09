@@ -9,13 +9,16 @@ from sqlmodel import Session, col, select
 
 from kinetic.database import engine
 from kinetic.models import Activity, BestEffort, SportType
+from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
     DATE_FORMAT,
     DISTANCE_LABELS,
+    add_multisport_cell,
     format_date,
     format_duration,
     format_pace,
+    multisport_row_fields,
     resolve_sports,
     sport_color,
     sport_filter_options,
@@ -48,10 +51,13 @@ def _db_get_distance_attempts(
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.duration_seconds))
+        results = session.exec(stmt).all()
+        parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
         return [
             {
                 "activity_id": effort.activity_id,
                 "activity_name": activity.name,
+                "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
                 "sport": effort.sport.value,
                 "kind": activity.kind.value,
                 "date": effort.date.isoformat(),
@@ -59,7 +65,7 @@ def _db_get_distance_attempts(
                 "duration_seconds": effort.duration_seconds,
                 "distance_meters": effort.distance_meters,
             }
-            for effort, activity in session.exec(stmt).all()
+            for effort, activity in results
         ]
 
 
@@ -190,6 +196,7 @@ async def best_effort_distance_page(
                         "duration_seconds": a["duration_seconds"],
                         "pace": format_pace(a["distance_meters"], a["duration_seconds"]),
                         "activity_id": a["activity_id"],
+                        **multisport_row_fields(a.get("parent_sport")),
                     }
                     for i, a in enumerate(attempts)
                 ]
@@ -201,6 +208,7 @@ async def best_effort_distance_page(
                 # Sort on the raw ISO date / seconds, but show the formatted values
                 tbl.add_slot("body-cell-date", '<q-td :props="props">{{ props.row.date }}</q-td>')
                 tbl.add_slot("body-cell-time", '<q-td :props="props">{{ props.row.time }}</q-td>')
+                add_multisport_cell(tbl)
                 tbl.on(
                     "rowClick",
                     lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"),
