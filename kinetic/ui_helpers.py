@@ -2,6 +2,7 @@
 
 from datetime import date, datetime
 from typing import Optional, Sequence, Union
+from urllib.parse import urlencode
 
 from nicegui import ui
 
@@ -180,6 +181,16 @@ def sport_icon(sport: Optional[str], default: str = "sports") -> str:
     return SPORT_ICONS.get(sport, default)
 
 
+def filtered_url(path: str, sport: Optional[str] = None, year: Optional[int] = None) -> str:
+    """Carry the shared sport/year filter over to another page."""
+    params = {}
+    if sport:
+        params["sport"] = sport
+    if year:
+        params["year"] = str(year)
+    return f"{path}?{urlencode(params)}" if params else path
+
+
 def _to_datetime(value: Union[datetime, date, str, None]) -> Optional[datetime]:
     """Coerce a datetime, date or ISO/dd-mm-yyyy string into a datetime."""
     if value is None or value == "":
@@ -337,6 +348,13 @@ def add_year_medal_cell(table: ui.table, column: str, value_field: Optional[str]
         '<q-icon v-if="props.row.year_best" name="military_tech" size="16px" class="q-ml-xs"'
         ' style="color: ' + GOLD + '">'
         "<q-tooltip>Best of {{ props.row.year }}</q-tooltip></q-icon></q-td>",
+    )
+
+
+def record_chip(value: str, icon: str = "emoji_events") -> None:
+    """The headline record of a card, in the same gold as the first-place medal."""
+    ui.chip(value, icon=icon).props("dense outline").style(
+        f"color: {GOLD}; border-color: {GOLD}"
     )
 
 

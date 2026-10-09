@@ -3,7 +3,6 @@
 from datetime import datetime
 from functools import partial
 from typing import Optional
-from urllib.parse import urlencode
 
 from nicegui import run, ui
 from sqlmodel import Session, col, select
@@ -23,6 +22,7 @@ from kinetic.ui_helpers import (
     add_multisport_cell,
     add_year_medal_cell,
     distance_label,
+    filtered_url,
     format_date,
     format_distance,
     format_duration,
@@ -30,8 +30,8 @@ from kinetic.ui_helpers import (
     medal_column,
     medal_row_fields,
     multisport_row_fields,
+    record_chip,
     resolve_sports,
-    sport_color,
     sport_filter_options,
     sport_label,
 )
@@ -39,14 +39,8 @@ from kinetic.ui_helpers import (
 
 def _attempts_url(distance: float, sport: Optional[str], year: Optional[int]) -> str:
     """URL of the page listing every attempt at a given best-effort distance."""
-    params = {}
-    if sport:
-        params["sport"] = sport
-    if year:
-        params["year"] = str(year)
-    query = f"?{urlencode(params)}" if params else ""
     distance_str = f"{distance:.2f}".rstrip("0").rstrip(".")
-    return f"/best-efforts/{distance_str}{query}"
+    return filtered_url(f"/best-efforts/{distance_str}", sport, year)
 
 
 def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict]:
@@ -95,13 +89,14 @@ def _stat_tile(label: str, value: str) -> None:
         ui.label(label).classes("text-caption text-grey-6")
 
 
-async def best_efforts_page() -> None:
+async def best_efforts_page(sport: Optional[str] = None, year: Optional[int] = None) -> None:
     ui.add_head_html(
         "<style>.best-efforts-table tbody td, .top-activities-table tbody td"
         " { cursor: pointer; }</style>"
     )
-    sport_filter = {"value": ALL_RUNNING}
-    year_filter: dict[str, Optional[int]] = {"value": None}
+    selected_sport = sport or ALL_RUNNING
+    sport_filter = {"value": selected_sport}
+    year_filter: dict[str, Optional[int]] = {"value": year}
 
     async def refresh():
         content_col.clear()
@@ -113,7 +108,6 @@ async def best_efforts_page() -> None:
         ) or {"count": 0, "distance_meters": 0.0, "duration_seconds": 0.0}
 
         with content_col:
-            color = sport_color(sport_filter["value"])
             if not efforts:
                 selection = sport_label(sport_filter["value"] or ALL_RUNNING).lower()
                 with ui.card().classes("w-full q-pa-lg text-center"):
@@ -131,24 +125,19 @@ async def best_efforts_page() -> None:
 
                     with ui.card().classes("w-full q-pa-md"):
                         with ui.row().classes("items-center justify-between w-full q-mb-sm"):
-                            ui.label(label).classes("text-h6 text-weight-bold")
-                            with ui.row().classes("items-center gap-2"):
-                                ui.chip(
-                                    format_duration(best["duration_seconds"]),
-                                    icon="emoji_events",
-                                ).props("dense outline").style(
-                                    f"color: {color}; border-color: {color}"
-                                )
-                                ui.button(
-                                    f"All attempts ({len(dist_efforts)})",
-                                    icon="format_list_bulleted",
-                                    on_click=partial(
-                                        ui.navigate.to,
-                                        _attempts_url(
-                                            dist, sport_filter["value"], year_filter["value"]
-                                        ),
+                            with ui.row().classes("items-center gap-3"):
+                                ui.label(label).classes("text-h6 text-weight-bold")
+                                record_chip(format_duration(best["duration_seconds"]))
+                            ui.button(
+                                f"All attempts ({len(dist_efforts)})",
+                                icon="format_list_bulleted",
+                                on_click=partial(
+                                    ui.navigate.to,
+                                    _attempts_url(
+                                        dist, sport_filter["value"], year_filter["value"]
                                     ),
-                                ).props("flat dense no-caps color=primary")
+                                ),
+                            ).props("flat dense no-caps color=primary")
 
                         cols = [
                             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
@@ -202,24 +191,24 @@ async def best_efforts_page() -> None:
                 config = TOP_METRICS[metric]
                 with ui.card().classes("w-full q-pa-md"):
                     with ui.row().classes("items-center justify-between w-full q-mb-sm"):
-                        ui.label(config["card_title"]).classes("text-h6 text-weight-bold")
-                        with ui.row().classes("items-center gap-2"):
-                            ui.chip(
-                                config["format"](top[0][config["field"]] or 0),
-                                icon=config["icon"],
-                            ).props("dense outline").style(
-                                f"color: {color}; border-color: {color}"
-                            )
-                            ui.button(
-                                f"All activities ({len(top)})",
-                                icon="format_list_bulleted",
-                                on_click=partial(
-                                    ui.navigate.to,
-                                    top_activities_url(
-                                        metric, sport_filter["value"], year_filter["value"]
-                                    ),
+                        with ui.row().classes("items-center gap-3"):
+                            ui.label(config["card_title"]).classes("text-h6 text-weight-bold")
+                            record_chip(
+                                config["format"](
+                                    top[0][config["field"]] or 0, sport_filter["value"]
                                 ),
-                            ).props("flat dense no-caps color=primary")
+                                icon=config["icon"],
+                            )
+                        ui.button(
+                            f"All activities ({len(top)})",
+                            icon="format_list_bulleted",
+                            on_click=partial(
+                                ui.navigate.to,
+                                top_activities_url(
+                                    metric, sport_filter["value"], year_filter["value"]
+                                ),
+                            ),
+                        ).props("flat dense no-caps color=primary")
                     render_top_table(metric, top[:10], compact=True)
 
             with ui.card().classes("w-full q-pa-md"):
@@ -238,7 +227,7 @@ async def best_efforts_page() -> None:
         with ui.row().classes("gap-2"):
             ui.select(
                 sport_filter_options(include_all_sports=False),
-                value=ALL_RUNNING,
+                value=selected_sport,
                 label="Sport",
                 on_change=lambda e: (
                     sport_filter.__setitem__("value", e.value),
@@ -247,7 +236,7 @@ async def best_efforts_page() -> None:
             ).classes("w-40")
             ui.select(
                 ["All years"] + [str(y) for y in range(datetime.now().year, 2009, -1)],
-                value="All years",
+                value=str(year) if year else "All years",
                 label="Year",
                 on_change=lambda e: (
                     year_filter.__setitem__(

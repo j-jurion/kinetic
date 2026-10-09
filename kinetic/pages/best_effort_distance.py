@@ -17,6 +17,7 @@ from kinetic.ui_helpers import (
     add_multisport_cell,
     add_year_medal_cell,
     distance_label,
+    filtered_url,
     format_date,
     format_duration,
     format_pace,
@@ -252,7 +253,9 @@ async def best_effort_distance_page(
             ui.button(
                 "Best Efforts",
                 icon="arrow_back",
-                on_click=lambda: ui.navigate.to("/best-efforts"),
+                on_click=lambda: ui.navigate.to(
+                    filtered_url("/best-efforts", sport_filter["value"], year_filter["value"])
+                ),
             ).props("flat dense no-caps color=primary")
             ui.icon(sport_icon(sport_filter["value"])).classes("text-grey-7")
             ui.label(f"{label} – all attempts").classes("text-h5 text-weight-bold")

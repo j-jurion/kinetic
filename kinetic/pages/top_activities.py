@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from typing import Any, Optional
-from urllib.parse import urlencode
 
 from nicegui import run, ui
 from sqlmodel import Session, col, select
@@ -13,6 +12,7 @@ from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
     add_multisport_cell,
+    filtered_url,
     format_date,
     format_distance,
     format_duration,
@@ -64,13 +64,7 @@ TOP_METRICS: dict[str, dict[str, Any]] = {
 
 def top_activities_url(metric: str, sport: Optional[str], year: Optional[int]) -> str:
     """URL of the page ranking every activity by the given metric."""
-    params = {}
-    if sport:
-        params["sport"] = sport
-    if year:
-        params["year"] = str(year)
-    query = f"?{urlencode(params)}" if params else ""
-    return f"/best-efforts/top/{metric}{query}"
+    return filtered_url(f"/best-efforts/top/{metric}", sport, year)
 
 
 def db_get_top_activities(
@@ -267,7 +261,9 @@ async def top_activities_page(
             ui.button(
                 "Best Efforts",
                 icon="arrow_back",
-                on_click=lambda: ui.navigate.to("/best-efforts"),
+                on_click=lambda: ui.navigate.to(
+                    filtered_url("/best-efforts", sport_filter["value"], year_filter["value"])
+                ),
             ).props("flat dense no-caps color=primary")
             ui.icon(sport_icon(sport_filter["value"])).classes("text-grey-7")
             ui.label(config["page_title"]).classes("text-h5 text-weight-bold")

@@ -136,9 +136,14 @@ async def page_graphs():
 
 
 @ui.page("/best-efforts")
-async def page_best_efforts():
+async def page_best_efforts(sport: str = "", year: str = ""):
     dark_ref = []
-    await _shell(title="Best Efforts", dark_ref=dark_ref, content_fn=best_efforts_page)
+    year_value = int(year) if year.isdigit() else None
+    await _shell(
+        title="Best Efforts",
+        dark_ref=dark_ref,
+        content_fn=lambda: best_efforts_page(sport or None, year_value),
+    )
 
 
 @ui.page("/best-efforts/top/{metric}")
