@@ -339,6 +339,20 @@ def add_medal_cell(table: ui.table, column: str = "medal") -> None:
     table.add_slot(f"body-cell-{column}", _MEDAL_CELL)
 
 
+def add_rank_medal_cell(table: ui.table, column: str = "rank") -> None:
+    """Render podium medals in place of ranks one through three."""
+    table.add_slot(
+        f"body-cell-{column}",
+        '<q-td :props="props" class="text-center">'
+        '<div style="width: 22px; height: 22px; display: flex; align-items: center; '
+        'justify-content: center;">'
+        '<q-icon v-if="props.row.medal_color" name="military_tech" size="22px"'
+        ' :style="`color: ${props.row.medal_color}`">'
+        "<q-tooltip>{{ props.row.medal_label }}</q-tooltip></q-icon>"
+        '<span v-else>{{ props.row.rank }}</span></div></q-td>',
+    )
+
+
 def add_year_medal_cell(table: ui.table, column: str, value_field: Optional[str] = None) -> None:
     """Append a gold medal to `column` when the row is the best of its year."""
     field = value_field or column

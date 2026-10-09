@@ -12,12 +12,16 @@ from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
     add_multisport_cell,
+    add_rank_medal_cell,
+    add_year_medal_cell,
     filtered_url,
     format_date,
     format_distance,
     format_duration,
     format_pace,
     is_swimming,
+    mark_year_bests,
+    medal_row_fields,
     multisport_row_fields,
     resolve_sports,
     sport_filter_options,
@@ -110,14 +114,13 @@ def top_table_columns(metric: str, compact: bool) -> list[dict]:
     if compact:
         return [
             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
-            {"name": "date", "label": "Date", "field": "date", "align": "left"},
             {"name": "activity", "label": "Activity", "field": "activity", "align": "left"},
+            {"name": "date", "label": "Date", "field": "date", "align": "left"},
             value_col,
         ]
     other = "distance" if metric == "elevation" else "elevation"
     return [
         {"name": "rank", "label": "#", "field": "rank", "align": "left"},
-        {"name": "date", "label": "Date", "field": "date_iso", "align": "left", "sortable": True},
         {
             "name": "activity",
             "label": "Activity",
@@ -125,6 +128,7 @@ def top_table_columns(metric: str, compact: bool) -> list[dict]:
             "align": "left",
             "sortable": True,
         },
+        {"name": "date", "label": "Date", "field": "date_iso", "align": "left", "sortable": True},
         value_col,
         {
             "name": "other",
@@ -148,8 +152,11 @@ def top_table_rows(metric: str, activities: list[dict]) -> list[dict]:
     config = TOP_METRICS[metric]
     other = "distance" if metric == "elevation" else "elevation"
     other_config = TOP_METRICS[other]
+    years = [int(str(activity["date"])[:4]) for activity in activities]
+    year_bests = mark_year_bests(years)
     rows = []
     for index, activity in enumerate(activities):
+        year = years[index]
         value = activity[config["field"]] or 0
         other_value = activity[other_config["field"]]
         distance = activity.get("distance_meters")
@@ -157,9 +164,10 @@ def top_table_rows(metric: str, activities: list[dict]) -> list[dict]:
         sport = activity.get("sport")
         rows.append(
             {
-                "rank": f"#{index + 1}",
+                "rank": index + 1,
                 "date": format_date(activity["date"]),
                 "date_iso": str(activity["date"])[:10],
+                "year": year,
                 "activity": activity["name"],
                 "value": config["format"](value, sport),
                 "value_raw": value,
@@ -169,6 +177,7 @@ def top_table_rows(metric: str, activities: list[dict]) -> list[dict]:
                 "duration_seconds": duration,
                 "pace": format_pace(distance, duration, sport) if distance and duration else "–",
                 "activity_id": activity["id"],
+                **medal_row_fields(index + 1, year_bests[index]),
                 **multisport_row_fields(activity.get("parent_sport")),
             }
         )
@@ -196,7 +205,9 @@ def render_top_table(metric: str, activities: list[dict], compact: bool) -> ui.t
     )
     cells = ["value"] if compact else ["date", "value", "other", "duration"]
     add_formatted_cells(table, cells)
+    add_rank_medal_cell(table)
     add_multisport_cell(table)
+    add_year_medal_cell(table, "date")
     table.on("rowClick", lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"))
     return table
 

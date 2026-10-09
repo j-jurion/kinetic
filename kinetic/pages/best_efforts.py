@@ -18,16 +18,16 @@ from kinetic.pages.top_activities import (
 from kinetic.queries import multisport_parent_sports
 from kinetic.ui_helpers import (
     ALL_RUNNING,
-    add_medal_cell,
     add_multisport_cell,
+    add_rank_medal_cell,
     add_year_medal_cell,
     distance_label,
     filtered_url,
     format_date,
     format_distance,
     format_duration,
+    format_pace,
     mark_year_bests,
-    medal_column,
     medal_row_fields,
     multisport_row_fields,
     record_chip,
@@ -141,25 +141,27 @@ async def best_efforts_page(sport: Optional[str] = None, year: Optional[int] = N
 
                         cols = [
                             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
-                            medal_column(),
-                            {"name": "date", "label": "Date", "field": "date", "align": "left"},
                             {
                                 "name": "activity",
                                 "label": "Activity",
                                 "field": "activity",
                                 "align": "left",
                             },
-                            {"name": "year", "label": "Year", "field": "year", "align": "left"},
+                            {"name": "date", "label": "Date", "field": "date", "align": "left"},
                             {"name": "time", "label": "Time", "field": "time", "align": "right"},
+                            {"name": "pace", "label": "Pace", "field": "pace", "align": "right"},
                         ]
                         year_bests = mark_year_bests([e["year"] for e in dist_efforts])
                         rows = [
                             {
-                                "rank": f"#{i + 1}",
+                                "rank": i + 1,
                                 "date": format_date(e["date"]),
                                 "activity": e["activity_name"],
                                 "year": str(e["year"]),
                                 "time": format_duration(e["duration_seconds"]),
+                                "pace": format_pace(
+                                    e["distance_meters"], e["duration_seconds"], e["sport"]
+                                ),
                                 "activity_id": e["activity_id"],
                                 **multisport_row_fields(e.get("parent_sport")),
                                 **medal_row_fields(i + 1, year_bests[i]),
@@ -171,9 +173,9 @@ async def best_efforts_page(sport: Optional[str] = None, year: Optional[int] = N
                             .classes("w-full best-efforts-table")
                             .props("dense flat")
                         )
+                        add_rank_medal_cell(tbl)
                         add_multisport_cell(tbl)
-                        add_medal_cell(tbl)
-                        add_year_medal_cell(tbl, "year")
+                        add_year_medal_cell(tbl, "date")
                         tbl.on(
                             "rowClick",
                             lambda e: ui.navigate.to(f"/activity/{e.args[1]['activity_id']}"),
