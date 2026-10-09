@@ -10,14 +10,17 @@ from sqlmodel import Session, col, select
 from kinetic.database import engine
 from kinetic.models import Activity, BestEffort, SportType
 from kinetic.ui_helpers import (
+    ALL_RUNNING,
     DATE_FORMAT,
     DISTANCE_LABELS,
-    SPORT_COLORS,
-    SPORT_ICONS,
-    SPORTS,
     format_date,
     format_duration,
     format_pace,
+    resolve_sports,
+    sport_color,
+    sport_filter_options,
+    sport_icon,
+    sport_label,
 )
 
 # Stored distances come from a fixed set of targets that are far apart, so a small
@@ -39,8 +42,9 @@ def _db_get_distance_attempts(
             .where(col(BestEffort.distance_meters) >= distance - _DISTANCE_TOLERANCE)
             .where(col(BestEffort.distance_meters) <= distance + _DISTANCE_TOLERANCE)
         )
-        if sport:
-            stmt = stmt.where(BestEffort.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(BestEffort.sport).in_([SportType(s) for s in sports]))
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.duration_seconds))
@@ -68,7 +72,7 @@ def build_progression_chart(
         return fig
 
     by_date = sorted(attempts, key=lambda a: a["date"])
-    color = SPORT_COLORS.get(sport or "running", "#f97316")
+    color = sport_color(sport)
     fig.add_trace(
         go.Scatter(
             x=[a["date"][:10] for a in by_date],
@@ -115,7 +119,9 @@ async def best_effort_distance_page(
     distance: float, sport: Optional[str] = None, year: Optional[int] = None
 ) -> None:
     ui.add_head_html("<style>.attempts-table tbody td { cursor: pointer; }</style>")
-    sport_filter: dict[str, Optional[str]] = {"value": sport}
+    # Every best effort belongs to a sport, so "all sports" would mix unrelated records
+    selected_sport = sport or ALL_RUNNING
+    sport_filter: dict[str, Optional[str]] = {"value": selected_sport}
     year_filter: dict[str, Optional[int]] = {"value": year}
     label = distance_label(distance)
 
@@ -127,9 +133,10 @@ async def best_effort_distance_page(
 
         with content_col:
             if not attempts:
+                selection = sport_label(sport_filter["value"] or ALL_RUNNING).lower()
                 with ui.card().classes("w-full q-pa-lg text-center"):
                     ui.icon("emoji_events", size="48px").classes("text-grey-4")
-                    ui.label(f"No attempts recorded at {label} yet.").classes(
+                    ui.label(f"No {selection} attempts recorded at {label} yet.").classes(
                         "text-grey-6 q-mt-sm"
                     )
                 return
@@ -178,7 +185,7 @@ async def best_effort_distance_page(
                         "date_iso": a["date"][:10],
                         "activity": a["activity_name"],
                         "kind": a["kind"].replace("_", " "),
-                        "sport": a["sport"],
+                        "sport": sport_label(a["sport"]),
                         "time": format_duration(a["duration_seconds"]),
                         "duration_seconds": a["duration_seconds"],
                         "pace": format_pace(a["distance_meters"], a["duration_seconds"]),
@@ -212,20 +219,18 @@ async def best_effort_distance_page(
                 icon="arrow_back",
                 on_click=lambda: ui.navigate.to("/best-efforts"),
             ).props("flat dense no-caps color=primary")
-            ui.icon(SPORT_ICONS.get(sport or "running", "sports")).classes("text-grey-7")
+            ui.icon(sport_icon(sport_filter["value"])).classes("text-grey-7")
             ui.label(f"{label} – all attempts").classes("text-h5 text-weight-bold")
         with ui.row().classes("gap-2"):
             ui.select(
-                ["All sports"] + SPORTS,
-                value=sport or "All sports",
+                sport_filter_options(include_all_sports=False),
+                value=selected_sport,
                 label="Sport",
                 on_change=lambda e: (
-                    sport_filter.__setitem__(
-                        "value", None if e.value == "All sports" else e.value
-                    ),
+                    sport_filter.__setitem__("value", e.value),
                     ui.timer(0, refresh, once=True),
                 ),
-            ).classes("w-36")
+            ).classes("w-40")
             ui.select(
                 ["All years"] + [str(y) for y in range(datetime.now().year, 2009, -1)],
                 value=str(year) if year else "All years",

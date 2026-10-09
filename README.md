@@ -6,7 +6,8 @@ Activity tracking web app built with NiceGUI + FastAPI.
 - Upload Garmin `.fit` files or add activities manually
 - Activities list with distance, pace, HR, duration
 - Edit and delete activities
-- Sport types: Running, Cycling, Swimming, Hiking, Walking, Triathlon, Strength, Yoga
+- Sport types: Running, Trail Running, Cycling, Swimming, Hiking, Walking, Triathlon, Strength, Yoga
+- Trail runs are detected from the `.fit` sub-sport; an "All running" filter covers road + trail
 - Activity kinds: Race, Training, Easy, Social, Long Run, Tempo, Interval, Recovery
 - Monthly & yearly distance charts with sport filter
 - Sport breakdown pie chart

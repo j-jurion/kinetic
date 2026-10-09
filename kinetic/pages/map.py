@@ -7,7 +7,7 @@ from sqlmodel import Session, col, select
 from kinetic.api import select_map_activities
 from kinetic.database import engine
 from kinetic.models import Activity
-from kinetic.ui_helpers import SPORT_COLORS, SPORT_ICONS, SPORTS
+from kinetic.ui_helpers import SPORT_COLORS, SPORT_ICONS, SPORTS, sport_label
 
 
 def _db_sports_with_routes() -> list[str]:
@@ -92,7 +92,7 @@ async def map_page() -> None:
         for sport in available:
             color = SPORT_COLORS.get(sport, "#6b7280")
             chip = ui.chip(
-                sport.replace("_", " ").title(),
+                sport_label(sport),
                 icon=SPORT_ICONS.get(sport, "sports"),
                 selectable=True,
                 selected=True,

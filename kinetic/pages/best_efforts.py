@@ -11,11 +11,13 @@ from sqlmodel import Session, col, select
 from kinetic.database import engine
 from kinetic.models import Activity, BestEffort, SportType
 from kinetic.ui_helpers import (
+    ALL_RUNNING,
     DISTANCE_LABELS,
-    SPORT_COLORS,
-    SPORTS,
     format_date,
     format_duration,
+    resolve_sports,
+    sport_color,
+    sport_filter_options,
 )
 
 
@@ -36,8 +38,9 @@ def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict
         stmt = select(BestEffort, Activity).join(
             Activity, col(BestEffort.activity_id) == col(Activity.id)
         )
-        if sport:
-            stmt = stmt.where(BestEffort.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(BestEffort.sport).in_([SportType(s) for s in sports]))
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
@@ -50,8 +53,9 @@ def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict
 def _db_get_activity_summary(sport: Optional[str], year: Optional[int]) -> dict:
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in sports]))
         if year:
             stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
             stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
@@ -71,7 +75,7 @@ def _stat_tile(label: str, value: str) -> None:
 
 async def best_efforts_page() -> None:
     ui.add_head_html("<style>.best-efforts-table tbody td { cursor: pointer; }</style>")
-    sport_filter = {"value": "running"}
+    sport_filter = {"value": ALL_RUNNING}
     year_filter: dict[str, Optional[int]] = {"value": None}
 
     async def refresh():
@@ -99,7 +103,7 @@ async def best_efforts_page() -> None:
                 for dist, dist_efforts in sorted(grouped.items()):
                     label = DISTANCE_LABELS.get(dist, f"{dist / 1000:.1f} km")
                     best = dist_efforts[0]
-                    color = SPORT_COLORS.get(sport_filter["value"] or "running", "#f97316")
+                    color = sport_color(sport_filter["value"])
 
                     with ui.card().classes("w-full q-pa-md"):
                         with ui.row().classes("items-center justify-between w-full q-mb-sm"):
@@ -167,14 +171,14 @@ async def best_efforts_page() -> None:
         ui.label("Best Efforts").classes("text-h5 text-weight-bold")
         with ui.row().classes("gap-2"):
             ui.select(
-                SPORTS,
-                value="running",
+                sport_filter_options(include_all_sports=False),
+                value=ALL_RUNNING,
                 label="Sport",
                 on_change=lambda e: (
                     sport_filter.__setitem__("value", e.value),
                     ui.timer(0, refresh, once=True),
                 ),
-            ).classes("w-36")
+            ).classes("w-40")
             ui.select(
                 ["All years"] + [str(y) for y in range(datetime.now().year, 2009, -1)],
                 value="All years",

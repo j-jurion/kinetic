@@ -20,6 +20,7 @@ from kinetic.ui_helpers import (
     format_date,
     format_duration,
     format_pace,
+    sport_label,
 )
 
 
@@ -509,7 +510,7 @@ async def activity_detail_page(activity_id: int) -> None:
             ui.label(a.get("name", "Activity")).classes("text-h5 text-weight-bold")
             ui.label(
                 f"{format_date(a.get('date'))}  \u2022  "
-                f"{a.get('kind', '').replace('_', ' ').title()}  \u2022  {sport.title()}"
+                f"{a.get('kind', '').replace('_', ' ').title()}  \u2022  {sport_label(sport)}"
             ).classes("text-caption text-grey-6")
         ui.button(icon="edit", on_click=lambda: show_edit_dialog(a, on_refresh)).props(
             "flat round dense"

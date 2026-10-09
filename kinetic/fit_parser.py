@@ -9,14 +9,17 @@ from kinetic.ui_helpers import DATE_FORMAT
 _SEMICIRCLES_TO_DEG = 180.0 / (2**31)
 
 # Standard best-effort distances per sport (meters)
+_RUNNING_DISTANCES = [1000, 5000, 10000, 15000, 30000, 21097.5, 42195]
 BEST_EFFORT_DISTANCES: dict[SportType, list[float]] = {
-    SportType.running: [1000, 5000, 10000, 15000, 30000, 21097.5, 42195],
+    SportType.running: _RUNNING_DISTANCES,
+    SportType.trail_running: _RUNNING_DISTANCES,
     SportType.cycling: [1000, 5000, 10000, 20000, 40000, 100000],
     SportType.swimming: [100, 200, 400, 800, 1500, 3000],
 }
 
 SPORT_MAP: dict[str, SportType] = {
     "running": SportType.running,
+    "trail_running": SportType.trail_running,
     "cycling": SportType.cycling,
     "biking": SportType.cycling,
     "swimming": SportType.swimming,
@@ -26,6 +29,21 @@ SPORT_MAP: dict[str, SportType] = {
     "triathlon": SportType.triathlon,
     "strength_training": SportType.strength,
 }
+
+# FIT sub_sport values that refine the recorded sport
+SUB_SPORT_MAP: dict[tuple[str, str], SportType] = {
+    ("running", "trail"): SportType.trail_running,
+}
+
+
+def resolve_sport(sport_raw: Optional[str], sub_sport_raw: Optional[str] = None) -> SportType:
+    """Map a FIT sport (refined by its sub_sport) onto a SportType."""
+    sport = str(sport_raw or "other").lower()
+    sub_sport = str(sub_sport_raw or "").lower()
+    refined = SUB_SPORT_MAP.get((sport, sub_sport))
+    if refined:
+        return refined
+    return SPORT_MAP.get(sport, SportType.other)
 
 
 def _safe_val(record: dict, key: str) -> Optional[float | int | str | datetime]:
@@ -101,7 +119,7 @@ def _build_single_activity(
     activity_name_hint: str | None,
 ) -> tuple[Activity, list[Lap], list[BestEffort]]:
     sport_raw = str(session_data.get("sport", "other")).lower()
-    sport = SPORT_MAP.get(sport_raw, SportType.other)
+    sport = resolve_sport(sport_raw, session_data.get("sub_sport"))
 
     start_time = session_data.get("start_time")
     if isinstance(start_time, str):
@@ -230,7 +248,7 @@ def _build_multisport(
         if sport_raw == "transition":
             continue
 
-        sport = SPORT_MAP.get(sport_raw, SportType.other)
+        sport = resolve_sport(sport_raw, session.get("sub_sport"))
         start_time = session.get("start_time")
         if isinstance(start_time, str):
             start_time = datetime.fromisoformat(start_time)

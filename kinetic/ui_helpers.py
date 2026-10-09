@@ -13,6 +13,7 @@ DATE_MASK = "DD-MM-YYYY"
 
 SPORTS = [
     "running",
+    "trail_running",
     "cycling",
     "swimming",
     "hiking",
@@ -30,30 +31,41 @@ KINDS = ["race", "training", "easy", "social", "long_run", "tempo", "interval", 
 # Three rings (swim · bike · run)
 _TRIATHLON_ICON = (
     "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
-    "%3Ccircle cx='4' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='12' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='20' cy='12' r='3.5' fill='none' stroke='%238b5cf6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='4' cy='12' r='3.5' fill='none' stroke='%237c4dff' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='12' cy='12' r='3.5' fill='none' stroke='%237c4dff' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='20' cy='12' r='3.5' fill='none' stroke='%237c4dff' stroke-width='1.8'/%3E"
     "%3C/svg%3E"
 )
 # Two rings (run · bike)
 _DUATHLON_ICON = (
     "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
-    "%3Ccircle cx='7' cy='12' r='5.5' fill='none' stroke='%23d946ef' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='17' cy='12' r='5.5' fill='none' stroke='%23d946ef' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='7' cy='12' r='5.5' fill='none' stroke='%23ff4dd8' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='12' r='5.5' fill='none' stroke='%23ff4dd8' stroke-width='1.8'/%3E"
     "%3C/svg%3E"
 )
 # Four rings in a 2×2 grid (other multisport)
 _MULTISPORT_ICON = (
     "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
-    "%3Ccircle cx='7' cy='7' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='17' cy='7' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='7' cy='17' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
-    "%3Ccircle cx='17' cy='17' r='3.5' fill='none' stroke='%2314b8a6' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='7' cy='7' r='3.5' fill='none' stroke='%2300bfa5' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='7' r='3.5' fill='none' stroke='%2300bfa5' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='7' cy='17' r='3.5' fill='none' stroke='%2300bfa5' stroke-width='1.8'/%3E"
+    "%3Ccircle cx='17' cy='17' r='3.5' fill='none' stroke='%2300bfa5' stroke-width='1.8'/%3E"
     "%3C/svg%3E"
+)
+# The standard running figure placed on top of a hill (trail running)
+_TRAIL_RUNNING_ICON = (
+    "img:data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E"
+    "%3Cpath transform='translate(2.4,0) scale(0.8)' fill='%23ff7a00' d='M13.49 5.48c1.1 0 2-.9"
+    " 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3"
+    " 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2"
+    "v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z'/%3E"
+    "%3Cpath fill='%23ff7a00' d='M0 24L0 22.6C4.5 22.6 6 17.8 11 17.8C16 17.8 18 22.6 24"
+    " 22.6L24 24Z'/%3E%3C/svg%3E"
 )
 
 SPORT_ICONS = {
     "running": "directions_run",
+    "trail_running": _TRAIL_RUNNING_ICON,
     "cycling": "directions_bike",
     "swimming": "pool",
     "hiking": "hiking",
@@ -67,18 +79,27 @@ SPORT_ICONS = {
 }
 
 SPORT_COLORS = {
-    "running": "#830000",
-    "cycling": "#036627",
-    "swimming": "#3b82f6",
-    "hiking": "#aa7400",
-    "walking": "#84cc16",
-    "triathlon": "#8b5cf6",
-    "duathlon": "#d946ef",
-    "multisport": "#c37aac",
-    "strength": "#ec4899",
-    "yoga": "#0bcaf5",
-    "other": "#6b7280",
+    "running": "#ff2d55",
+    "trail_running": "#ff7a00",
+    "cycling": "#00c853",
+    "swimming": "#00a3ff",
+    "hiking": "#ffb300",
+    "walking": "#aeea00",
+    "triathlon": "#7c4dff",
+    "duathlon": "#ff4dd8",
+    "multisport": "#00bfa5",
+    "strength": "#ff2d8a",
+    "yoga": "#00e5ff",
+    "other": "#90a4ae",
 }
+
+# Filter groups: a single option that selects several sports at once
+ALL_RUNNING = "all_running"
+SPORT_GROUPS: dict[str, list[str]] = {
+    ALL_RUNNING: ["running", "trail_running"],
+}
+SPORT_GROUP_LABELS = {ALL_RUNNING: "All running"}
+ALL_SPORTS = ""
 
 DISTANCE_LABELS: dict[float, str] = {
     400: "400 m",
@@ -99,6 +120,56 @@ DISTANCE_LABELS: dict[float, str] = {
     200: "200 m",
     1500: "1500 m",
 }
+
+
+def sport_label(sport: str) -> str:
+    """Human readable name for a sport or sport group."""
+    if sport in SPORT_GROUP_LABELS:
+        return SPORT_GROUP_LABELS[sport]
+    return sport.replace("_", " ").capitalize()
+
+
+def sport_filter_options(
+    sports: Optional[list[str]] = None, include_all_sports: bool = True
+) -> dict[str, str]:
+    """Options for a sport filter select, mapping stored value → displayed label."""
+    options: dict[str, str] = {}
+    if include_all_sports:
+        options[ALL_SPORTS] = "All sports"
+    candidates = sports if sports is not None else SPORTS
+    for group, members in SPORT_GROUPS.items():
+        if any(m in candidates for m in members):
+            options[group] = SPORT_GROUP_LABELS[group]
+    for sport in candidates:
+        options[sport] = sport_label(sport)
+    return options
+
+
+def resolve_sports(value: Optional[str]) -> Optional[list[str]]:
+    """Expand a filter selection into the sports it covers (None = every sport)."""
+    if not value:
+        return None
+    if value in SPORT_GROUPS:
+        return list(SPORT_GROUPS[value])
+    return [value]
+
+
+def sport_color(sport: Optional[str], default: str = "#f97316") -> str:
+    """Colour for a sport or sport group."""
+    if not sport:
+        return default
+    if sport in SPORT_GROUPS:
+        return SPORT_COLORS.get(SPORT_GROUPS[sport][0], default)
+    return SPORT_COLORS.get(sport, default)
+
+
+def sport_icon(sport: Optional[str], default: str = "sports") -> str:
+    """Icon for a sport or sport group."""
+    if not sport:
+        return default
+    if sport in SPORT_GROUPS:
+        return SPORT_ICONS.get(SPORT_GROUPS[sport][0], default)
+    return SPORT_ICONS.get(sport, default)
 
 
 def _to_datetime(value: Union[datetime, date, str, None]) -> Optional[datetime]:
@@ -166,4 +237,4 @@ def format_speed_kmh(speed_ms: float) -> str:
 def sport_chip(sport: str) -> None:
     color = SPORT_COLORS.get(sport, "#6b7280")
     icon = SPORT_ICONS.get(sport, "sports")
-    ui.chip(sport, icon=icon, color=color).props("outline dense")
+    ui.chip(sport_label(sport), icon=icon, color=color).props("outline dense")

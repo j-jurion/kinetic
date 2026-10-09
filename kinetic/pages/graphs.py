@@ -9,14 +9,21 @@ from sqlmodel import Session, col, select
 
 from kinetic.database import engine
 from kinetic.models import Activity, SportType
-from kinetic.ui_helpers import SPORT_COLORS, SPORTS
+from kinetic.ui_helpers import (
+    ALL_SPORTS,
+    resolve_sports,
+    sport_color,
+    sport_filter_options,
+    sport_label,
+)
 
 
 def _db_get_monthly(sport: Optional[str], year: Optional[int]) -> list[dict]:
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in sports]))
         if year:
             stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
             stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
@@ -41,8 +48,9 @@ def _db_get_monthly(sport: Optional[str], year: Optional[int]) -> list[dict]:
 def _db_get_yearly(sport: Optional[str]) -> list[dict]:
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in sports]))
         activities = session.exec(stmt).all()
     yearly: dict[int, dict] = {}
     for a in activities:
@@ -58,8 +66,9 @@ def _db_get_yearly(sport: Optional[str]) -> list[dict]:
 def _db_get_activities_for_pie(sport: Optional[str]) -> list[dict]:
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == SportType(sport))
+        sports = resolve_sports(sport)
+        if sports:
+            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in sports]))
         return [
             {
                 "sport": a.sport,
@@ -111,11 +120,11 @@ def build_monthly_chart(
     mc = METRIC_CONFIG[metric]
     labels = [f"{MONTH_NAMES[d['month']]} {d['year']}" for d in data]
     values = [round(d[mc["field"]], mc["round"]) for d in data]
-    color = SPORT_COLORS.get(sport or "running", "#f97316")
+    color = sport_color(sport)
     unit = f" {mc['unit']}" if mc["unit"] else ""
     hover = f"<b>%{{x}}</b><br>{mc['label']}: %{{y:{mc['fmt']}}}{unit}<extra></extra>"
 
-    sport_label = sport.title() if sport else "All Sports"
+    sport_title = sport_label(sport) if sport else "All Sports"
     year_label = f" ({year})" if year else ""
     fig = go.Figure()
     fig.add_trace(
@@ -129,7 +138,7 @@ def build_monthly_chart(
         )
     )
     fig.update_layout(
-        title=f"Monthly {mc['label']} – {sport_label}{year_label}",
+        title=f"Monthly {mc['label']} – {sport_title}{year_label}",
         xaxis_title="Month",
         yaxis_title=mc["label"],
         plot_bgcolor="rgba(0,0,0,0)",
@@ -151,7 +160,7 @@ def build_yearly_chart(
     mc = METRIC_CONFIG[metric]
     years = [str(d["year"]) for d in data]
     values = [round(d[mc["field"]], mc["round"]) for d in data]
-    color = SPORT_COLORS.get(sport or "running", "#f97316")
+    color = sport_color(sport)
     unit = f" {mc['unit']}" if mc["unit"] else ""
     hover = f"<b>%{{x}}</b><br>{mc['label']}: %{{y:{mc['fmt']}}}{unit}<extra></extra>"
 
@@ -167,7 +176,7 @@ def build_yearly_chart(
         )
     )
     fig.update_layout(
-        title=f"Yearly {mc['label']} – {sport.title() if sport else 'All Sports'}",
+        title=f"Yearly {mc['label']} – {sport_label(sport) if sport else 'All Sports'}",
         xaxis_title="Year",
         yaxis_title=mc["label"],
         plot_bgcolor="rgba(0,0,0,0)",
@@ -200,12 +209,12 @@ def build_sport_breakdown_chart(
 
     labels = list(totals.keys())
     values = [round(v, mc["round"]) for v in totals.values()]
-    colors = [SPORT_COLORS.get(name, "#6b7280") for name in labels]
+    colors = [sport_color(name, "#6b7280") for name in labels]
     unit = f" {mc['unit']}" if mc["unit"] else ""
 
     fig = go.Figure(
         go.Pie(
-            labels=[name.title() for name in labels],
+            labels=[sport_label(name) for name in labels],
             values=values,
             marker=dict(colors=colors),
             hovertemplate=(
@@ -253,11 +262,11 @@ async def graphs_page() -> None:
         ui.label("Graphs").classes("text-h5 text-weight-bold")
         with ui.row().classes("gap-2"):
             ui.select(
-                ["All sports"] + SPORTS,
-                value="All sports",
+                sport_filter_options(),
+                value=ALL_SPORTS,
                 label="Sport",
                 on_change=lambda e: (
-                    sport_filter.__setitem__("value", None if e.value == "All sports" else e.value),
+                    sport_filter.__setitem__("value", e.value or None),
                     ui.timer(0, refresh, once=True),
                 ),
             ).classes("w-36")

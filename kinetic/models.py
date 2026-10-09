@@ -7,6 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 class SportType(str, Enum):
     running = "running"
+    trail_running = "trail_running"
     cycling = "cycling"
     swimming = "swimming"
     hiking = "hiking"

@@ -22,6 +22,7 @@ from kinetic.models import (
     SportType,
 )
 from kinetic.ui_helpers import (
+    ALL_SPORTS,
     KINDS,
     SPORT_COLORS,
     SPORT_ICONS,
@@ -31,6 +32,9 @@ from kinetic.ui_helpers import (
     format_duration,
     format_pace,
     parse_date_input,
+    resolve_sports,
+    sport_filter_options,
+    sport_label,
 )
 
 UPLOAD_DIR = Path("uploads")
@@ -67,11 +71,12 @@ def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
 
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            # With a sport filter: show activities matching that sport (includes triathlon
+        sports = resolve_sports(sport)
+        if sports:
+            # With a sport filter: show activities matching those sports (includes triathlon
             # children). Triathlon parents have sport=triathlon so they won't appear under
             # e.g. 'running'.
-            stmt = stmt.where(Activity.sport == SportType(sport))
+            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in sports]))
         else:
             # No filter: show top-level activities only (no triathlon sub-sport children)
             stmt = stmt.where(Activity.parent_id == None)  # noqa: E711
@@ -273,7 +278,9 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
 
         with ui.row().classes("w-full gap-3"):
             sport_sel = ui.select(
-                SPORTS, label="Sport", value=data.get("sport", "running")
+                {s: sport_label(s) for s in SPORTS},
+                label="Sport",
+                value=data.get("sport", "running"),
             ).classes("flex-1")
             kind_sel = ui.select(KINDS, label="Kind", value=data.get("kind", "training")).classes(
                 "flex-1"
@@ -469,11 +476,11 @@ async def activities_page() -> None:
 
         with ui.row().classes("items-center gap-2"):
             ui.select(
-                ["All sports"] + SPORTS,
-                value="All sports",
+                sport_filter_options(),
+                value=ALL_SPORTS,
                 label="Sport",
                 on_change=lambda e: (
-                    sport_filter.__setitem__("value", None if e.value == "All sports" else e.value),
+                    sport_filter.__setitem__("value", e.value or None),
                     ui.timer(0, refresh, once=True),
                 ),
             ).classes("w-36")
