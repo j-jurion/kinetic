@@ -1,6 +1,15 @@
 """Shared UI helpers, theme tokens and navigation."""
 
+from datetime import date, datetime
+from typing import Optional, Union
+
 from nicegui import ui
+
+# Every date shown in the app uses this format
+DATE_FORMAT = "%d-%m-%Y"
+DATETIME_FORMAT = "%d-%m-%Y %H:%M"
+# Quasar date-picker mask matching DATE_FORMAT
+DATE_MASK = "DD-MM-YYYY"
 
 SPORTS = [
     "running",
@@ -90,6 +99,45 @@ DISTANCE_LABELS: dict[float, str] = {
     200: "200 m",
     1500: "1500 m",
 }
+
+
+def _to_datetime(value: Union[datetime, date, str, None]) -> Optional[datetime]:
+    """Coerce a datetime, date or ISO/dd-mm-yyyy string into a datetime."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        for fmt in (DATETIME_FORMAT, DATE_FORMAT):
+            try:
+                return datetime.strptime(value, fmt)
+            except ValueError:
+                continue
+    return None
+
+
+def format_date(value: Union[datetime, date, str, None]) -> str:
+    """Render any date value as dd-mm-yyyy."""
+    parsed = _to_datetime(value)
+    return parsed.strftime(DATE_FORMAT) if parsed else ""
+
+
+def format_datetime(value: Union[datetime, date, str, None]) -> str:
+    """Render any date value as dd-mm-yyyy HH:MM."""
+    parsed = _to_datetime(value)
+    return parsed.strftime(DATETIME_FORMAT) if parsed else ""
+
+
+def parse_date_input(value: Union[str, None]) -> datetime:
+    """Parse a user-entered dd-mm-yyyy[ HH:MM] value; ISO input is also accepted."""
+    parsed = _to_datetime((value or "").strip())
+    if parsed is None:
+        raise ValueError(f"Unrecognised date: {value!r}")
+    return parsed
 
 
 def format_duration(seconds: float) -> str:

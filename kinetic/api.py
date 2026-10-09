@@ -13,6 +13,7 @@ from kinetic.database import engine, require_id
 from kinetic.fit_parser import parse_fit_file
 from kinetic.garmin_sync import UPLOAD_DIR
 from kinetic.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
+from kinetic.ui_helpers import format_date
 
 router = APIRouter()
 
@@ -84,7 +85,7 @@ def _format_duration(seconds: float) -> str:
 
 def _activity_stat_rows(activity: Activity) -> list[list[str]]:
     """The compact stat list shown when hovering a single route."""
-    rows: list[list[str]] = [["Date", activity.date.strftime("%d %b %Y")]]
+    rows: list[list[str]] = [["Date", format_date(activity.date)]]
     if activity.distance_meters:
         rows.append(["Distance", f"{activity.distance_meters / 1000:.2f} km"])
     rows.append(["Duration", _format_duration(activity.duration_seconds or 0)])
@@ -448,7 +449,7 @@ def get_activities_map(sports: Optional[str] = None) -> HTMLResponse:
                 "name": activity.name,
                 "sport": sport,
                 "color": SPORT_COLORS.get(sport, "#6b7280"),
-                "date": activity.date.strftime("%d %b %Y"),
+                "date": format_date(activity.date),
                 "stats": _activity_stat_rows(activity),
                 "coords": coords,
             }

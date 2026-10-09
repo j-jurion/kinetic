@@ -17,6 +17,7 @@ from kinetic.ui_helpers import (
     DISTANCE_LABELS,
     SPORT_COLORS,
     SPORT_ICONS,
+    format_date,
     format_duration,
     format_pace,
 )
@@ -507,7 +508,7 @@ async def activity_detail_page(activity_id: int) -> None:
         with ui.column().classes("gap-0 flex-1"):
             ui.label(a.get("name", "Activity")).classes("text-h5 text-weight-bold")
             ui.label(
-                f"{a.get('date', '')[:10]}  \u2022  "
+                f"{format_date(a.get('date'))}  \u2022  "
                 f"{a.get('kind', '').replace('_', ' ').title()}  \u2022  {sport.title()}"
             ).classes("text-caption text-grey-6")
         ui.button(icon="edit", on_click=lambda: show_edit_dialog(a, on_refresh)).props(

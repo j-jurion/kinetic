@@ -1,25 +1,50 @@
 """Best Efforts page."""
 
 from datetime import datetime
+from functools import partial
 from typing import Optional
+from urllib.parse import urlencode
 
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
 from kinetic.database import engine
 from kinetic.models import Activity, BestEffort, SportType
-from kinetic.ui_helpers import DISTANCE_LABELS, SPORT_COLORS, SPORTS, format_duration
+from kinetic.ui_helpers import (
+    DISTANCE_LABELS,
+    SPORT_COLORS,
+    SPORTS,
+    format_date,
+    format_duration,
+)
+
+
+def _attempts_url(distance: float, sport: Optional[str], year: Optional[int]) -> str:
+    """URL of the page listing every attempt at a given best-effort distance."""
+    params = {}
+    if sport:
+        params["sport"] = sport
+    if year:
+        params["year"] = str(year)
+    query = f"?{urlencode(params)}" if params else ""
+    distance_str = f"{distance:.2f}".rstrip("0").rstrip(".")
+    return f"/best-efforts/{distance_str}{query}"
 
 
 def _db_get_best_efforts(sport: Optional[str], year: Optional[int]) -> list[dict]:
     with Session(engine) as session:
-        stmt = select(BestEffort)
+        stmt = select(BestEffort, Activity).join(
+            Activity, col(BestEffort.activity_id) == col(Activity.id)
+        )
         if sport:
             stmt = stmt.where(BestEffort.sport == SportType(sport))
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
-        return [e.model_dump() for e in session.exec(stmt).all()]
+        return [
+            {**effort.model_dump(), "activity_name": activity.name}
+            for effort, activity in session.exec(stmt).all()
+        ]
 
 
 def _db_get_activity_summary(sport: Optional[str], year: Optional[int]) -> dict:
@@ -79,21 +104,41 @@ async def best_efforts_page() -> None:
                     with ui.card().classes("w-full q-pa-md"):
                         with ui.row().classes("items-center justify-between w-full q-mb-sm"):
                             ui.label(label).classes("text-h6 text-weight-bold")
-                            ui.chip(
-                                format_duration(best["duration_seconds"]),
-                                icon="emoji_events",
-                            ).props("dense outline").style(f"color: {color}; border-color: {color}")
+                            with ui.row().classes("items-center gap-2"):
+                                ui.chip(
+                                    format_duration(best["duration_seconds"]),
+                                    icon="emoji_events",
+                                ).props("dense outline").style(
+                                    f"color: {color}; border-color: {color}"
+                                )
+                                ui.button(
+                                    f"All attempts ({len(dist_efforts)})",
+                                    icon="format_list_bulleted",
+                                    on_click=partial(
+                                        ui.navigate.to,
+                                        _attempts_url(
+                                            dist, sport_filter["value"], year_filter["value"]
+                                        ),
+                                    ),
+                                ).props("flat dense no-caps color=primary")
 
                         cols = [
                             {"name": "rank", "label": "#", "field": "rank", "align": "left"},
                             {"name": "date", "label": "Date", "field": "date", "align": "left"},
+                            {
+                                "name": "activity",
+                                "label": "Activity",
+                                "field": "activity",
+                                "align": "left",
+                            },
                             {"name": "year", "label": "Year", "field": "year", "align": "left"},
                             {"name": "time", "label": "Time", "field": "time", "align": "right"},
                         ]
                         rows = [
                             {
                                 "rank": f"#{i + 1}",
-                                "date": str(e["date"])[:10],
+                                "date": format_date(e["date"]),
+                                "activity": e["activity_name"],
                                 "year": str(e["year"]),
                                 "time": format_duration(e["duration_seconds"]),
                                 "activity_id": e["activity_id"],

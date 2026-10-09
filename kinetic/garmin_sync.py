@@ -14,6 +14,7 @@ from sqlmodel import Session, select
 from kinetic.database import engine, require_id
 from kinetic.fit_parser import parse_fit_file
 from kinetic.models import Activity
+from kinetic.ui_helpers import format_date
 
 UPLOAD_DIR = Path("uploads")
 TOKEN_DIR = Path("~/.garminconnect").expanduser()
@@ -177,7 +178,7 @@ def sync_garmin_activities(
         raise RuntimeError(f"Garmin connection error: {exc}") from exc
 
     until_date = until or date.today()
-    _cb(f"Fetching activity list {since.isoformat()} → {until_date.isoformat()}…")
+    _cb(f"Fetching activity list {format_date(since)} → {format_date(until_date)}…")
 
     try:
         activities = garmin.get_activities_by_date(since.isoformat(), until_date.isoformat())

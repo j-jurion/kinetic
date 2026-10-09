@@ -9,6 +9,21 @@ from sqlmodel import Session, col, select
 from kinetic import garmin_sync
 from kinetic.database import engine
 from kinetic.models import Activity
+from kinetic.ui_helpers import DATE_MASK, format_date, parse_date_input
+
+
+def _date_field(label_text: str, value: str) -> ui.input:
+    """A dd-mm-yyyy text field with an attached calendar picker."""
+    with ui.input(label=label_text, value=value).props(
+        "outlined dense style='width:200px'"
+    ) as field:
+        with ui.menu().props("no-parent-event") as menu:
+            with ui.date(mask=DATE_MASK).bind_value(field):
+                with ui.row().classes("justify-end"):
+                    ui.button("Close", on_click=menu.close).props("flat")
+        with field.add_slot("append"):
+            ui.icon("edit_calendar").on("click", menu.open).classes("cursor-pointer")
+    return field
 
 
 def _latest_activity_date() -> date | None:
@@ -146,13 +161,8 @@ async def sync_page() -> None:
         )
 
         with ui.row().classes("items-center gap-4 q-mb-md flex-wrap"):
-            since_input = ui.input(
-                label="Sync since",
-                value=default_since.isoformat(),
-            ).props("outlined dense type=date style='width:180px'")
-            until_input = ui.input(label="Until (optional)", value="").props(
-                "outlined dense type=date style='width:180px'"
-            )
+            since_input = _date_field("Sync since (dd-mm-yyyy)", format_date(default_since))
+            until_input = _date_field("Until (optional, dd-mm-yyyy)", "")
 
         async def _do_sync() -> None:
             if _sync_running[0]:
@@ -174,10 +184,10 @@ async def sync_page() -> None:
             since_str = (since_input.value or "").strip()
             until_str = (until_input.value or "").strip()
             try:
-                since_date = date.fromisoformat(since_str)
-                until_date = date.fromisoformat(until_str) if until_str else None
+                since_date = parse_date_input(since_str).date()
+                until_date = parse_date_input(until_str).date() if until_str else None
             except ValueError:
-                ui.notify("Invalid date format", type="negative")
+                ui.notify("Invalid date — use dd-mm-yyyy", type="negative")
                 return
 
             _sync_running[0] = True

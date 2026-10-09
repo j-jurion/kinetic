@@ -26,8 +26,11 @@ from kinetic.ui_helpers import (
     SPORT_COLORS,
     SPORT_ICONS,
     SPORTS,
+    format_date,
+    format_datetime,
     format_duration,
     format_pace,
+    parse_date_input,
 )
 
 UPLOAD_DIR = Path("uploads")
@@ -206,7 +209,7 @@ def activity_row(a: dict, on_refresh) -> None:
                         if a.get("has_race_result"):
                             ui.icon("emoji_events", size="14px").classes("text-amber-500")
                     ui.label(
-                        f"{a.get('date', '')[:10]}  \u2022  "
+                        f"{format_date(a.get('date'))}  \u2022  "
                         f"{a.get('kind', '').replace('_', ' ').title()}"
                     ).classes("text-caption text-grey-6")
 
@@ -265,8 +268,8 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
         ui.label("Edit Activity" if is_edit else "Add Activity Manually").classes("text-h6 q-mb-md")
 
         name = ui.input("Name", value=data.get("name", "")).classes("w-full")
-        date_val = (data.get("date", datetime.now().isoformat()) or "")[:16]
-        date_input = ui.input("Date & Time (YYYY-MM-DDTHH:MM)", value=date_val).classes("w-full")
+        date_val = format_datetime(data.get("date") or datetime.now())
+        date_input = ui.input("Date & Time (dd-mm-yyyy HH:MM)", value=date_val).classes("w-full")
 
         with ui.row().classes("w-full gap-3"):
             sport_sel = ui.select(
@@ -334,13 +337,16 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
             ui.button("Cancel", on_click=dialog.close).props("flat")
 
             async def do_save():
-                raw_date = date_input.value or ""
-                iso_date = raw_date if "T" in raw_date else raw_date + "T00:00:00"
+                try:
+                    activity_date = parse_date_input(date_input.value)
+                except ValueError:
+                    ui.notify("Invalid date — use dd-mm-yyyy HH:MM", type="negative")
+                    return
                 payload = {
                     "name": name.value,
                     "sport": SportType(sport_sel.value),
                     "kind": ActivityKind(kind_sel.value),
-                    "date": datetime.fromisoformat(iso_date),
+                    "date": activity_date,
                     "duration_seconds": float(duration.value or 0),
                     "distance_meters": float(distance.value) if distance.value else None,
                     "avg_heart_rate": int(avg_hr.value) if avg_hr.value else None,

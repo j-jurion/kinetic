@@ -13,6 +13,7 @@ from kinetic.api import router
 from kinetic.database import create_db_and_tables
 from kinetic.pages.activities import activities_page
 from kinetic.pages.activity_detail import activity_detail_page
+from kinetic.pages.best_effort_distance import best_effort_distance_page
 from kinetic.pages.best_efforts import best_efforts_page
 from kinetic.pages.friends import friends_page
 from kinetic.pages.graphs import graphs_page
@@ -137,6 +138,17 @@ async def page_graphs():
 async def page_best_efforts():
     dark_ref = []
     await _shell(title="Best Efforts", dark_ref=dark_ref, content_fn=best_efforts_page)
+
+
+@ui.page("/best-efforts/{distance}")
+async def page_best_effort_distance(distance: float, sport: str = "", year: str = ""):
+    dark_ref = []
+    year_value = int(year) if year.isdigit() else None
+    await _shell(
+        title="Best Efforts",
+        dark_ref=dark_ref,
+        content_fn=lambda: best_effort_distance_page(distance, sport or None, year_value),
+    )
 
 
 @ui.page("/friends")

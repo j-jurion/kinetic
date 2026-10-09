@@ -11,6 +11,7 @@ Activity tracking web app built with NiceGUI + FastAPI.
 - Monthly & yearly distance charts with sport filter
 - Sport breakdown pie chart
 - Best efforts per distance per sport per year
+- Dedicated page listing every attempt at a given distance, with progression chart
 - Friends management
 - Dark / light mode toggle
 

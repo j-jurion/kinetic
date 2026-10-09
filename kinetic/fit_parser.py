@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from kinetic.models import Activity, ActivityKind, BestEffort, Lap, SportType
+from kinetic.ui_helpers import DATE_FORMAT
 
 _SEMICIRCLES_TO_DEG = 180.0 / (2**31)
 
@@ -107,7 +108,7 @@ def _build_single_activity(
         start_time = datetime.fromisoformat(start_time)
 
     activity_date = start_time or datetime.now(timezone.utc)
-    date_str = activity_date.strftime("%Y-%m-%d")
+    date_str = activity_date.strftime(DATE_FORMAT)
     if activity_name_hint:
         activity_name = f"{activity_name_hint} {date_str}"
     else:
@@ -192,7 +193,7 @@ def _build_multisport(
     if isinstance(first_start, str):
         first_start = datetime.fromisoformat(first_start)
     activity_date = first_start or datetime.now(timezone.utc)
-    date_str = activity_date.strftime("%Y-%m-%d")
+    date_str = activity_date.strftime(DATE_FORMAT)
 
     sport_sessions = [s for s in sessions if str(s.get("sport", "")).lower() != "transition"]
 
