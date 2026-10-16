@@ -32,56 +32,47 @@ def _latest_activity_date() -> date | None:
         return result.date() if result else None
 
 
-async def sync_page() -> None:
+async def sync_page(refresh_garmin_status=None, set_sync_action=None) -> None:
     # ── Persistent state for MFA handshake ───────────────────────────────────
     _mfa_holder: dict = {}
     _sync_running = [False]
+    sync_section_ref = []
 
     # ── Status card ──────────────────────────────────────────────────────────
     stored_email: str = nicegui_app.storage.general.get("garmin_email", "")
 
     with ui.card().classes("w-full q-pa-md q-mb-md"):
         with ui.row().classes("items-center gap-3 q-mb-md"):
-            status_icon = ui.icon("", size="24px")
-            status_label = ui.label("")
+            ui.label("Garmin Connect").classes("text-h6 text-weight-bold")
             logout_btn = ui.button("Log out", icon="logout", on_click=lambda: _do_logout()).props(
                 "flat dense color=negative size=sm"
             )
 
         def _refresh_status() -> None:
             ok = garmin_sync.tokens_exist()
-            status_icon.props(
-                f"name={'check_circle' if ok else 'error'} color={'positive' if ok else 'negative'}"
-            )
-            if ok:
-                logged_in_email = nicegui_app.storage.general.get("garmin_email", "")
-                status_label.text = (
-                    f"Logged in as {logged_in_email}"
-                    if logged_in_email
-                    else "Garmin tokens cached — ready to sync"
-                )
-            else:
-                status_label.text = "Not authenticated — enter credentials below"
+            login_panel.set_visibility(not ok)
             logout_btn.set_visibility(ok)
+            if sync_section_ref:
+                sync_section_ref[0].set_visibility(ok)
+            if refresh_garmin_status:
+                refresh_garmin_status()
 
         def _do_logout() -> None:
             garmin_sync.logout()
             _refresh_status()
             ui.notify("Logged out — tokens removed", type="info")
 
-        _refresh_status()
-
-        ui.label("Garmin Connect").classes("text-h6 text-weight-bold")
         ui.separator().classes("q-my-sm")
 
-        with ui.row().classes("items-start gap-4 flex-wrap"):
-            email_input = ui.input(
-                label="Garmin email",
-                value=stored_email,
-            ).props("outlined dense clearable style='width:280px'")
-            pw_input = ui.input(
-                label="Password (not stored)", password=True, password_toggle_button=True
-            ).props("outlined dense style='width:280px'")
+        with ui.column().classes("w-full gap-3") as login_panel:
+            with ui.row().classes("items-start gap-4 flex-wrap"):
+                email_input = ui.input(
+                    label="Garmin email",
+                    value=stored_email,
+                ).props("outlined dense clearable style='width:280px'")
+                pw_input = ui.input(
+                    label="Password (not stored)", password=True, password_toggle_button=True
+                ).props("outlined dense style='width:280px'")
 
         async def _do_authenticate() -> None:
             email = (email_input.value or "").strip()
@@ -110,11 +101,18 @@ async def sync_page() -> None:
                 _refresh_status()
                 ui.notify("Authenticated successfully!", type="positive")
 
-        with ui.row().classes("items-center gap-3"):
-            auth_btn = ui.button("Authenticate", icon="login", on_click=_do_authenticate).props(
-                "outlined color=primary"
-            )
-            auth_status = ui.label("").classes("text-caption text-grey-6")
+        with login_panel:
+            with ui.row().classes("items-center gap-3"):
+                auth_btn = ui.button(
+                    "Authenticate", icon="login", on_click=_do_authenticate
+                ).props("outlined color=primary")
+                auth_status = ui.label("").classes("text-caption text-grey-6")
+
+        with ui.column().classes("w-full") as sync_section:
+            pass
+        sync_section_ref.append(sync_section)
+
+        _refresh_status()
 
     # ── MFA dialog ───────────────────────────────────────────────────────────
     with ui.dialog() as mfa_dialog, ui.card().classes("q-pa-lg"):
@@ -151,7 +149,7 @@ async def sync_page() -> None:
         mfa_input.on("keydown.enter", _submit_mfa)
 
     # ── Sync section ─────────────────────────────────────────────────────────
-    with ui.card().classes("w-full q-pa-md"):
+    with sync_section:
         ui.label("Sync Activities").classes("text-h6 text-weight-bold q-mb-sm")
         ui.separator().classes("q-my-sm")
 
@@ -163,6 +161,15 @@ async def sync_page() -> None:
         with ui.row().classes("items-center gap-4 q-mb-md flex-wrap"):
             since_input = _date_field("Sync since (dd-mm-yyyy)", format_date(default_since))
             until_input = _date_field("Until (optional, dd-mm-yyyy)", "")
+
+        sync_buttons = []
+
+        def _set_sync_loading(loading: bool) -> None:
+            for button in sync_buttons:
+                if loading:
+                    button.props("loading")
+                else:
+                    button.props(remove="loading")
 
         async def _do_sync() -> None:
             if _sync_running[0]:
@@ -191,7 +198,7 @@ async def sync_page() -> None:
                 return
 
             _sync_running[0] = True
-            sync_btn.props("loading")
+            _set_sync_loading(True)
             result_box.clear()
             progress_col.clear()
             progress_col.set_visibility(True)
@@ -217,18 +224,24 @@ async def sync_page() -> None:
                     _progress,
                 )
             except Exception as exc:
-                sync_btn.props(remove="loading")
+                _set_sync_loading(False)
                 _sync_running[0] = False
                 ui.notify(str(exc), type="negative", timeout=8000)
                 return
 
-            sync_btn.props(remove="loading")
+            _set_sync_loading(False)
             _sync_running[0] = False
 
             with result_box:
                 _render_result(result or {})
 
-        sync_btn = ui.button("Sync", icon="sync", on_click=_do_sync).props("color=primary")
+        with ui.row().classes("items-center gap-3"):
+            card_sync_button = ui.button("Sync", icon="sync", on_click=_do_sync).props(
+                "color=primary"
+            )
+            sync_buttons.append(card_sync_button)
+            if set_sync_action:
+                sync_buttons.append(set_sync_action(_do_sync))
 
         # Progress log
         progress_col = ui.column().classes("w-full gap-0 q-mt-md")
@@ -245,7 +258,7 @@ def _render_result(result: dict) -> None:
     skipped = result["skipped"]
     errors: list[str] = result["errors"]
 
-    with ui.card().classes("w-full q-pa-md"):
+    with ui.column().classes("w-full q-pt-md"):
         ui.label("Sync complete").classes("text-h6 text-weight-bold q-mb-sm")
         with ui.row().classes("gap-6 q-mb-sm"):
             _stat("Imported", str(imported), "text-positive")

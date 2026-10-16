@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from nicegui import app as nicegui_app
 from nicegui import ui
 
+from kinetic import garmin_sync
 from kinetic.api import router
 from kinetic.database import create_db_and_tables
 from kinetic.pages.activities import activities_page
@@ -62,7 +63,7 @@ body, .q-field, .q-btn, .q-card, .q-item, .q-label,
 """
 
 
-async def _shell(title: str, dark_ref: list, content_fn):
+async def _shell(title: str, dark_ref: list, content_fn, *, sync_nav: bool = False):
     """Render the shared app shell with nav drawer + header + content."""
     dark = ui.dark_mode(value=nicegui_app.storage.user.get("dark_mode", False))
     dark_ref.append(dark)
@@ -97,6 +98,24 @@ async def _shell(title: str, dark_ref: list, content_fn):
             ui.separator().props("vertical").classes("q-mx-sm").style("height:20px; opacity:0.3")
             ui.label(title).classes("text-body1 text-weight-medium")
         with ui.row().classes("items-center gap-2"):
+            sync_action = [lambda: ui.navigate.to("/sync")]
+            sync_nav_button = ui.button(
+                "Sync", icon="sync", on_click=lambda: sync_action[0]()
+            ).props("flat dense")
+            connect_button = ui.button(
+                "Connect", icon="login", on_click=lambda: ui.navigate.to("/sync")
+            ).props("flat dense")
+
+            def set_sync_action(action):
+                sync_action[0] = action
+                return sync_nav_button
+
+            def refresh_garmin_status() -> None:
+                authenticated = garmin_sync.tokens_exist()
+                sync_nav_button.set_visibility(authenticated)
+                connect_button.set_visibility(not authenticated)
+
+            refresh_garmin_status()
 
             def toggle_dark():
                 if dark.value:
@@ -111,7 +130,10 @@ async def _shell(title: str, dark_ref: list, content_fn):
         pass  # reserved
 
     with ui.column().classes("w-full q-pa-md").style("max-width: 1200px; margin: 0 auto"):
-        await content_fn()
+        if sync_nav:
+            await content_fn(refresh_garmin_status, set_sync_action)
+        else:
+            await content_fn()
 
 
 # ── Pages ─────────────────────────────────────────────────────────────────────
@@ -177,7 +199,10 @@ async def page_friends_route():
 @ui.page("/sync")
 async def page_sync_route():
     dark_ref = []
-    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=sync_page)
+    async def render_sync(refresh_garmin_status, set_sync_action):
+        await sync_page(refresh_garmin_status, set_sync_action)
+
+    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=render_sync, sync_nav=True)
 
 
 @ui.page("/activity/{activity_id}")
@@ -196,6 +221,7 @@ async def page_activity_detail(activity_id: int):
 @nicegui_app.on_startup
 async def startup():
     create_db_and_tables()
+    garmin_sync.logout()
 
 
 def main():
