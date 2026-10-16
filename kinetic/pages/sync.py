@@ -103,9 +103,9 @@ async def sync_page(refresh_garmin_status=None, set_sync_action=None) -> None:
 
         with login_panel:
             with ui.row().classes("items-center gap-3"):
-                auth_btn = ui.button(
-                    "Authenticate", icon="login", on_click=_do_authenticate
-                ).props("outlined color=primary")
+                auth_btn = ui.button("Authenticate", icon="login", on_click=_do_authenticate).props(
+                    "outlined color=primary"
+                )
                 auth_status = ui.label("").classes("text-caption text-grey-6")
 
         with ui.column().classes("w-full") as sync_section:
@@ -150,9 +150,6 @@ async def sync_page(refresh_garmin_status=None, set_sync_action=None) -> None:
 
     # ── Sync section ─────────────────────────────────────────────────────────
     with sync_section:
-        ui.label("Sync Activities").classes("text-h6 text-weight-bold q-mb-sm")
-        ui.separator().classes("q-my-sm")
-
         latest = await run.io_bound(_latest_activity_date)
         default_since = (
             (latest - timedelta(days=1)) if latest else (date.today() - timedelta(days=90))
