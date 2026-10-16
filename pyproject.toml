@@ -18,6 +18,8 @@ dependencies = [
     "garminconnect>=0.3.7",
     "curl_cffi>=0.7.0",
     "loguru>=0.7.3",
+    "polyline>=2.0.4",
+    "defusedxml>=0.7.1",
 ]
 
 [tool.ruff]

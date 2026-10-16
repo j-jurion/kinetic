@@ -25,6 +25,28 @@ def create_db_and_tables() -> None:
                 sqlalchemy.text("ALTER TABLE activity ADD COLUMN garmin_activity_id INTEGER")
             )
             conn.commit()
+        if "strava_activity_id" not in existing:
+            conn.execute(
+                sqlalchemy.text("ALTER TABLE activity ADD COLUMN strava_activity_id INTEGER")
+            )
+            conn.commit()
+        conn.execute(
+            sqlalchemy.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_activity_strava_id "
+                "ON activity (strava_activity_id)"
+            )
+        )
+        if "apple_health_workout_id" not in existing:
+            conn.execute(
+                sqlalchemy.text("ALTER TABLE activity ADD COLUMN apple_health_workout_id TEXT")
+            )
+        conn.execute(
+            sqlalchemy.text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ix_activity_apple_health_id "
+                "ON activity (apple_health_workout_id)"
+            )
+        )
+        conn.commit()
 
 
 def get_session() -> Session:

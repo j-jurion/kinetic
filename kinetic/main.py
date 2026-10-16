@@ -6,10 +6,11 @@ Run with:  python -m kinetic.main
 from functools import partial
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from nicegui import app as nicegui_app
-from nicegui import ui
+from nicegui import run, ui
 
-from kinetic import garmin_sync
+from kinetic import garmin_sync, strava_sync
 from kinetic.api import router
 from kinetic.database import create_db_and_tables
 from kinetic.pages.activities import activities_page
@@ -99,9 +100,16 @@ async def _shell(title: str, dark_ref: list, content_fn, *, sync_nav: bool = Fal
             ui.label(title).classes("text-body1 text-weight-medium")
         with ui.row().classes("items-center gap-2"):
             sync_action = [lambda: ui.navigate.to("/sync")]
-            sync_nav_button = ui.button(
-                "Sync", icon="sync", on_click=lambda: sync_action[0]()
-            ).props("flat dense")
+
+            async def run_sync_action() -> None:
+                if sync_nav and garmin_sync.tokens_exist():
+                    await sync_action[0]()
+                else:
+                    ui.navigate.to("/sync")
+
+            sync_nav_button = ui.button("Sync", icon="sync", on_click=run_sync_action).props(
+                "flat dense"
+            )
             connect_button = ui.button(
                 "Connect", icon="login", on_click=lambda: ui.navigate.to("/sync")
             ).props("flat dense")
@@ -111,7 +119,11 @@ async def _shell(title: str, dark_ref: list, content_fn, *, sync_nav: bool = Fal
                 return sync_nav_button
 
             def refresh_garmin_status() -> None:
-                authenticated = garmin_sync.tokens_exist()
+                identifier = nicegui_app.storage.user.get("strava_session")
+                strava_connected = bool(
+                    identifier and strava_sync.session_for(identifier).connected
+                )
+                authenticated = garmin_sync.tokens_exist() or strava_connected
                 sync_nav_button.set_visibility(authenticated)
                 connect_button.set_visibility(not authenticated)
 
@@ -199,10 +211,30 @@ async def page_friends_route():
 @ui.page("/sync")
 async def page_sync_route():
     dark_ref = []
+
     async def render_sync(refresh_garmin_status, set_sync_action):
         await sync_page(refresh_garmin_status, set_sync_action)
 
-    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=render_sync, sync_nav=True)
+    await _shell(title="Sync", dark_ref=dark_ref, content_fn=render_sync, sync_nav=True)
+
+
+@ui.page("/strava/callback")
+async def page_strava_callback(code: str = "", state: str = "", scope: str = "", error: str = ""):
+    identifier = nicegui_app.storage.user.get("strava_session")
+    try:
+        if not identifier:
+            raise ValueError("Strava sign-in session was lost. Please connect again.")
+        await run.io_bound(
+            strava_sync.complete_login,
+            strava_sync.session_for(identifier),
+            state,
+            code,
+            scope,
+            error,
+        )
+    except (ValueError, RuntimeError) as exc:
+        nicegui_app.storage.user["strava_error"] = str(exc)
+    return RedirectResponse("/sync", status_code=303)
 
 
 @ui.page("/activity/{activity_id}")

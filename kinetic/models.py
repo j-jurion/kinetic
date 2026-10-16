@@ -77,6 +77,8 @@ class Activity(SQLModel, table=True):
     parent_id: Optional[int] = Field(default=None, foreign_key="activity.id", nullable=True)
     # Garmin Connect activity ID for deduplication during sync
     garmin_activity_id: Optional[int] = None
+    strava_activity_id: Optional[int] = Field(default=None, unique=True)
+    apple_health_workout_id: Optional[str] = Field(default=None, unique=True)
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
