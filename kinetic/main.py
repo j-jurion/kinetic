@@ -18,6 +18,7 @@ from kinetic.pages.best_efforts import best_efforts_page
 from kinetic.pages.friends import friends_page
 from kinetic.pages.graphs import graphs_page
 from kinetic.pages.map import map_page
+from kinetic.pages.races import races_page
 from kinetic.pages.sync import sync_page
 from kinetic.pages.top_activities import top_activities_page
 
@@ -75,6 +76,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
         with ui.column().classes("full-height gap-1"):
             nav_items = [
                 ("Activities", "list", "/"),
+                ("Races", "emoji_events", "/races"),
                 ("Map", "map", "/map"),
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
@@ -127,6 +129,12 @@ async def page_index():
 async def page_map_route():
     dark_ref = []
     await _shell(title="Map", dark_ref=dark_ref, content_fn=map_page)
+
+
+@ui.page("/races")
+async def page_races():
+    dark_ref = []
+    await _shell(title="Races", dark_ref=dark_ref, content_fn=races_page)
 
 
 @ui.page("/graphs")

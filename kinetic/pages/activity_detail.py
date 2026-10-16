@@ -359,10 +359,6 @@ def _render_race_results_card(
 ) -> None:
     sport = activity.get("sport", "other")
     kind = activity.get("kind", "other")
-    gps_dur = activity.get("duration_seconds", 0)
-
-    if race_result is None and kind != "race":
-        return
 
     with ui.card().classes("w-full q-pa-md q-mb-md"):
         with ui.row().classes("items-center justify-between q-mb-sm"):
@@ -400,29 +396,16 @@ def _render_race_results_card(
 
         rr = race_result
 
-        # Time + bib + age group
+        # Summary cards
         official_t = rr.get("official_time_seconds")
-        with ui.row().classes("items-center gap-4 q-mb-sm flex-wrap"):
-            if official_t:
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("timer", size="16px").classes("text-grey-6")
-                    ui.label(f"Official: {format_duration(official_t)}").classes(
-                        "text-weight-medium"
-                    )
-                    if gps_dur and abs(gps_dur - official_t) > 5:
-                        delta = int(abs(official_t - gps_dur))
-                        label = "faster" if official_t < gps_dur else "slower"
-                        ui.label(
-                            f"(GPS {format_duration(gps_dur)}, {format_duration(delta)} {label})"
-                        ).classes("text-caption text-grey-6")
-            if rr.get("bib_number"):
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("confirmation_number", size="16px").classes("text-grey-6")
-                    ui.label(f"#{rr['bib_number']}").classes("text-body2")
-            if rr.get("age_group"):
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("group", size="16px").classes("text-grey-6")
-                    ui.label(rr["age_group"]).classes("text-body2")
+        if official_t or rr.get("bib_number") or rr.get("age_group"):
+            with ui.row().classes("flex-wrap gap-3 q-mb-md"):
+                if official_t:
+                    _stat_card("Official time", format_duration(official_t), "#f59e0b")
+                if rr.get("bib_number"):
+                    _stat_card("Bib", f"#{rr['bib_number']}", "#3b82f6")
+                if rr.get("age_group"):
+                    _stat_card("Age group", rr["age_group"], "#8b5cf6")
 
         # Rank mini-cards
         rank_items: list[tuple[str, int, int | None]] = []
