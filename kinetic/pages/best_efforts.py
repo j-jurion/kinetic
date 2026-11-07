@@ -286,7 +286,9 @@ def _best_activity_tile(
     with (
         ui.card()
         .classes("w-full q-pa-md trophy-tile cursor-pointer")
+        .props("tabindex=0 role=link")
         .on("click", lambda: ui.navigate.to(attempts_url))
+        .on("keydown.enter", lambda: ui.navigate.to(attempts_url))
     ):
         with ui.row().classes("items-center justify-between no-wrap trophy-tile-heading"):
             with ui.row().classes("items-center no-wrap gap-2 flex-1 min-w-0"):
