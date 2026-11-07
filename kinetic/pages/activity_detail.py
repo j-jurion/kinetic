@@ -187,6 +187,17 @@ def _parse_time_input(s: str) -> float | None:
         return None
 
 
+def _is_valid_split_time(value: str) -> bool:
+    parts = value.strip().split(":")
+    return (
+        len(parts) == 2
+        and parts[0].isdigit()
+        and parts[1].isdigit()
+        and len(parts[1]) == 2
+        and int(parts[1]) < 60
+    )
+
+
 def _ordinal(n: int) -> str:
     suffix = "th"
     if n % 100 not in (11, 12, 13):
@@ -292,7 +303,14 @@ def _show_race_result_dialog(
             for i, row in enumerate(splits_data):
                 with ui.row().classes("items-center gap-2 q-mb-xs"):
                     ui.input().bind_value(row, "label").props("dense").style("width: 80px")
-                    ui.input().bind_value(row, "time_str").props("dense").style("width: 110px")
+                    ui.input(
+                        placeholder="M:SS",
+                        validation={
+                            "Use M:SS with seconds from 00 to 59": lambda value: (
+                                not (value or "").strip() or _is_valid_split_time(value)
+                            )
+                        },
+                    ).bind_value(row, "time_str").props("dense").style("width: 110px")
                     ui.input().bind_value(row, "rank_str").props("dense").style("width: 65px")
 
                     def remove(i: int = i) -> None:
@@ -317,6 +335,21 @@ def _show_race_result_dialog(
             ui.button("Cancel", on_click=dialog.close).props("flat")
 
             async def save() -> None:
+                invalid_split = next(
+                    (
+                        row
+                        for row in splits_data
+                        if row.time_str.strip() and not _is_valid_split_time(row.time_str)
+                    ),
+                    None,
+                )
+                if invalid_split:
+                    ui.notify(
+                        f"Invalid time for {invalid_split.label or 'split'}; use M:SS with seconds from 00 to 59.",
+                        type="negative",
+                    )
+                    return
+
                 def to_int(v) -> int | None:
                     return int(v) if v is not None else None
 
