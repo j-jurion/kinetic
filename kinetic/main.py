@@ -86,7 +86,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
             for label, icon, path in nav_items:
                 with ui.item(
                     on_click=partial(ui.navigate.to, path),
-                ).classes("rounded-borders q-mb-xs cursor-pointer"):
+                ).classes("rounded-borders q-mb-xs cursor-pointer w-full"):
                     with ui.item_section().props("avatar"):
                         ui.icon(icon).classes("text-grey-7")
                     with ui.item_section():
