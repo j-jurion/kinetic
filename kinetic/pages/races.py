@@ -14,6 +14,34 @@ from kinetic.ui_helpers import (
     multisport_marker,
 )
 
+_RACES_PAGE_CSS = """
+.races-result-card {
+    border: 1px solid rgba(13, 148, 136, .2);
+    border-left: 3px solid #14b8a6;
+    background: linear-gradient(135deg, #fff 0%, #f0fdfa 100%);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.races-result-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(13, 148, 136, .38);
+    border-left-color: #0f766e;
+    box-shadow: 0 8px 18px rgba(13, 80, 75, .1);
+}
+.body--dark .races-result-card {
+    border-color: rgba(45, 212, 191, .2);
+    border-left-color: #2dd4bf;
+    background: linear-gradient(135deg, #18262b, #1d3836);
+}
+.body--dark .races-result-card:hover {
+    border-color: rgba(45, 212, 191, .4);
+    border-left-color: #5eead4;
+}
+@media (prefers-reduced-motion: reduce) {
+    .races-result-card { transition: none; }
+    .races-result-card:hover { transform: none; }
+}
+"""
+
 
 def _format_rank(rank: int | None, total: int | None) -> str:
     if not rank:
@@ -78,6 +106,7 @@ def _db_get_race_results() -> list[dict]:
 
 
 async def races_page() -> None:
+    ui.add_css(_RACES_PAGE_CSS)
     results = await run.io_bound(_db_get_race_results) or []
 
     with ui.row().classes("items-center justify-between w-full q-mb-md"):
@@ -93,7 +122,7 @@ async def races_page() -> None:
     for activity in results:
         sport = activity["sport"]
         activity_id = activity["activity_id"]
-        with ui.card().classes("w-full q-pa-sm q-mb-sm hover:shadow-md transition-shadow"):
+        with ui.card().classes("w-full q-pa-sm q-mb-sm races-result-card"):
             with ui.row().classes("items-center no-wrap w-full gap-2"):
                 with (
                     ui.row()
@@ -107,7 +136,6 @@ async def races_page() -> None:
                         with ui.row().classes("items-center gap-1"):
                             ui.label(activity["name"]).classes("text-weight-medium text-body1")
                             multisport_marker(activity.get("parent_sport"))
-                            ui.icon("emoji_events", size="14px").classes("text-amber-500")
                         ui.label(f"{activity['date']}  ·  {activity['kind'].replace('_', ' ').title()}").classes(
                             "text-caption text-grey-6"
                         )
