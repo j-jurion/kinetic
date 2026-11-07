@@ -71,7 +71,7 @@ _RACE_RESULTS_CSS = """
     line-height: 1.15;
 }
 .race-results-subtitle { color: rgba(255, 255, 255, .72); }
-.race-results-trophy {
+.race-results-flag {
     flex: none;
     color: #99f6e4;
     filter: drop-shadow(0 6px 12px rgba(45, 212, 191, .25));
@@ -251,7 +251,7 @@ _RACE_RESULTS_CSS = """
 @media (max-width: 520px) {
     .race-results-hero { padding: 16px; }
     .race-results-time { font-size: 1.7rem; }
-    .race-results-trophy { font-size: 34px !important; }
+    .race-results-flag { font-size: 34px !important; }
 }
 """
 
@@ -636,7 +636,7 @@ def _render_race_results_card(
     with ui.card().classes("w-full q-pa-md q-mb-md race-results-panel"):
         with ui.row().classes("items-center justify-between q-mb-md race-results-heading"):
             with ui.row().classes("items-center gap-2"):
-                ui.icon("emoji_events", size="22px").classes("race-results-icon")
+                ui.icon("flag", size="22px").classes("race-results-icon")
                 ui.label("Race result").classes("text-subtitle1 text-weight-bold")
             with ui.row().classes("gap-1"):
                 if race_result:
@@ -665,7 +665,7 @@ def _render_race_results_card(
 
         if race_result is None:
             with ui.row().classes("items-center gap-3 q-pa-md w-full race-empty-state"):
-                ui.icon("emoji_events", size="24px").classes("race-results-icon")
+                ui.icon("flag", size="24px").classes("race-results-icon")
                 with ui.column().classes("gap-0"):
                     ui.label("No official results yet").classes("text-weight-medium")
                     ui.label("Add a finish time, rankings, and race splits.").classes(
@@ -685,7 +685,7 @@ def _render_race_results_card(
                     ui.label("No official time entered").classes(
                         "text-caption race-results-subtitle"
                     )
-            ui.icon("emoji_events", size="48px").classes("race-results-trophy")
+            ui.icon("flag", size="48px").classes("race-results-flag")
 
         facts = []
         if rr.get("bib_number"):

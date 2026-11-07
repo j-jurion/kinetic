@@ -76,7 +76,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
         with ui.column().classes("full-height gap-1"):
             nav_items = [
                 ("Activities", "list", "/"),
-                ("Races", "emoji_events", "/races"),
+                ("Races", "flag", "/races"),
                 ("Map", "map", "/map"),
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
