@@ -6,10 +6,10 @@ from typing import Any, Optional
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, SportType
-from kinetic.queries import multisport_parent_sports
-from kinetic.ui_helpers import (
+from app.database import engine
+from app.models import Activity, SportType
+from app.queries import multisport_parent_sports
+from app.ui_helpers import (
     ALL_RUNNING,
     add_multisport_cell,
     add_rank_medal_cell,

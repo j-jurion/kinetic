@@ -3,8 +3,8 @@
 from nicegui import run, ui
 from sqlmodel import Session, select
 
-from kinetic.database import engine
-from kinetic.models import Friend
+from app.database import engine
+from app.models import Friend
 
 
 def _db_get_friends() -> list[dict]:

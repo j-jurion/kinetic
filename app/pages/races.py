@@ -3,10 +3,10 @@
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, RaceResult, RaceResultSplit
-from kinetic.queries import multisport_parent_sports
-from kinetic.ui_helpers import (
+from app.database import engine
+from app.models import Activity, RaceResult, RaceResultSplit
+from app.queries import multisport_parent_sports
+from app.ui_helpers import (
     SPORT_COLORS,
     SPORT_ICONS,
     format_date,
@@ -56,7 +56,9 @@ def _db_get_race_results() -> list[dict]:
             .join(Activity, col(RaceResult.activity_id) == col(Activity.id))
             .order_by(col(Activity.date).desc(), col(Activity.id).desc())
         ).all()
-        parent_sports = multisport_parent_sports(session, (activity.parent_id for _, activity in results))
+        parent_sports = multisport_parent_sports(
+            session, (activity.parent_id for _, activity in results)
+        )
         result_ids = [result.id for result, _ in results if result.id is not None]
         splits_by_result: dict[int, list[RaceResultSplit]] = {}
         if result_ids:
@@ -90,9 +92,7 @@ def _db_get_race_results() -> list[dict]:
                     "overall": _format_rank(result.overall_rank, result.overall_total),
                     "gender": _format_rank(result.gender_rank, result.gender_total),
                     "age_group": result.age_group or "-",
-                    "age_group_rank": _format_rank(
-                        result.age_group_rank, result.age_group_total
-                    ),
+                    "age_group_rank": _format_rank(result.age_group_rank, result.age_group_total),
                     "split_summary": " · ".join(
                         f"{split.label}: {format_duration(split.duration_seconds)}"
                         if split.duration_seconds
@@ -136,9 +136,9 @@ async def races_page() -> None:
                         with ui.row().classes("items-center gap-1"):
                             ui.label(activity["name"]).classes("text-weight-medium text-body1")
                             multisport_marker(activity.get("parent_sport"))
-                        ui.label(f"{activity['date']}  ·  {activity['kind'].replace('_', ' ').title()}").classes(
-                            "text-caption text-grey-6"
-                        )
+                        ui.label(
+                            f"{activity['date']}  ·  {activity['kind'].replace('_', ' ').title()}"
+                        ).classes("text-caption text-grey-6")
                         details = []
                         if activity["bib"] != "-":
                             details.append(f"Bib {activity['bib']}")

@@ -5,7 +5,7 @@ from typing import Optional
 
 from sqlmodel import Session, col, select
 
-from kinetic.models import Activity
+from app.models import Activity
 
 
 def multisport_parent_sports(

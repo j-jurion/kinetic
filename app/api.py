@@ -9,11 +9,11 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine, require_id
-from kinetic.fit_parser import parse_fit_file
-from kinetic.garmin_sync import UPLOAD_DIR
-from kinetic.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
-from kinetic.ui_helpers import format_date, format_distance, format_pace
+from app.database import engine, require_id
+from app.fit_parser import parse_fit_file
+from app.garmin_sync import UPLOAD_DIR
+from app.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
+from app.ui_helpers import format_date, format_distance, format_pace
 
 router = APIRouter()
 
@@ -422,7 +422,7 @@ def get_activities_map(sports: Optional[str] = None) -> HTMLResponse:
 
     ``sports`` is an optional comma-separated list of sport names to include.
     """
-    from kinetic.ui_helpers import SPORT_COLORS
+    from app.ui_helpers import SPORT_COLORS
 
     wanted: Optional[set[str]] = None
     if sports:

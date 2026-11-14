@@ -11,10 +11,10 @@ from typing import Any
 from loguru import logger
 from sqlmodel import Session, select
 
-from kinetic.database import engine, require_id
-from kinetic.fit_parser import parse_fit_file
-from kinetic.models import Activity
-from kinetic.ui_helpers import format_date
+from app.database import engine, require_id
+from app.fit_parser import parse_fit_file
+from app.models import Activity
+from app.ui_helpers import format_date
 
 UPLOAD_DIR = Path("uploads")
 TOKEN_DIR = Path("~/.garminconnect").expanduser()

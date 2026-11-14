@@ -4,10 +4,10 @@ from urllib.parse import urlencode
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.api import select_map_activities
-from kinetic.database import engine
-from kinetic.models import Activity
-from kinetic.ui_helpers import SPORT_COLORS, SPORT_ICONS, SPORTS, sport_label
+from app.api import select_map_activities
+from app.database import engine
+from app.models import Activity
+from app.ui_helpers import SPORT_COLORS, SPORT_ICONS, SPORTS, sport_label
 
 
 def _db_sports_with_routes() -> list[str]:

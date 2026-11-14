@@ -1,0 +1,16 @@
+[Unit]
+Description=Kinetic activity tracking app
+After=network.target
+
+[Service]
+Type=simple
+User=kinetic
+Group=kinetic
+WorkingDirectory=/opt/kinetic
+ExecStart=/opt/kinetic/.venv/bin/python /opt/kinetic/run.py
+Restart=on-failure
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

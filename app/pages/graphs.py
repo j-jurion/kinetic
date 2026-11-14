@@ -7,9 +7,9 @@ import plotly.graph_objects as go
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, SportType
-from kinetic.ui_helpers import (
+from app.database import engine
+from app.models import Activity, SportType
+from app.ui_helpers import (
     ALL_SPORTS,
     is_swimming,
     resolve_sports,

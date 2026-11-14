@@ -6,15 +6,15 @@ from typing import Optional
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, BestEffort, SportType
-from kinetic.pages.top_activities import (
+from app.database import engine
+from app.models import Activity, BestEffort, SportType
+from app.pages.top_activities import (
     TOP_METRICS,
     db_get_top_activities,
     top_activities_url,
 )
-from kinetic.queries import multisport_parent_sports
-from kinetic.ui_helpers import (
+from app.queries import multisport_parent_sports
+from app.ui_helpers import (
     ALL_RUNNING,
     distance_label,
     filtered_url,

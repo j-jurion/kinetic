@@ -4,8 +4,8 @@ from nicegui import run, ui
 from sqlalchemy import func
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine, require_id
-from kinetic.models import (
+from app.database import engine, require_id
+from app.models import (
     Activity,
     ActivityFriend,
     BestEffort,
@@ -14,9 +14,7 @@ from kinetic.models import (
     RaceResult,
     RaceResultSplit,
 )
-from kinetic.ui_helpers import (
-    MEDAL_COLORS,
-    MEDAL_LABELS,
+from app.ui_helpers import (
     SPORT_COLORS,
     SPORT_ICONS,
     add_rank_medal_cell,
@@ -780,7 +778,7 @@ def _stat_card(label: str, value: str, color: str = "#f97316") -> None:
 
 
 async def activity_detail_page(activity_id: int) -> None:
-    from kinetic.pages.activities import confirm_delete, show_edit_dialog
+    from app.pages.activities import confirm_delete, show_edit_dialog
 
     detail = await run.io_bound(_db_get_activity_detail, activity_id)
     if not detail:
@@ -935,9 +933,7 @@ async def activity_detail_page(activity_id: int) -> None:
             with ui.row().classes(
                 "items-center gap-2 q-mb-md activity-best-efforts-section-heading"
             ):
-                ui.icon("emoji_events", size="22px").classes(
-                    "activity-best-efforts-section-icon"
-                )
+                ui.icon("emoji_events", size="22px").classes("activity-best-efforts-section-icon")
                 ui.label("Best Efforts").classes("text-subtitle1 text-weight-bold")
 
             with ui.element("div").classes("activity-best-efforts-grid"):
