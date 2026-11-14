@@ -75,6 +75,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
         with ui.column().classes("full-height gap-1"):
             nav_items = [
                 ("Activities", "list", "/"),
+                ("Races", "flag", "/races"),
                 ("Map", "map", "/map"),
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
@@ -84,7 +85,7 @@ async def _shell(title: str, dark_ref: list, content_fn):
             for label, icon, path in nav_items:
                 with ui.item(
                     on_click=partial(ui.navigate.to, path),
-                ).classes("rounded-borders q-mb-xs cursor-pointer"):
+                ).classes("rounded-borders q-mb-xs cursor-pointer w-full"):
                     with ui.item_section().props("avatar"):
                         ui.icon(icon).classes("text-grey-7")
                     with ui.item_section():
@@ -127,6 +128,12 @@ async def page_index():
 async def page_map_route():
     dark_ref = []
     await _shell(title="Map", dark_ref=dark_ref, content_fn=map_page)
+
+
+@ui.page("/races")
+async def page_races():
+    dark_ref = []
+    await _shell(title="Races", dark_ref=dark_ref, content_fn=races_page)
 
 
 @ui.page("/graphs")
