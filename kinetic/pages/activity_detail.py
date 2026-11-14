@@ -1,6 +1,7 @@
 """Activity detail page."""
 
 from nicegui import run, ui
+from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from kinetic.database import engine, require_id
@@ -14,8 +15,11 @@ from kinetic.models import (
     RaceResultSplit,
 )
 from kinetic.ui_helpers import (
+    MEDAL_COLORS,
+    MEDAL_LABELS,
     SPORT_COLORS,
     SPORT_ICONS,
+    add_rank_medal_cell,
     distance_label,
     format_date,
     format_distance,
@@ -23,6 +27,233 @@ from kinetic.ui_helpers import (
     format_pace,
     sport_label,
 )
+
+_RACE_RESULTS_CSS = """
+.race-results-panel {
+    overflow: hidden;
+    border: 1px solid rgba(13, 148, 136, .24);
+    background: linear-gradient(135deg, #fff 0%, #f0fdfa 100%);
+}
+.activity-best-efforts-panel {
+    border: 1px solid rgba(195, 139, 46, .22);
+    background: linear-gradient(135deg, #fff 0%, #fffaf0 100%);
+}
+.race-results-heading {
+    border-bottom: 1px solid rgba(13, 148, 136, .2);
+    padding-bottom: 12px;
+}
+.activity-best-efforts-section-heading {
+    border-bottom: 1px solid rgba(195, 139, 46, .18);
+    padding-bottom: 12px;
+}
+.activity-best-efforts-section-icon { color: #a87826; }
+.race-results-icon { color: #0f766e; }
+.race-results-hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-radius: 8px;
+    color: #fff;
+    background: linear-gradient(115deg, #123b46, #0f766e);
+}
+.race-results-hero-copy { min-width: 0; }
+.race-results-eyebrow {
+    color: #99f6e4;
+    font-size: .72rem;
+    font-weight: 700;
+}
+.race-results-time {
+    color: #fff;
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.15;
+}
+.race-results-subtitle { color: rgba(255, 255, 255, .72); }
+.race-results-flag {
+    flex: none;
+    color: #99f6e4;
+    filter: drop-shadow(0 6px 12px rgba(45, 212, 191, .25));
+}
+.race-results-facts { display: flex; flex-wrap: wrap; gap: 8px; }
+.race-result-fact {
+    padding: 7px 11px;
+    border: 1px solid rgba(13, 148, 136, .18);
+    border-radius: 6px;
+    color: #115e59;
+    background: rgba(13, 148, 136, .09);
+    font-weight: 600;
+}
+.race-rank-grid {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+    gap: 10px;
+}
+.race-rank-tile {
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+    padding: 10px 12px 12px;
+    border: 1px solid rgba(13, 148, 136, .2);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, .82);
+    box-shadow: 0 2px 8px rgba(13, 80, 75, .07);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.race-rank-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #5eead4, #14b8a6, #67e8f9);
+}
+.race-rank-tile:hover {
+    transform: translateY(-2px);
+    border-color: rgba(13, 148, 136, .5);
+    box-shadow: 0 8px 18px rgba(13, 80, 75, .12);
+}
+.race-rank-tile-heading {
+    width: calc(100% + 24px);
+    margin: -10px -12px 8px;
+    padding: 8px 12px 7px;
+    background: linear-gradient(115deg, #123b46, #0f766e);
+}
+.race-rank-value { color: #0f766e; font-size: 1.55rem; font-weight: 800; line-height: 1.1; }
+.race-rank-label { color: #d1fae5; font-size: .9rem; font-weight: 700; }
+.race-rank-detail {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 3px 8px;
+    border: 1px solid rgba(13, 148, 136, .15);
+    border-radius: 999px;
+    color: #115e59;
+    background: rgba(13, 148, 136, .09);
+    font-size: .72rem;
+    font-weight: 600;
+}
+.race-empty-state {
+    border: 1px dashed rgba(13, 148, 136, .32);
+    border-radius: 8px;
+    background: rgba(13, 148, 136, .06);
+}
+.activity-best-efforts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+    gap: 8px;
+    width: 100%;
+}
+.activity-best-effort-tile {
+    position: relative;
+    overflow: hidden;
+    min-width: 0;
+    padding: 10px 12px 12px;
+    border: 1px solid rgba(205, 161, 77, .25);
+    border-radius: 8px;
+    background: linear-gradient(145deg, #fff 0%, #fffaf0 100%);
+    box-shadow: 0 2px 8px rgba(75, 54, 23, .07);
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+}
+.activity-best-effort-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: linear-gradient(90deg, #f5c35e, #f18a39, #e5c36d);
+}
+.activity-best-effort-tile:hover {
+    transform: translateY(-2px);
+    border-color: rgba(205, 161, 77, .58);
+    box-shadow: 0 8px 18px rgba(75, 54, 23, .12);
+}
+.activity-best-effort-heading {
+    width: calc(100% + 24px);
+    margin: -10px -12px 8px;
+    padding: 8px 12px 7px;
+    background: linear-gradient(115deg, #30243e, #574039);
+}
+.activity-best-effort-distance { color: #fff; font-size: .9rem; font-weight: 700; }
+.activity-best-effort-sport { color: #ffdc8c; }
+.activity-best-effort-medal { flex: none; filter: drop-shadow(0 4px 8px rgba(255, 190, 75, .25)); }
+.activity-best-effort-time {
+    color: #7e4a18;
+    font-size: 1.45rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+.activity-best-effort-rank {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 3px 8px;
+    border: 1px solid rgba(195, 139, 46, .15);
+    border-radius: 999px;
+    color: #81571f;
+    background: rgba(226, 183, 94, .17);
+    font-size: .72rem;
+    font-weight: 600;
+}
+.activity-best-effort-pace { color: #82776a; }
+.body--dark .race-results-panel {
+    border-color: rgba(45, 212, 191, .22);
+    background: linear-gradient(135deg, #18262b, #1d3836);
+}
+.body--dark .activity-best-efforts-panel {
+    border-color: rgba(226, 183, 94, .2);
+    background: linear-gradient(135deg, #252525, #302b23);
+}
+.body--dark .race-results-heading { border-color: rgba(45, 212, 191, .2); }
+.body--dark .activity-best-efforts-section-heading { border-color: rgba(226, 183, 94, .18); }
+.body--dark .activity-best-efforts-section-icon { color: #e7bd68; }
+.body--dark .race-results-icon { color: #5eead4; }
+.body--dark .race-result-fact {
+    border-color: rgba(45, 212, 191, .2);
+    color: #99f6e4;
+    background: rgba(45, 212, 191, .1);
+}
+.body--dark .race-rank-tile {
+    border-color: rgba(45, 212, 191, .2);
+    background: linear-gradient(145deg, #202f32, #263b3b);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .16);
+}
+.body--dark .race-rank-tile-heading { background: linear-gradient(115deg, #102d35, #0f5f5b); }
+.body--dark .race-rank-value { color: #5eead4; }
+.body--dark .race-rank-label { color: #d1fae5; }
+.body--dark .race-rank-detail {
+    border-color: rgba(45, 212, 191, .18);
+    color: #99f6e4;
+    background: rgba(45, 212, 191, .1);
+}
+.body--dark .race-empty-state {
+    border-color: rgba(45, 212, 191, .26);
+    background: rgba(45, 212, 191, .07);
+}
+.body--dark .activity-best-effort-tile {
+    border-color: rgba(226, 183, 94, .25);
+    background: linear-gradient(145deg, #292721 0%, #302b23 100%);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .16);
+}
+.body--dark .activity-best-effort-time { color: #f4cf7a; }
+.body--dark .activity-best-effort-rank {
+    border-color: rgba(226, 183, 94, .18);
+    color: #efd18e;
+    background: rgba(226, 183, 94, .12);
+}
+.body--dark .activity-best-effort-pace { color: #b9b0a2; }
+@media (prefers-reduced-motion: reduce) {
+    .race-rank-tile { transition: none; }
+    .race-rank-tile:hover { transform: none; }
+    .activity-best-effort-tile { transition: none; }
+    .activity-best-effort-tile:hover { transform: none; }
+}
+@media (max-width: 520px) {
+    .race-results-hero { padding: 16px; }
+    .race-results-time { font-size: 1.7rem; }
+    .race-results-flag { font-size: 34px !important; }
+}
+"""
 
 
 def _db_get_activity_detail(activity_id: int) -> dict:
@@ -38,6 +269,16 @@ def _db_get_activity_detail(activity_id: int) -> dict:
             .where(BestEffort.activity_id == activity_id)
             .order_by(col(BestEffort.distance_meters))
         ).all()
+        ranked_best_efforts = []
+        for effort in best_efforts:
+            faster_count = session.exec(
+                select(func.count(BestEffort.id)).where(
+                    BestEffort.sport == effort.sport,
+                    BestEffort.distance_meters == effort.distance_meters,
+                    BestEffort.duration_seconds < effort.duration_seconds,
+                )
+            ).one()
+            ranked_best_efforts.append({**effort.model_dump(mode="json"), "rank": faster_count + 1})
         # Multi-sport: fetch children (if parent) or siblings + parent (if child)
         children: list[dict] = []
         parent: dict | None = None
@@ -56,7 +297,7 @@ def _db_get_activity_detail(activity_id: int) -> dict:
         return {
             "activity": activity.model_dump(mode="json"),
             "laps": [lap.model_dump(mode="json") for lap in laps],
-            "best_efforts": [be.model_dump(mode="json") for be in best_efforts],
+            "best_efforts": ranked_best_efforts,
             "children": children,
             "parent": parent,
         }
@@ -187,6 +428,17 @@ def _parse_time_input(s: str) -> float | None:
         return None
 
 
+def _is_valid_split_time(value: str) -> bool:
+    parts = value.strip().split(":")
+    return (
+        len(parts) == 2
+        and parts[0].isdigit()
+        and parts[1].isdigit()
+        and len(parts[1]) == 2
+        and int(parts[1]) < 60
+    )
+
+
 def _ordinal(n: int) -> str:
     suffix = "th"
     if n % 100 not in (11, 12, 13):
@@ -292,7 +544,14 @@ def _show_race_result_dialog(
             for i, row in enumerate(splits_data):
                 with ui.row().classes("items-center gap-2 q-mb-xs"):
                     ui.input().bind_value(row, "label").props("dense").style("width: 80px")
-                    ui.input().bind_value(row, "time_str").props("dense").style("width: 110px")
+                    ui.input(
+                        placeholder="M:SS",
+                        validation={
+                            "Use M:SS with seconds from 00 to 59": lambda value: (
+                                not (value or "").strip() or _is_valid_split_time(value)
+                            )
+                        },
+                    ).bind_value(row, "time_str").props("dense").style("width: 110px")
                     ui.input().bind_value(row, "rank_str").props("dense").style("width: 65px")
 
                     def remove(i: int = i) -> None:
@@ -317,6 +576,21 @@ def _show_race_result_dialog(
             ui.button("Cancel", on_click=dialog.close).props("flat")
 
             async def save() -> None:
+                invalid_split = next(
+                    (
+                        row
+                        for row in splits_data
+                        if row.time_str.strip() and not _is_valid_split_time(row.time_str)
+                    ),
+                    None,
+                )
+                if invalid_split:
+                    ui.notify(
+                        f"Invalid time for {invalid_split.label or 'split'}; use M:SS with seconds from 00 to 59.",
+                        type="negative",
+                    )
+                    return
+
                 def to_int(v) -> int | None:
                     return int(v) if v is not None else None
 
@@ -358,17 +632,12 @@ def _render_race_results_card(
     on_refresh,
 ) -> None:
     sport = activity.get("sport", "other")
-    kind = activity.get("kind", "other")
-    gps_dur = activity.get("duration_seconds", 0)
 
-    if race_result is None and kind != "race":
-        return
-
-    with ui.card().classes("w-full q-pa-md q-mb-md"):
-        with ui.row().classes("items-center justify-between q-mb-sm"):
+    with ui.card().classes("w-full q-pa-md q-mb-md race-results-panel"):
+        with ui.row().classes("items-center justify-between q-mb-md race-results-heading"):
             with ui.row().classes("items-center gap-2"):
-                ui.icon("emoji_events", size="20px").classes("text-amber-500")
-                ui.label("Race Results").classes("text-weight-bold")
+                ui.icon("flag", size="22px").classes("race-results-icon")
+                ui.label("Race result").classes("text-subtitle1 text-weight-bold")
             with ui.row().classes("gap-1"):
                 if race_result:
                     ui.button(
@@ -395,36 +664,41 @@ def _render_race_results_card(
                     ).props("flat dense size=sm color=primary")
 
         if race_result is None:
-            ui.label("No official results recorded yet.").classes("text-caption text-grey-5")
+            with ui.row().classes("items-center gap-3 q-pa-md w-full race-empty-state"):
+                ui.icon("flag", size="24px").classes("race-results-icon")
+                with ui.column().classes("gap-0"):
+                    ui.label("No official results yet").classes("text-weight-medium")
+                    ui.label("Add a finish time, rankings, and race splits.").classes(
+                        "text-caption text-grey-6"
+                    )
             return
 
         rr = race_result
-
-        # Time + bib + age group
         official_t = rr.get("official_time_seconds")
-        with ui.row().classes("items-center gap-4 q-mb-sm flex-wrap"):
-            if official_t:
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("timer", size="16px").classes("text-grey-6")
-                    ui.label(f"Official: {format_duration(official_t)}").classes(
-                        "text-weight-medium"
+        with ui.row().classes("w-full q-mb-md race-results-hero"):
+            with ui.column().classes("gap-1 race-results-hero-copy"):
+                ui.label("OFFICIAL FINISH").classes("race-results-eyebrow")
+                ui.label(format_duration(official_t) if official_t else "Result recorded").classes(
+                    "race-results-time"
+                )
+                if not official_t:
+                    ui.label("No official time entered").classes(
+                        "text-caption race-results-subtitle"
                     )
-                    if gps_dur and abs(gps_dur - official_t) > 5:
-                        delta = int(abs(official_t - gps_dur))
-                        label = "faster" if official_t < gps_dur else "slower"
-                        ui.label(
-                            f"(GPS {format_duration(gps_dur)}, {format_duration(delta)} {label})"
-                        ).classes("text-caption text-grey-6")
-            if rr.get("bib_number"):
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("confirmation_number", size="16px").classes("text-grey-6")
-                    ui.label(f"#{rr['bib_number']}").classes("text-body2")
-            if rr.get("age_group"):
-                with ui.row().classes("items-center gap-1"):
-                    ui.icon("group", size="16px").classes("text-grey-6")
-                    ui.label(rr["age_group"]).classes("text-body2")
+            ui.icon("flag", size="48px").classes("race-results-flag")
 
-        # Rank mini-cards
+        facts = []
+        if rr.get("bib_number"):
+            facts.append(("confirmation_number", f"Bib #{rr['bib_number']}"))
+        if rr.get("age_group"):
+            facts.append(("groups", rr["age_group"]))
+        if facts:
+            with ui.row().classes("q-mb-md race-results-facts"):
+                for icon, value in facts:
+                    with ui.row().classes("items-center gap-1 race-result-fact"):
+                        ui.icon(icon, size="16px")
+                        ui.label(value)
+
         rank_items: list[tuple[str, int, int | None]] = []
         if rr.get("overall_rank"):
             rank_items.append(("Overall", rr["overall_rank"], rr.get("overall_total")))
@@ -435,29 +709,56 @@ def _render_race_results_card(
             rank_items.append((label, rr["age_group_rank"], rr.get("age_group_total")))
 
         if rank_items:
-            with ui.row().classes("gap-3 q-mb-sm flex-wrap"):
+            with ui.element("div").classes("q-mb-md race-rank-grid"):
                 for label, rank, total in rank_items:
-                    with ui.card().classes("q-pa-sm text-center").style("min-width: 90px"):
-                        ui.label(_ordinal(rank)).classes("text-h6 text-weight-bold text-amber-600")
+                    with ui.element("div").classes("race-rank-tile"):
+                        with ui.row().classes(
+                            "items-center justify-between no-wrap w-full race-rank-tile-heading"
+                        ):
+                            ui.label(label).classes("race-rank-label")
+                            if rank in MEDAL_COLORS:
+                                ui.icon("military_tech", size="24px").style(
+                                    f"color: {MEDAL_COLORS[rank]}"
+                                ).props(f'aria-label="{MEDAL_LABELS[rank]} place medal"')
+                        ui.label(_ordinal(rank)).classes("race-rank-value q-mt-xs")
                         if total:
                             pct = rank / total * 100
-                            ui.label(f"/ {total}  ({pct:.0f}%)").classes("text-caption text-grey-6")
-                        ui.label(label).classes("text-caption text-grey-6")
+                            ui.label(f"of {total} finishers · top {pct:.0f}%").classes(
+                                "race-rank-detail q-mt-sm"
+                            )
 
-        # Splits
         splits = rr.get("splits", [])
         if splits:
-            ui.label("Splits").classes("text-caption text-grey-6 q-mt-xs q-mb-xs")
-            with ui.row().classes("gap-2 flex-wrap"):
-                for split in splits:
-                    with ui.card().classes("q-pa-sm text-center").style("min-width: 70px"):
-                        ui.label(split["label"]).classes("text-caption text-grey-6")
-                        dt = split.get("duration_seconds")
-                        ui.label(format_duration(dt) if dt else "–").classes(
-                            "text-weight-medium text-body2"
-                        )
-                        if split.get("rank"):
-                            ui.label(_ordinal(split["rank"])).classes("text-caption text-amber-600")
+            with ui.row().classes("items-center gap-2 q-mb-sm"):
+                ui.label("Race splits").classes("text-subtitle2 text-weight-bold")
+                ui.separator().classes("col")
+            split_columns = [
+                {"name": "order", "label": "#", "field": "order", "align": "left"},
+                {"name": "label", "label": "Split", "field": "label", "align": "left"},
+                {"name": "time", "label": "Time", "field": "time", "align": "right"},
+                {"name": "rank", "label": "Rank", "field": "rank", "align": "right"},
+            ]
+            split_rows = [
+                {
+                    "order": index,
+                    "label": split["label"],
+                    "time": (
+                        format_duration(split["duration_seconds"])
+                        if split.get("duration_seconds")
+                        else "–"
+                    ),
+                    "rank": _ordinal(split["rank"]) if split.get("rank") else "–",
+                    "medal_color": MEDAL_COLORS.get(split.get("rank")),
+                    "medal_label": MEDAL_LABELS.get(split.get("rank")),
+                }
+                for index, split in enumerate(splits, start=1)
+            ]
+            split_table = (
+                ui.table(columns=split_columns, rows=split_rows, row_key="order")
+                .classes("w-full q-mb-sm")
+                .props("flat bordered dense")
+            )
+            add_rank_medal_cell(split_table)
 
         # Footer: link + notes
         if rr.get("results_url") or rr.get("notes"):
@@ -489,6 +790,7 @@ async def activity_detail_page(activity_id: int) -> None:
         return
 
     a = detail["activity"]
+    ui.add_css(_RACE_RESULTS_CSS)
     laps = detail["laps"]
     best_efforts = detail["best_efforts"]
     children: list[dict] = detail.get("children", [])
@@ -629,19 +931,46 @@ async def activity_detail_page(activity_id: int) -> None:
 
     # ── Best Efforts ──────────────────────────────────────────────────────────
     if best_efforts:
-        ui.label("Best Efforts").classes("text-h6 text-weight-bold q-mb-sm")
-        with ui.row().classes("flex-wrap gap-3"):
-            for be in best_efforts:
-                label = distance_label(be["distance_meters"], be.get("sport", sport))
-                with ui.card().classes("q-pa-sm text-center").style("min-width: 80px"):
-                    ui.label(label).classes("text-caption text-grey-6")
-                    ui.label(format_duration(be["duration_seconds"])).classes(
-                        "text-weight-bold text-body1"
-                    )
-                    bd = be.get("distance_meters")
-                    bt = be.get("duration_seconds")
-                    if bd and bt:
-                        ui.label(format_pace(bd, bt, sport)).classes("text-caption text-grey-6")
+        with ui.card().classes("w-full q-pa-md q-mb-md activity-best-efforts-panel"):
+            with ui.row().classes(
+                "items-center gap-2 q-mb-md activity-best-efforts-section-heading"
+            ):
+                ui.icon("emoji_events", size="22px").classes(
+                    "activity-best-efforts-section-icon"
+                )
+                ui.label("Best Efforts").classes("text-subtitle1 text-weight-bold")
+
+            with ui.element("div").classes("activity-best-efforts-grid"):
+                for be in best_efforts:
+                    label = distance_label(be["distance_meters"], be.get("sport", sport))
+                    with ui.element("div").classes("activity-best-effort-tile"):
+                        with ui.row().classes(
+                            "items-center justify-between no-wrap w-full activity-best-effort-heading"
+                        ):
+                            with ui.row().classes("items-center gap-2 min-w-0"):
+                                ui.icon(
+                                    SPORT_ICONS.get(be.get("sport", sport), "sports"), size="18px"
+                                ).classes("activity-best-effort-sport")
+                                ui.label(label).classes("activity-best-effort-distance")
+                            if be["rank"] in MEDAL_COLORS:
+                                ui.icon("military_tech", size="24px").style(
+                                    f"color: {MEDAL_COLORS[be['rank']]}"
+                                ).props(
+                                    f'aria-label="{MEDAL_LABELS[be["rank"]]} place medal"'
+                                ).classes("activity-best-effort-medal")
+
+                        effort_time = be["duration_seconds"]
+                        ui.label(format_duration(effort_time)).classes(
+                            "activity-best-effort-time q-mt-xs"
+                        )
+                        ui.label(f"All-time #{be['rank']}").classes(
+                            "activity-best-effort-rank q-mt-xs"
+                        )
+                        bd = be.get("distance_meters")
+                        if bd and effort_time:
+                            ui.label(format_pace(bd, effort_time, sport)).classes(
+                                "text-caption activity-best-effort-pace q-mt-xs"
+                            )
 
     # ── Friends ───────────────────────────────────────────────────────────────
     all_friends = await run.io_bound(_db_get_all_friends) or []
