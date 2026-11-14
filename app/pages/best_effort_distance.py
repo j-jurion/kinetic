@@ -7,10 +7,10 @@ import plotly.graph_objects as go
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine
-from kinetic.models import Activity, BestEffort, SportType
-from kinetic.queries import multisport_parent_sports
-from kinetic.ui_helpers import (
+from app.database import engine
+from app.models import Activity, BestEffort, SportType
+from app.queries import multisport_parent_sports
+from app.ui_helpers import (
     ALL_RUNNING,
     DATE_FORMAT,
     add_medal_cell,

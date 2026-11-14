@@ -3,8 +3,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from kinetic.models import Activity, ActivityKind, BestEffort, Lap, SportType
-from kinetic.ui_helpers import DATE_FORMAT
+from app.models import Activity, ActivityKind, BestEffort, Lap, SportType
+from app.ui_helpers import DATE_FORMAT
 
 _SEMICIRCLES_TO_DEG = 180.0 / (2**31)
 

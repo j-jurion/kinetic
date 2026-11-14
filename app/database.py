@@ -1,7 +1,7 @@
 import sqlalchemy
 from sqlmodel import Session, SQLModel, create_engine
 
-DATABASE_URL = "sqlite:///./kinetic.db"
+DATABASE_URL = "sqlite:///./app.db"
 engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_thread": False})
 
 

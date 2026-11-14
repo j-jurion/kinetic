@@ -1,6 +1,6 @@
 """Kinetic – Activity Tracking App.
 
-Run with:  python -m kinetic.main
+Run with:  python -m app.main
 """
 
 from functools import partial
@@ -9,17 +9,17 @@ from fastapi import FastAPI
 from nicegui import app as nicegui_app
 from nicegui import ui
 
-from kinetic.api import router
-from kinetic.database import create_db_and_tables
-from kinetic.pages.activities import activities_page
-from kinetic.pages.activity_detail import activity_detail_page
-from kinetic.pages.best_effort_distance import best_effort_distance_page
-from kinetic.pages.best_efforts import best_efforts_page
-from kinetic.pages.friends import friends_page
-from kinetic.pages.graphs import graphs_page
-from kinetic.pages.map import map_page
-from kinetic.pages.sync import sync_page
-from kinetic.pages.top_activities import top_activities_page
+from app.api import router
+from app.database import create_db_and_tables
+from app.pages.activities import activities_page
+from app.pages.activity_detail import activity_detail_page
+from app.pages.best_effort_distance import best_effort_distance_page
+from app.pages.best_efforts import best_efforts_page
+from app.pages.friends import friends_page
+from app.pages.graphs import graphs_page
+from app.pages.map import map_page
+from app.pages.sync import sync_page
+from app.pages.top_activities import top_activities_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
@@ -209,7 +209,7 @@ def main():
 
     import uvicorn
 
-    uvicorn.run(fastapi_app, host="localhost", port=8080)
+    uvicorn.run(fastapi_app, host="localhost", port=8081)
 
 
 if __name__ == "__main__":

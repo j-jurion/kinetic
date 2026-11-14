@@ -30,6 +30,20 @@ python run.py
 
 Open http://localhost:8000
 
+### Run with systemd (Ubuntu)
+
+The service file assumes the checkout and virtual environment are at `/opt/kinetic`,
+owned by a `kinetic` system user. Install the project dependencies into
+`/opt/kinetic/.venv`, then install and start the service:
+
+```bash
+sudo install -m 0644 kinetic.service /etc/systemd/system/kinetic.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now kinetic
+```
+
+Check logs with `sudo journalctl -u kinetic -f`.
+
 ## Stack
 - **NiceGUI** – reactive UI framework
 - **FastAPI** – REST API (served at `/api`)

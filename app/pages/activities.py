@@ -9,9 +9,9 @@ from loguru import logger
 from nicegui import events, run, ui
 from sqlmodel import col, select
 
-from kinetic.database import engine, require_id
-from kinetic.fit_parser import parse_fit_file
-from kinetic.models import (
+from app.database import engine, require_id
+from app.fit_parser import parse_fit_file
+from app.models import (
     Activity,
     ActivityFriend,
     ActivityKind,
@@ -21,8 +21,8 @@ from kinetic.models import (
     RaceResult,
     SportType,
 )
-from kinetic.queries import multisport_parent_sports
-from kinetic.ui_helpers import (
+from app.queries import multisport_parent_sports
+from app.ui_helpers import (
     ALL_SPORTS,
     KINDS,
     SPORT_COLORS,

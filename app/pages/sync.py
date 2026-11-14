@@ -6,10 +6,10 @@ from nicegui import app as nicegui_app
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic import garmin_sync
-from kinetic.database import engine
-from kinetic.models import Activity
-from kinetic.ui_helpers import DATE_MASK, format_date, parse_date_input
+from app import garmin_sync
+from app.database import engine
+from app.models import Activity
+from app.ui_helpers import DATE_MASK, format_date, parse_date_input
 
 
 def _date_field(label_text: str, value: str) -> ui.input:

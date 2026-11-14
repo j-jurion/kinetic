@@ -3,8 +3,8 @@
 from nicegui import run, ui
 from sqlmodel import Session, col, select
 
-from kinetic.database import engine, require_id
-from kinetic.models import (
+from app.database import engine, require_id
+from app.models import (
     Activity,
     ActivityFriend,
     BestEffort,
@@ -13,7 +13,7 @@ from kinetic.models import (
     RaceResult,
     RaceResultSplit,
 )
-from kinetic.ui_helpers import (
+from app.ui_helpers import (
     SPORT_COLORS,
     SPORT_ICONS,
     distance_label,
@@ -479,7 +479,7 @@ def _stat_card(label: str, value: str, color: str = "#f97316") -> None:
 
 
 async def activity_detail_page(activity_id: int) -> None:
-    from kinetic.pages.activities import confirm_delete, show_edit_dialog
+    from app.pages.activities import confirm_delete, show_edit_dialog
 
     detail = await run.io_bound(_db_get_activity_detail, activity_id)
     if not detail:
