@@ -1,7 +1,13 @@
-"""Garmin Connect sync: auth helpers and activity download/import logic."""
+"""Garmin Connect sync: auth helpers and activity download/import logic.
+
+Garmin tokens and the Garmin email are stored per Kinetic account, and all database access
+goes through the account-scoped session, so accounts never share Garmin data.
+"""
 
 import io
+import threading
 import time
+import uuid
 import zipfile
 from collections.abc import Callable
 from datetime import date
@@ -9,27 +15,54 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from sqlmodel import Session, select
+from sqlmodel import select
 
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
 from app.models import Activity
+from app.ownership import UserSession as Session
+from app.ownership import current_owner
 from app.ui_helpers import format_date
 
 UPLOAD_DIR = Path("uploads")
-TOKEN_DIR = Path("~/.garminconnect").expanduser()
-_TOKEN_STORE = str(TOKEN_DIR)
+TOKEN_ROOT = Path("garmin_tokens")
+_TOKEN_FILE = "garmin_tokens.json"
+_EMAIL_FILE = "garmin_email"
+
+_running_syncs: set[str] = set()
+_running_lock = threading.Lock()
+
+
+def _owner_id() -> str:
+    owner_id = current_owner.get()
+    if not owner_id:
+        raise PermissionError("An authenticated account is required")
+    return str(uuid.UUID(owner_id))  # rejects anything that is not a plain account id
+
+
+def _token_dir() -> Path:
+    path = TOKEN_ROOT / _owner_id()
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return path
 
 
 def tokens_exist() -> bool:
-    """Return True if a valid token file is present on disk."""
-    return (TOKEN_DIR / "garmin_tokens.json").exists()
+    """Return True if the current account has cached Garmin tokens."""
+    return (_token_dir() / _TOKEN_FILE).exists()
+
+
+def saved_email() -> str:
+    path = _token_dir() / _EMAIL_FILE
+    return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+
+
+def save_email(email: str) -> None:
+    (_token_dir() / _EMAIL_FILE).write_text(email.strip(), encoding="utf-8")
 
 
 def logout() -> None:
-    """Remove cached Garmin tokens from disk."""
-    token_file = TOKEN_DIR / "garmin_tokens.json"
-    token_file.unlink(missing_ok=True)
+    """Remove the current account's cached Garmin tokens."""
+    (_token_dir() / _TOKEN_FILE).unlink(missing_ok=True)
 
 
 def _garmin_id_exists(garmin_activity_id: int) -> bool:
@@ -47,7 +80,7 @@ def _save_fit_and_import(
 ) -> None:
     """Write FIT bytes to uploads/ and import into the database."""
     UPLOAD_DIR.mkdir(exist_ok=True)
-    fit_path = UPLOAD_DIR / f"garmin_{garmin_activity_id}.fit"
+    fit_path = UPLOAD_DIR / f"{uuid.uuid4().hex}.fit"
     fit_path.write_bytes(fit_bytes)
 
     try:
@@ -102,19 +135,19 @@ def attempt_login(email: str, password: str) -> dict[str, Any]:
     """
     from garminconnect import Garmin
 
-    TOKEN_DIR.mkdir(parents=True, exist_ok=True)
+    token_store = str(_token_dir())
     client = Garmin(email=email, password=password, return_on_mfa=True)
-    status, client_state = client.login(_TOKEN_STORE)
+    status, client_state = client.login(token_store)
     if status == "needs_mfa":
         return {"needs_mfa": True, "_client": client, "_state": client_state}
-    client.client.dump(_TOKEN_STORE)
+    client.client.dump(token_store)
     return {"ok": True}
 
 
 def complete_mfa(client_obj, client_state, mfa_code: str) -> None:
     """Finish a login that required MFA and persist the tokens."""
     client_obj.resume_login(client_state, mfa_code)
-    client_obj.client.dump(_TOKEN_STORE)
+    client_obj.client.dump(str(_token_dir()))
 
 
 def login_with_tokens() -> Any:
@@ -122,7 +155,7 @@ def login_with_tokens() -> Any:
     from garminconnect import Garmin
 
     client = Garmin()
-    client.login(_TOKEN_STORE)
+    client.login(str(_token_dir()))
     return client
 
 
@@ -130,9 +163,8 @@ def login_with_credentials(email: str, password: str) -> Any:
     """Return an authenticated Garmin client, refreshing tokens if needed."""
     from garminconnect import Garmin
 
-    TOKEN_DIR.mkdir(parents=True, exist_ok=True)
     client = Garmin(email=email, password=password)
-    client.login(_TOKEN_STORE)
+    client.login(str(_token_dir()))
     return client
 
 
@@ -151,6 +183,25 @@ def sync_garmin_activities(
 
     Returns {"imported": int, "skipped": int, "errors": list[str]}.
     """
+    owner_id = _owner_id()
+    with _running_lock:
+        if owner_id in _running_syncs:
+            raise RuntimeError("A sync is already running for this account")
+        _running_syncs.add(owner_id)
+    try:
+        return _sync(since, until, email, password, progress_cb)
+    finally:
+        with _running_lock:
+            _running_syncs.discard(owner_id)
+
+
+def _sync(
+    since: date,
+    until: date | None,
+    email: str,
+    password: str,
+    progress_cb: Callable[[str], None] | None,
+) -> dict[str, Any]:
     from garminconnect import (
         GarminConnectAuthenticationError,
         GarminConnectConnectionError,

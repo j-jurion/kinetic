@@ -38,11 +38,10 @@ Decide the initial registration rules, supported countries, data retention, stor
 
 ### 4. Redesign Garmin sync
 
-The current Garmin email and tokens are shared globally in `sync.py` and `garmin_sync.py`.
+Garmin tokens and the Garmin email are now stored per account under `garmin_tokens/<user id>/`. Each account has its own disconnect, and only one sync can run per account at a time.
 
-- Disable public Garmin sync until it supports isolated, encrypted per-user credentials and tokens.
+- Encrypt the stored Garmin tokens at rest, or restrict and back up `garmin_tokens/` as carefully as `app.db`.
 - Verify Garmin’s permitted integration and credential-handling requirements before offering it publicly.
-- Add per-user disconnect and token deletion; prevent one user’s sync or logout affecting another.
 
 ### 5. Harden uploads and processing
 
