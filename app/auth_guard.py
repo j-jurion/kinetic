@@ -37,9 +37,7 @@ class AuthGuard:
             return
 
         path = scope["path"]
-        public = path in (
-            "/login", "/register", "/forgot", "/verify", "/reset", "/resend"
-        ) or path.startswith("/auth/")
+        public = path in ("/login", "/register") or path.startswith("/auth/")
         owner_id = authenticated_owner(scope)
         if not public and owner_id is None:
             if scope["type"] == "websocket":

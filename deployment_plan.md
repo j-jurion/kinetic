@@ -22,7 +22,7 @@ Decide the initial registration rules, supported countries, data retention, stor
 
 ### 2. Add accounts and authentication
 
-- Use an established authentication provider or library for registration, email verification, login, password reset and session management.
+- Use username and password accounts (no email); reset forgotten passwords with the server-side `app.reset_password` command.
 - Protect both NiceGUI pages and FastAPI endpoints, including WebSocket connections.
 - Use secure, HTTP-only cookies, session expiration and revocation, and CSRF protection.
 - Replace the hard-coded secret in `main.py` with a protected environment secret.
@@ -62,15 +62,27 @@ The current Garmin email and tokens are shared globally in `sync.py` and `garmin
 
 1. Install security updates, Python 3.12+, PostgreSQL and `uv`.
 2. Run the app under a dedicated, minimally privileged service account.
-3. Install locked dependencies and configure secrets outside the repository.
-4. Adapt `kinetic.service`; keep the app listening on localhost.
+3. Install locked dependencies. Create a persistent environment file outside the repository,
+   readable only by root and the `kinetic` group:
+
+   ```bash
+   sudo install -d -o root -g kinetic -m 0750 /etc/kinetic
+   sudo sh -c 'umask 027; printf "KINETIC_STORAGE_SECRET=%s\n" "$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")" > /etc/kinetic/kinetic.env'
+   sudo chown root:kinetic /etc/kinetic/kinetic.env
+   sudo chmod 0640 /etc/kinetic/kinetic.env
+   ```
+
+   Set `KINETIC_PUBLIC_ORIGIN` to the exact HTTPS origin in the same file. Keep the generated
+   secret stable across restarts; changing it invalidates existing browser sessions.
+4. Add `EnvironmentFile=/etc/kinetic/kinetic.env` under `[Service]` in `kinetic.service`;
+   keep the app listening on localhost.
 5. Verify migrations, service restart, logs, database connectivity and backups before public launch.
 
 ### 8. Publish through Cloudflare
 
 1. Point a Cloudflare-managed domain at a **Cloudflare Tunnel** routing to the local app.
 2. Unlike the private plan, **do not require Cloudflare Access for the whole site**: public users authenticate in the app. You may still use Access for administrator-only tools.
-3. Enable suitable WAF and rate-limit rules for registration, login, reset, uploads and API abuse.
+3. Enable suitable WAF and rate-limit rules for registration, login, uploads and API abuse.
 4. Do not cache authenticated pages, API responses or personal data. Test HTTPS, WebSockets, mobile reconnects and upload limits.
 5. Keep the origin private; do not forward the app port from your router. See [Cloudflare Tunnel routing](https://developers.cloudflare.com/tunnel/concepts/routing/).
 
@@ -95,7 +107,7 @@ See the European Commission’s [guidance on legal grounds for processing](https
 
 ### 11. Test and launch gradually
 
-- Test registration, verification, login, isolation, password reset, uploads, sync, deletion and recovery with multiple accounts.
+- Test registration, login, isolation, password reset, uploads, sync, deletion and recovery with multiple accounts.
 - Perform a security review and load test before opening registration.
 - Launch with a small pilot, monitor errors and resource usage, then expand.
 - Monitor uptime, disk space, database health and abuse; plan for your home internet, power or machine failing. Cloudflare cannot keep the app available when the Ubuntu origin is offline.

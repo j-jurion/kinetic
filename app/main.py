@@ -6,20 +6,13 @@ Run with:  python -m app.main
 import os
 from functools import partial
 
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.api import router
-from app.auth import (
-    UserCreate,
-    UserRead,
-    backend,
-    create_auth_tables,
-    public_origin,
-    require_smtp,
-    users,
-)
+from app.auth import create_auth_tables, public_origin
+from app.auth import router as auth_router
 from app.auth_guard import AuthGuard, install_socket_guards
 from app.auth_pages import router as auth_pages_router
 from app.database import create_db_and_tables
@@ -37,20 +30,7 @@ from app.pages.top_activities import top_activities_page
 fastapi_app = FastAPI(title="Kinetic API")
 fastapi_app.add_middleware(AuthGuard)
 fastapi_app.include_router(auth_pages_router)
-fastapi_app.include_router(
-    users.get_auth_router(backend, requires_verification=True), prefix="/auth/cookie"
-)
-fastapi_app.include_router(
-    users.get_register_router(UserRead, UserCreate),
-    prefix="/auth",
-    dependencies=[Depends(require_smtp)],
-)
-fastapi_app.include_router(
-    users.get_verify_router(UserRead), prefix="/auth", dependencies=[Depends(require_smtp)]
-)
-fastapi_app.include_router(
-    users.get_reset_password_router(), prefix="/auth", dependencies=[Depends(require_smtp)]
-)
+fastapi_app.include_router(auth_router)
 fastapi_app.include_router(router, prefix="/api")
 
 # ── Shared CSS ────────────────────────────────────────────────────────────────
@@ -135,17 +115,19 @@ async def _shell(title: str, dark_ref: list, content_fn):
 
             ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense")
 
-            async def logout():
-                ok = await ui.run_javascript("""
-                    fetch('/auth/cookie/logout', {method: 'POST', credentials: 'same-origin'})
-                      .then(response => response.ok)
-                """)
-                if ok:
-                    ui.navigate.to("/login")
-                else:
-                    ui.notify("Sign out failed", type="negative")
-
-            ui.button("Sign out", on_click=logout).props("flat")
+            # Runs entirely in the browser: once the token is revoked, the socket guard
+            # rejects further events from this client, so no reply could reach the server.
+            ui.button("Sign out").props("flat").on(
+                "click",
+                js_handler="""() => {
+                    fetch('/auth/logout', {method: 'POST', credentials: 'same-origin'})
+                      .then(response => {
+                        if (response.ok) location.assign('/login');
+                        else alert('Sign out failed');
+                      })
+                      .catch(() => alert('Sign out failed'));
+                }""",
+            )
 
     with ui.page_sticky(position="top-right", x_offset=20, y_offset=70):
         pass  # reserved

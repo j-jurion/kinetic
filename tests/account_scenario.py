@@ -1,32 +1,23 @@
 """Run the account integration scenario in an isolated process and database."""
 
-import asyncio
-import os
 import re
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
-from app.auth import COOKIE_NAME, User, UserManager, async_sessions, get_user_db
+from app.auth import COOKIE_NAME, User, password_hash, reset_password
+from app.database import engine
 from app.main import fastapi_app, main
 
 
-async def create_test_users():
-    async with async_sessions() as session:
-        db = await anext(get_user_db(session))
-        manager = UserManager(db)
-        password_hash = manager.password_helper.hash("correct-horse-battery")
-        for email in ("alice@example.com", "bob@example.com"):
+def create_test_users():
+    with Session(engine) as session:
+        for username in ("alice", "bob"):
             session.add(
-                User(
-                    email=email,
-                    hashed_password=password_hash,
-                    is_active=True,
-                    is_verified=True,
-                    is_superuser=False,
-                )
+                User(username=username, hashed_password=password_hash.hash("correct-horse-battery"))
             )
-        await session.commit()
+        session.commit()
 
 
 with patch("uvicorn.run"):
@@ -34,15 +25,14 @@ with patch("uvicorn.run"):
 
 origin = {"Origin": "http://localhost:8081"}
 with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
-    asyncio.run(create_test_users())
+    create_test_users()
     assert client.get("/api/activities").status_code == 401
     assert client.get("/").status_code == 200  # follows the redirect to login
-    assert client.post("/auth/register", json={}, headers=origin).status_code == 503
 
-    def login(email):
+    def login(username, password="correct-horse-battery"):
         response = client.post(
-            "/auth/cookie/login",
-            data={"username": email, "password": "correct-horse-battery"},
+            "/auth/login",
+            json={"username": username, "password": password},
             headers=origin,
         )
         assert response.status_code == 204, response.text
@@ -52,7 +42,7 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
         client.cookies.clear()
         client.cookies.set(COOKIE_NAME, token, domain="localhost.local", path="/")
 
-    alice = login("alice@example.com")
+    alice = login("alice")
     activity = {"name": "Alice's run", "date": "2026-01-01T10:00:00", "duration_seconds": 60}
     response = client.post("/api/activities", json=activity, headers=origin)
     assert response.status_code == 201, response.text
@@ -63,7 +53,7 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
     assert match, "NiceGUI page did not contain a client identifier"
     alice_client = match.group(1)
     client.cookies.clear()
-    bob = login("bob@example.com")
+    bob = login("bob")
     assert client.get("/api/activities").json() == []
     assert client.get(f"/api/activities/{activity_id}").status_code == 404
     assert (
@@ -122,7 +112,7 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
                     assert message == "431[false]", message
                     break
         use_token(alice)
-        assert client.post("/auth/cookie/logout", headers=origin).status_code == 204
+        assert client.post("/auth/logout", headers=origin).status_code == 204
         socket.send_text(
             f'422["event",{{"client_id":"{alice_client}","id":0,'
             '"listener_id":"invalid","args":[]}]'
@@ -137,59 +127,41 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
     use_token(bob)
     assert client.get("/api/activities").status_code == 200
 
-    os.environ.update(
-        {
-            "KINETIC_SMTP_HOST": "smtp.example.com",
-            "KINETIC_SMTP_USER": "test",
-            "KINETIC_SMTP_PASSWORD": "test",
-            "KINETIC_SMTP_FROM": "test@example.com",
-        }
-    )
-    sent = []
-    with patch("app.auth._send_email", side_effect=lambda *args: sent.append(args)):
+
+    def register(username, password="correct-horse-battery"):
         client.cookies.clear()
-        response = client.post(
-            "/auth/register",
-            json={"email": "carol@example.com", "password": "correct-horse-battery"},
+        return client.post(
+            "/auth/register", json={"username": username, "password": password}, headers=origin
+        )
+
+    response = register(" Carol ")
+    assert response.status_code == 201, response.text
+    assert response.json() == {"username": "carol"}
+    assert client.get("/api/activities").json() == []
+    assert register("CAROL").json()["detail"] == "Username is already taken"
+    assert register("ab").status_code == 400
+    assert register("carol@example.com").status_code == 400
+    assert register("dave", "too-short").status_code == 400
+    assert (
+        client.post(
+            "/auth/login",
+            json={"username": "carol", "password": "wrong-horse-battery"},
             headers=origin,
-        )
-        assert response.status_code == 201, response.text
-        assert len(sent) == 1
-        assert (
-            client.post(
-                "/auth/cookie/login",
-                data={"username": "carol@example.com", "password": "correct-horse-battery"},
-                headers=origin,
-            ).status_code
-            == 400
-        )
-        assert (
-            client.post("/auth/verify", json={"token": sent.pop()[3]}, headers=origin).status_code
-            == 200
-        )
-        carol = login("carol@example.com")
-        assert (
-            client.post(
-                "/auth/forgot-password", json={"email": "carol@example.com"}, headers=origin
-            ).status_code
-            == 202
-        )
-        reset_token = sent.pop()[3]
-        assert (
-            client.post(
-                "/auth/reset-password",
-                json={"token": reset_token, "password": "new-correct-horse-battery"},
-                headers=origin,
-            ).status_code
-            == 200
-        )
-        use_token(carol)
-        assert client.get("/api/activities").status_code == 401
-        assert (
-            client.post(
-                "/auth/reset-password",
-                json={"token": reset_token, "password": "new-correct-horse-battery"},
-                headers=origin,
-            ).status_code
-            == 400
-        )
+        ).status_code
+        == 400
+    )
+    carol = login("Carol")
+    new_password = reset_password("carol")
+    use_token(carol)
+    assert client.get("/api/activities").status_code == 401
+    client.cookies.clear()
+    assert (
+        client.post(
+            "/auth/login",
+            json={"username": "carol", "password": "correct-horse-battery"},
+            headers=origin,
+        ).status_code
+        == 400
+    )
+    login("carol", new_password)
+    assert client.get("/api/activities").status_code == 200

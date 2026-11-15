@@ -54,15 +54,24 @@ unassigned records are not visible to any account. Friend records are labels, no
 connections between accounts; activity sharing is not implemented. Garmin sync is disabled
 until its credentials and data can be isolated per user.
 
-Registration and password recovery require a STARTTLS SMTP service configured with
-`KINETIC_SMTP_HOST`, `KINETIC_SMTP_PORT` (default 587), `KINETIC_SMTP_USER`,
-`KINETIC_SMTP_PASSWORD`, and `KINETIC_SMTP_FROM`. Keep credentials out of the repository.
-Without SMTP, registration and password recovery return an explicit error. A new account
-must verify its email before signing in.
+Anyone can create an account on the **Register** page with a username and a password of at
+least 12 characters; no email address is needed. Usernames are 3 to 32 characters (letters,
+digits, `.`, `_` or `-`) and are case-insensitive.
+
+There is no self-service password recovery. To reset a forgotten password, run the following
+on the server; it prints a new generated password and signs the account out everywhere:
+
+```bash
+uv run python -m app.reset_password <username>
+```
+
+Accounts created by earlier email-based versions are converted automatically at startup:
+the part of the email address before `@` becomes the username (with a numeric suffix if it is
+already taken). Back up `app.db` before upgrading.
 
 For a **local test only**, stop the app and use the following command to copy an existing
 single-user SQLite database into an empty `app.db`, back up both databases, assign its
-activities and friends to a verified test account, and print a generated password once:
+activities and friends to a test account named `test`, and print a generated password once:
 
 ```bash
 uv run python -m app.bootstrap_test_account --source kinetic.db --backup-dir /secure/backup

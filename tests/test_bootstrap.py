@@ -8,9 +8,9 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path
 
-from fastapi_users.password import PasswordHelper
 from sqlmodel import Session, SQLModel, create_engine
 
+from app.auth import password_hash
 from app.models import Activity, Friend
 
 
@@ -48,14 +48,15 @@ class BootstrapTests(unittest.TestCase):
                 if line.startswith("One-time password: ")
             )
             with closing(sqlite3.connect(path / "app.db")) as connection:
-                user_id, hashed = connection.execute(
-                    'SELECT id, hashed_password FROM "user"'
+                user_id, username, hashed = connection.execute(
+                    'SELECT id, username, hashed_password FROM "user"'
                 ).fetchone()
                 activity_owner = connection.execute("SELECT owner_id FROM activity").fetchone()[0]
                 friend_owner = connection.execute("SELECT owner_id FROM friend").fetchone()[0]
             self.assertEqual(activity_owner, user_id)
             self.assertEqual(friend_owner, activity_owner)
-            self.assertTrue(PasswordHelper().verify_and_update(password, hashed)[0])
+            self.assertEqual(username, "test")
+            self.assertTrue(password_hash.verify(password, hashed))
             self.assertEqual(len(list(path.glob("kinetic-*.sqlite"))), 2)
             with closing(sqlite3.connect(source)) as connection:
                 self.assertIsNone(connection.execute("SELECT owner_id FROM activity").fetchone()[0])

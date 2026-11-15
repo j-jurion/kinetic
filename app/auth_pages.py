@@ -124,96 +124,56 @@ a:hover { text-decoration: underline; }
     <h1 id="title">Sign in</h1>
     <p class="subtitle" id="subtitle">Welcome back. Sign in to view your activities.</p>
     <form id="form">
-      <label class="field" id="email-field" for="email">Email
-        <input id="email" type="email" placeholder="you@example.com" autocomplete="email">
+      <label class="field" for="username">Username
+        <input id="username" type="text" placeholder="Your username" autocomplete="username"
+          autocapitalize="none" spellcheck="false" required minlength="3" maxlength="32"
+          pattern="[A-Za-z0-9][A-Za-z0-9_.\\-]{2,31}">
       </label>
-      <label class="field" id="password-field" for="password">Password
+      <label class="field" for="password">Password
         <input id="password" type="password" placeholder="Enter your password"
-          autocomplete="current-password">
+          autocomplete="current-password" required>
       </label>
       <button id="submit" type="submit">Sign in</button>
     </form>
     <p id="message" role="status"></p>
     <nav aria-label="Account options"><a href="/login">Sign in</a><a href="/register">Register</a>
-      <a href="/forgot">Reset password</a><a href="/resend">Resend verification</a>
     </nav>
   </section>
 </main>
 <script>
-const path = location.pathname;
-const token = location.hash.slice(1);
-if (token) history.replaceState(null, "", path);
-const email = document.getElementById("email"), password = document.getElementById("password");
+const register = location.pathname === "/register";
+const username = document.getElementById("username");
+const password = document.getElementById("password");
 const form = document.getElementById("form"), message = document.getElementById("message");
-document.getElementById("title").textContent = ({
-  "/login":"Sign in", "/register":"Create account", "/forgot":"Reset password",
-  "/verify":"Verify email", "/reset":"Choose a new password",
-  "/resend":"Resend verification"
-})[path];
-document.getElementById("subtitle").textContent = ({
-  "/login":"Welcome back. Sign in to view your activities.",
-  "/register":"Create an account to start tracking your activities.",
-  "/forgot":"Enter your email and we'll send you a reset link.",
-  "/verify":"Confirm your email address to finish setting up your account.",
-  "/reset":"Choose a new password for your account.",
-  "/resend":"Enter your email to receive another verification link."
-})[path];
-document.getElementById("submit").textContent = ({
-  "/login":"Sign in", "/register":"Create account", "/forgot":"Send reset link",
-  "/reset":"Update password", "/resend":"Send verification link"
-})[path] || "Continue";
-if (path === "/register" || path === "/reset") password.autocomplete = "new-password";
-if (path === "/forgot" || path === "/verify" || path === "/resend")
-  document.getElementById("password-field").remove();
-if (path === "/reset" || path === "/verify") document.getElementById("email-field").remove();
-if (path === "/verify") form.style.display = "none";
-async function post(url, body, formEncoded=false) {
-  const response = await fetch(url, {method:"POST", credentials:"same-origin",
-    headers:{"Content-Type": formEncoded ?
-      "application/x-www-form-urlencoded" : "application/json"},
-    body: formEncoded ? new URLSearchParams(body) : JSON.stringify(body)});
-  if (!response.ok) {
-    let data = await response.json().catch(() => ({}));
-    throw new Error(typeof data.detail === "string" ? data.detail : "Request failed");
-  }
+if (register) {
+  document.getElementById("title").textContent = "Create account";
+  document.getElementById("subtitle").textContent =
+    "Choose a username and a password of at least 12 characters.";
+  document.getElementById("submit").textContent = "Create account";
+  username.placeholder = "Choose a username";
+  password.placeholder = "At least 12 characters";
+  password.autocomplete = "new-password";
+  password.minLength = 12;
 }
 form.addEventListener("submit", async event => {
   event.preventDefault(); message.textContent = "";
   try {
-    if (path === "/login") {
-      await post("/auth/cookie/login", {username:email.value, password:password.value}, true);
-      location.assign("/");
-    } else if (path === "/register") {
-      await post("/auth/register", {email:email.value, password:password.value});
-      message.textContent = "Check your email for a verification link.";
-    } else if (path === "/forgot") {
-      await post("/auth/forgot-password", {email:email.value});
-      message.textContent = "If the account exists, a reset email will be sent.";
-    } else if (path === "/resend") {
-      await post("/auth/request-verify-token", {email:email.value});
-      message.textContent = "If verification is needed, an email will be sent.";
-    } else if (path === "/reset") {
-      if (!token) throw new Error("Missing reset token");
-      await post("/auth/reset-password", {token, password:password.value});
-      message.textContent = "Password updated. Sign in again.";
+    const response = await fetch(register ? "/auth/register" : "/auth/login", {
+      method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username: username.value, password: password.value})});
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(typeof data.detail === "string" ? data.detail : "Request failed");
     }
+    location.assign("/");
   } catch (error) { message.textContent = error.message; }
 });
-if (path === "/verify") {
-  if (!token) message.textContent = "Missing verification token";
-  else post("/auth/verify", {token})
-    .then(() => { message.textContent = "Email verified. You can now sign in."; })
-    .catch(error => { message.textContent = error.message; });
-}
 </script></body></html>"""
 
 
 @router.get("/login", response_class=HTMLResponse)
 @router.get("/register", response_class=HTMLResponse)
-@router.get("/forgot", response_class=HTMLResponse)
-@router.get("/verify", response_class=HTMLResponse)
-@router.get("/reset", response_class=HTMLResponse)
-@router.get("/resend", response_class=HTMLResponse)
 def account_page() -> HTMLResponse:
     return HTMLResponse(
         PAGE, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}

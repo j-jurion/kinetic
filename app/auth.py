@@ -1,54 +1,62 @@
-"""Account management and revocable browser sessions."""
+"""Username/password accounts and revocable browser sessions."""
 
-import asyncio
 import os
-import smtplib
-import ssl
+import re
+import secrets
 import uuid
-from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
-from email.message import EmailMessage
 from http.cookies import CookieError, SimpleCookie
 from urllib.parse import urlparse
 
-from fastapi import Depends, HTTPException, Request
-from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin, schemas
-from fastapi_users.authentication import AuthenticationBackend, CookieTransport
-from fastapi_users.authentication.strategy.db import DatabaseStrategy
-from fastapi_users.db import SQLAlchemyBaseUserTableUUID, SQLAlchemyUserDatabase
-from fastapi_users.exceptions import InvalidPasswordException
-from fastapi_users_db_sqlalchemy.access_token import (
-    SQLAlchemyAccessTokenDatabase,
-    SQLAlchemyBaseAccessTokenTableUUID,
-)
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.orm import DeclarativeBase, Session
+from fastapi import APIRouter, HTTPException, Request, Response
+from pwdlib import PasswordHash
+from pydantic import BaseModel, Field
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, delete, inspect, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from app.database import engine
 
 COOKIE_NAME = "kinetic_auth"
 SESSION_SECONDS = 12 * 60 * 60
+USERNAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_.-]{2,31}")
+USERNAME_RULES = "Username must be 3 to 32 characters: letters, digits, '.', '_' or '-'"
+PASSWORD_RULES = "Password must be 12 to 1024 characters"
+INVALID_LOGIN = "Invalid username or password"
+
+password_hash = PasswordHash.recommended()
+# Verified against unknown usernames so failed logins take similar time either way.
+_DUMMY_HASH = password_hash.hash(secrets.token_urlsafe(16))
 
 
 class AuthBase(DeclarativeBase):
     pass
 
 
-class User(SQLAlchemyBaseUserTableUUID, AuthBase):
-    pass
+class User(AuthBase):
+    __tablename__ = "user"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(1024))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
-class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, AuthBase):
-    pass
+class AccessToken(AuthBase):
+    __tablename__ = "accesstoken"
+
+    token: Mapped[str] = mapped_column(String(43), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, index=True, default=lambda: datetime.now(timezone.utc)
+    )
 
 
-class UserRead(schemas.BaseUser[uuid.UUID]):
-    pass
-
-
-class UserCreate(schemas.BaseUserCreate):
-    pass
+class Credentials(BaseModel):
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=1024)
 
 
 def public_origin() -> str:
@@ -72,125 +80,150 @@ def public_origin() -> str:
     return origin.rstrip("/")
 
 
-def smtp_configured() -> bool:
-    return all(
-        os.environ.get(name)
-        for name in ("KINETIC_SMTP_HOST", "KINETIC_SMTP_USER", "KINETIC_SMTP_PASSWORD",
-                     "KINETIC_SMTP_FROM")
+def normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
+def validate_password(password: str) -> None:
+    if not 12 <= len(password) <= 1024:
+        raise ValueError(PASSWORD_RULES)
+
+
+def _secure_cookies() -> bool:
+    return os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") != "1"
+
+
+def _start_session(session: Session, user_id: str, request: Request, response: Response) -> None:
+    previous = request.cookies.get(COOKIE_NAME)
+    if previous:
+        session.execute(delete(AccessToken).where(AccessToken.token == previous))
+    token = secrets.token_urlsafe(32)
+    session.add(AccessToken(token=token, user_id=user_id))
+    session.commit()
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=_secure_cookies(),
+        samesite="strict",
     )
 
 
-def require_smtp() -> None:
-    if not smtp_configured():
-        raise HTTPException(status_code=503, detail="Email service is not configured")
+router = APIRouter(prefix="/auth")
 
 
-def _send_email(recipient: str, subject: str, path: str, token: str) -> None:
-    require_smtp()
-    message = EmailMessage()
-    message["From"] = os.environ["KINETIC_SMTP_FROM"]
-    message["To"] = recipient
-    message["Subject"] = subject
-    message.set_content(f"{subject}: {public_origin()}/{path}#{token}")
-    with smtplib.SMTP(
-        os.environ["KINETIC_SMTP_HOST"], int(os.environ.get("KINETIC_SMTP_PORT", "587")),
-        timeout=15,
-    ) as smtp:
-        smtp.starttls(context=ssl.create_default_context())
-        smtp.login(os.environ["KINETIC_SMTP_USER"], os.environ["KINETIC_SMTP_PASSWORD"])
-        smtp.send_message(message)
+@router.post("/register", status_code=201)
+def register(credentials: Credentials, request: Request, response: Response):
+    username = normalize_username(credentials.username)
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise HTTPException(status_code=400, detail=USERNAME_RULES)
+    try:
+        validate_password(credentials.password)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    with Session(engine) as session:
+        user = User(username=username, hashed_password=password_hash.hash(credentials.password))
+        session.add(user)
+        try:
+            session.commit()
+        except IntegrityError:
+            raise HTTPException(status_code=400, detail="Username is already taken") from None
+        _start_session(session, user.id, request, response)
+    return {"username": username}
 
 
-async_engine = create_async_engine("sqlite+aiosqlite:///./app.db")
-async_sessions = async_sessionmaker(async_engine, expire_on_commit=False)
-
-
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_sessions() as session:
-        yield session
-
-
-async def get_user_db(session: AsyncSession = Depends(get_async_session)):
-    yield SQLAlchemyUserDatabase(session, User)
-
-
-class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    def __init__(self, user_db: SQLAlchemyUserDatabase[User, uuid.UUID]):
-        super().__init__(user_db)
-        self.db_session = user_db.session
-        secret = os.environ.get("KINETIC_STORAGE_SECRET", "")
-        if len(secret.strip()) < 32:
-            raise RuntimeError("KINETIC_STORAGE_SECRET must be at least 32 characters")
-        self.reset_password_token_secret = secret
-        self.verification_token_secret = secret
-
-    async def validate_password(self, password: str, user):
-        if not 12 <= len(password) <= 1024:
-            raise InvalidPasswordException(reason="Password must be 12 to 1024 characters")
-
-    async def on_after_register(self, user: User, request: Request | None = None):
-        await self.request_verify(user, request)
-
-    async def on_after_login(self, user: User, request: Request | None = None, response=None):
-        if request is not None:
-            previous = request.cookies.get(COOKIE_NAME)
-            if previous:
-                from sqlalchemy import delete
-
-                await self.db_session.execute(
-                    delete(AccessToken).where(AccessToken.__table__.c.token == previous)
-                )
-                await self.db_session.commit()
-
-    async def on_after_request_verify(
-        self, user: User, token: str, request: Request | None = None
-    ):
-        await asyncio.to_thread(
-            _send_email, user.email, "Verify your Kinetic account", "verify", token
+@router.post("/login", status_code=204)
+def login(credentials: Credentials, request: Request, response: Response) -> None:
+    with Session(engine) as session:
+        user = session.scalar(
+            select(User).where(User.username == normalize_username(credentials.username))
         )
-
-    async def on_after_forgot_password(
-        self, user: User, token: str, request: Request | None = None
-    ):
-        await asyncio.to_thread(
-            _send_email, user.email, "Reset your Kinetic password", "reset", token
+        if user is None:
+            password_hash.verify(credentials.password, _DUMMY_HASH)
+            raise HTTPException(status_code=400, detail=INVALID_LOGIN)
+        valid, updated_hash = password_hash.verify_and_update(
+            credentials.password, user.hashed_password
         )
+        if not valid or not user.is_active:
+            raise HTTPException(status_code=400, detail=INVALID_LOGIN)
+        if updated_hash:
+            user.hashed_password = updated_hash
+        _start_session(session, user.id, request, response)
 
-    async def on_after_reset_password(self, user: User, request: Request | None = None):
-        from sqlalchemy import delete
 
-        await self.db_session.execute(
-            delete(AccessToken).where(AccessToken.__table__.c.user_id == user.id)
+@router.post("/logout", status_code=204)
+def logout(request: Request, response: Response) -> None:
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        with Session(engine) as session:
+            session.execute(delete(AccessToken).where(AccessToken.token == token))
+            session.commit()
+    response.delete_cookie(
+        COOKIE_NAME, httponly=True, secure=_secure_cookies(), samesite="strict"
+    )
+
+
+def reset_password(username: str) -> str:
+    """Set a generated password for an account, revoke its sessions and return the password."""
+    password = secrets.token_urlsafe(18)
+    with Session(engine) as session:
+        user = session.scalar(select(User).where(User.username == normalize_username(username)))
+        if user is None:
+            raise LookupError(f"No account named {username!r}")
+        user.hashed_password = password_hash.hash(password)
+        session.execute(delete(AccessToken).where(AccessToken.user_id == user.id))
+        session.commit()
+    return password
+
+
+def _username_from_email(email: str, taken: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9_.-]", "", email.split("@")[0].lower())
+    base = re.sub(r"^[^a-z0-9]+", "", base)[:28]
+    if len(base) < 3:
+        base = "user"
+    candidate, suffix = base, 2
+    while candidate in taken:
+        candidate, suffix = f"{base}-{suffix}", suffix + 1
+    taken.add(candidate)
+    return candidate
+
+
+def _migrate_email_accounts(connection) -> None:
+    """Convert accounts from the former email-based schema to usernames."""
+    rows = connection.execute(
+        text('SELECT id, email, hashed_password, is_active FROM "user" ORDER BY email')
+    ).all()
+    taken: set[str] = set()
+    connection.execute(
+        text(
+            "CREATE TABLE user_new (id CHAR(36) NOT NULL PRIMARY KEY, "
+            "username VARCHAR(32) NOT NULL, hashed_password VARCHAR(1024) NOT NULL, "
+            "is_active BOOLEAN NOT NULL)"
         )
-        await self.db_session.commit()
-
-
-async def get_user_manager(user_db=Depends(get_user_db)):
-    yield UserManager(user_db)
-
-
-async def get_token_db(session: AsyncSession = Depends(get_async_session)):
-    yield SQLAlchemyAccessTokenDatabase(session, AccessToken)
-
-
-async def get_strategy(token_db=Depends(get_token_db)):
-    return DatabaseStrategy(token_db, lifetime_seconds=SESSION_SECONDS)
-
-
-cookie_transport = CookieTransport(
-    cookie_name=COOKIE_NAME,
-    cookie_max_age=SESSION_SECONDS,
-    cookie_secure=os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") != "1",
-    cookie_httponly=True,
-    cookie_samesite="strict",
-)
-backend = AuthenticationBackend(
-    name="cookie", transport=cookie_transport, get_strategy=get_strategy
-)
-users = FastAPIUsers[User, uuid.UUID](get_user_manager, [backend])
+    )
+    for row in rows:
+        connection.execute(
+            text("INSERT INTO user_new VALUES (:id, :username, :hashed_password, :is_active)"),
+            {
+                "id": row.id,
+                "username": _username_from_email(row.email, taken),
+                "hashed_password": row.hashed_password,
+                "is_active": row.is_active,
+            },
+        )
+    connection.execute(text('DROP TABLE "user"'))
+    connection.execute(text('ALTER TABLE user_new RENAME TO "user"'))
+    connection.execute(text('CREATE UNIQUE INDEX ix_user_username ON "user" (username)'))
 
 
 def create_auth_tables() -> None:
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if inspector.has_table("user") and "username" not in {
+            column["name"] for column in inspector.get_columns("user")
+        }:
+            _migrate_email_accounts(connection)
     AuthBase.metadata.create_all(engine)
 
 
@@ -209,20 +242,15 @@ def authenticated_owner(scope) -> str | None:
     token = cookie[COOKIE_NAME].value
     with Session(engine) as session:
         result = session.execute(
-            select(User, AccessToken)
-            .join(AccessToken, AccessToken.__table__.c.user_id == User.__table__.c.id)
-            .where(
-                AccessToken.__table__.c.token == token,
-                User.__table__.c.is_active.is_(True),
-                User.__table__.c.is_verified.is_(True),
-            )
+            select(User.id, AccessToken.created_at)
+            .join(AccessToken, AccessToken.user_id == User.id)
+            .where(AccessToken.token == token, User.is_active.is_(True))
         ).first()
         if not result:
             return None
-        user, access_token = result
-        created = access_token.created_at
+        user_id, created = result
         if created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
         if datetime.now(timezone.utc) - created >= timedelta(seconds=SESSION_SECONDS):
             return None
-        return str(user.id)
+        return user_id

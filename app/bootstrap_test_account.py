@@ -1,4 +1,4 @@
-"""Import a single-user database and create a local, verified test account."""
+"""Import a single-user database and create a local test account."""
 
 import argparse
 import secrets
@@ -7,12 +7,11 @@ import uuid
 from contextlib import closing
 from pathlib import Path
 
-from fastapi_users.password import PasswordHelper
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 from sqlmodel import col
 
-from app.auth import User, create_auth_tables
+from app.auth import User, create_auth_tables, password_hash
 from app.database import create_db_and_tables, engine
 from app.models import Activity, Friend
 
@@ -93,24 +92,22 @@ def main() -> None:
     create_db_and_tables()
     create_auth_tables()
     password = secrets.token_urlsafe(24)
-    user_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
     with Session(engine) as session:
         session.add(
             User(
                 id=user_id,
-                email="test@kinetic.invalid",
-                hashed_password=PasswordHelper().hash(password),
+                username="test",
+                hashed_password=password_hash.hash(password),
                 is_active=True,
-                is_verified=True,
-                is_superuser=False,
             )
         )
         for model in (Activity, Friend):
             session.execute(
-                update(model).where(col(model.owner_id).is_(None)).values(owner_id=str(user_id))
+                update(model).where(col(model.owner_id).is_(None)).values(owner_id=user_id)
             )
         session.commit()
-    print("Test account: test@kinetic.invalid")
+    print("Test account username: test")
     print(f"One-time password: {password}")
 
 
