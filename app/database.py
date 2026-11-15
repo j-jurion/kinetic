@@ -25,6 +25,20 @@ def create_db_and_tables() -> None:
                 sqlalchemy.text("ALTER TABLE activity ADD COLUMN garmin_activity_id INTEGER")
             )
             conn.commit()
+        if "owner_id" not in existing:
+            conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN owner_id VARCHAR"))
+        friend_columns = {
+            row[1] for row in conn.execute(sqlalchemy.text("PRAGMA table_info(friend)"))
+        }
+        if "owner_id" not in friend_columns:
+            conn.execute(sqlalchemy.text("ALTER TABLE friend ADD COLUMN owner_id VARCHAR"))
+        conn.execute(
+            sqlalchemy.text("CREATE INDEX IF NOT EXISTS ix_activity_owner_id ON activity(owner_id)")
+        )
+        conn.execute(
+            sqlalchemy.text("CREATE INDEX IF NOT EXISTS ix_friend_owner_id ON friend(owner_id)")
+        )
+        conn.commit()
 
 
 def get_session() -> Session:

@@ -6,11 +6,22 @@ Run with:  python -m app.main
 import os
 from functools import partial
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.api import router
+from app.auth import (
+    UserCreate,
+    UserRead,
+    backend,
+    create_auth_tables,
+    public_origin,
+    require_smtp,
+    users,
+)
+from app.auth_guard import AuthGuard, install_socket_guards
+from app.auth_pages import router as auth_pages_router
 from app.database import create_db_and_tables
 from app.pages.activities import activities_page
 from app.pages.activity_detail import activity_detail_page
@@ -19,11 +30,27 @@ from app.pages.best_efforts import best_efforts_page
 from app.pages.friends import friends_page
 from app.pages.graphs import graphs_page
 from app.pages.map import map_page
-from app.pages.sync import sync_page
+from app.pages.races import races_page
 from app.pages.top_activities import top_activities_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
+fastapi_app.add_middleware(AuthGuard)
+fastapi_app.include_router(auth_pages_router)
+fastapi_app.include_router(
+    users.get_auth_router(backend, requires_verification=True), prefix="/auth/cookie"
+)
+fastapi_app.include_router(
+    users.get_register_router(UserRead, UserCreate),
+    prefix="/auth",
+    dependencies=[Depends(require_smtp)],
+)
+fastapi_app.include_router(
+    users.get_verify_router(UserRead), prefix="/auth", dependencies=[Depends(require_smtp)]
+)
+fastapi_app.include_router(
+    users.get_reset_password_router(), prefix="/auth", dependencies=[Depends(require_smtp)]
+)
 fastapi_app.include_router(router, prefix="/api")
 
 # ── Shared CSS ────────────────────────────────────────────────────────────────
@@ -81,7 +108,6 @@ async def _shell(title: str, dark_ref: list, content_fn):
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
                 ("Friends", "people", "/friends"),
-                ("Sync", "sync", "/sync"),
             ]
             for label, icon, path in nav_items:
                 with ui.item(
@@ -108,6 +134,18 @@ async def _shell(title: str, dark_ref: list, content_fn):
                 nicegui_app.storage.user["dark_mode"] = dark.value
 
             ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense")
+
+            async def logout():
+                ok = await ui.run_javascript("""
+                    fetch('/auth/cookie/logout', {method: 'POST', credentials: 'same-origin'})
+                      .then(response => response.ok)
+                """)
+                if ok:
+                    ui.navigate.to("/login")
+                else:
+                    ui.notify("Sign out failed", type="negative")
+
+            ui.button("Sign out", on_click=logout).props("flat")
 
     with ui.page_sticky(position="top-right", x_offset=20, y_offset=70):
         pass  # reserved
@@ -184,8 +222,7 @@ async def page_friends_route():
 
 @ui.page("/sync")
 async def page_sync_route():
-    dark_ref = []
-    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=sync_page)
+    ui.label("Garmin sync is disabled until it supports separate accounts.")
 
 
 @ui.page("/activity/{activity_id}")
@@ -204,6 +241,7 @@ async def page_activity_detail(activity_id: int):
 @nicegui_app.on_startup
 async def startup():
     create_db_and_tables()
+    create_auth_tables()
 
 
 def main():
@@ -212,6 +250,7 @@ def main():
         raise RuntimeError(
             "Set KINETIC_STORAGE_SECRET to a securely generated value of at least 32 characters"
         )
+    public_origin()
 
     ui.run_with(
         fastapi_app,
@@ -219,7 +258,12 @@ def main():
         favicon="⚡",
         dark=None,  # respect system preference initially
         storage_secret=storage_secret,
+        session_middleware_kwargs={
+            "https_only": os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") != "1",
+            "same_site": "strict",
+        },
     )
+    install_socket_guards()
 
     import uvicorn
 

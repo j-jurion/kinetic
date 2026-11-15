@@ -23,8 +23,12 @@ class StorageSecretTests(unittest.TestCase):
     def test_configured_secret_is_used(self):
         secret = "s" * 32
         with (
-            patch.dict(os.environ, {"KINETIC_STORAGE_SECRET": secret}),
+            patch.dict(
+                os.environ,
+                {"KINETIC_STORAGE_SECRET": secret, "KINETIC_PUBLIC_ORIGIN": "https://example.com"},
+            ),
             patch("app.main.ui.run_with") as run_with,
+            patch("app.main.install_socket_guards"),
             patch("uvicorn.run") as uvicorn_run,
         ):
             main()

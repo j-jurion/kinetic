@@ -4,11 +4,13 @@ from datetime import datetime
 from typing import Optional
 
 import plotly.graph_objects as go
-from nicegui import run, ui
-from sqlmodel import Session, col, select
+from nicegui import ui
+from sqlmodel import col, select
 
+from app import user_run as run
 from app.database import engine
 from app.models import Activity, SportType
+from app.ownership import UserSession as Session
 from app.ui_helpers import (
     ALL_SPORTS,
     is_swimming,

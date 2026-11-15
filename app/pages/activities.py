@@ -4,11 +4,13 @@ from datetime import datetime, timezone
 from functools import partial
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from loguru import logger
-from nicegui import events, run, ui
+from nicegui import events, ui
 from sqlmodel import col, select
 
+from app import user_run as run
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
 from app.models import (
@@ -21,6 +23,7 @@ from app.models import (
     RaceResult,
     SportType,
 )
+from app.ownership import UserSession as Session
 from app.queries import multisport_parent_sports
 from app.ui_helpers import (
     ALL_SPORTS,
@@ -48,8 +51,6 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 
 def _db_set_activity_friends(activity_id: int, friend_ids: list[int]) -> None:
-    from sqlmodel import Session
-
     with Session(engine) as session:
         # Collect all activity IDs to update: the activity itself + any children
         child_ids = [
@@ -70,8 +71,6 @@ def _db_set_activity_friends(activity_id: int, friend_ids: list[int]) -> None:
 
 
 def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
-    from sqlmodel import Session
-
     with Session(engine) as session:
         stmt = select(Activity)
         sports = resolve_sports(sport)
@@ -111,8 +110,6 @@ def _db_get_activities(sport: Optional[str], year: Optional[int]) -> list[dict]:
 
 
 def _db_delete_activity(activity_id: int) -> None:
-    from sqlmodel import Session
-
     with Session(engine) as session:
         activity = session.get(Activity, activity_id)
         if not activity:
@@ -138,8 +135,6 @@ def _db_delete_activity(activity_id: int) -> None:
 
 
 def _db_save_activity(activity_id: Optional[int], data: dict) -> dict:
-    from sqlmodel import Session
-
     with Session(engine) as session:
         if activity_id:
             existing = session.get(Activity, activity_id)
@@ -159,11 +154,11 @@ def _db_save_activity(activity_id: Optional[int], data: dict) -> dict:
 
 def _db_process_fit(file_bytes: bytes, filename: str) -> dict:
     """Write bytes to disk, parse FIT, save everything to DB. Runs in thread."""
-    dest = UPLOAD_DIR / filename
+    if not filename.endswith(".fit"):
+        raise ValueError("Only .fit files are accepted")
+    dest = UPLOAD_DIR / f"{uuid4().hex}.fit"
     dest.write_bytes(file_bytes)
     activity, laps, best_efforts, children = parse_fit_file(dest)
-
-    from sqlmodel import Session
 
     with Session(engine) as session:
         session.add(activity)
@@ -319,8 +314,6 @@ def show_edit_dialog(activity: Optional[dict], on_refresh) -> None:
         notes = ui.textarea("Notes", value=data.get("notes") or "").classes("w-full")
 
         # ── Friends ───────────────────────────────────────────────────────────
-        from sqlmodel import Session
-
         with Session(engine) as session:
             all_friends = session.exec(select(Friend)).all()
         friend_options = {f.id: f.name for f in all_friends}
