@@ -1,7 +1,7 @@
 """Protect HTTP requests and bind NiceGUI socket events to their account."""
 
 import inspect
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, urlparse
 
 from nicegui import core
 from nicegui.client import Client
@@ -27,7 +27,18 @@ class AuthGuard:
         unsafe = scope["type"] == "websocket" or scope.get("method") not in (
             "GET", "HEAD", "OPTIONS"
         )
-        if unsafe and origin != public_origin():
+        allowed_origin = public_origin()
+        allowed = urlparse(allowed_origin)
+        host = headers.get(b"host", b"").decode("latin-1")
+        # Local development: send e.g. 127.0.0.1 visitors to the configured localhost origin
+        # so the browser's Origin header matches on later POSTs.
+        if allowed.scheme == "http" and not unsafe and host != allowed.netloc:
+            target = allowed_origin + scope["path"]
+            if scope.get("query_string"):
+                target += "?" + scope["query_string"].decode("latin-1")
+            await RedirectResponse(target, status_code=307)(scope, receive, send)
+            return
+        if unsafe and origin != allowed_origin:
             if scope["type"] == "websocket":
                 await send({"type": "websocket.close", "code": 4403})
             else:
