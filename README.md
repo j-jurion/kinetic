@@ -25,16 +25,31 @@ Activity tracking web app built with NiceGUI + FastAPI.
 
 ```bash
 pip install -e .
+export KINETIC_STORAGE_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 python run.py
 ```
 
-Open http://localhost:8000
+Open http://localhost:8081. Store the generated secret securely and reuse it across restarts;
+changing it invalidates existing browser sessions.
+
+On PowerShell, set the secret for the current process with:
+
+```powershell
+$env:KINETIC_STORAGE_SECRET = python -c "import secrets; print(secrets.token_urlsafe(32))"
+python run.py
+```
+
+The app does not yet support separate user accounts or private per-user activities. Do not
+expose it publicly until authentication and data isolation are implemented.
 
 ### Run with systemd (Ubuntu)
 
 The service file assumes the checkout and virtual environment are at `/opt/kinetic`,
 owned by a `kinetic` system user. Install the project dependencies into
-`/opt/kinetic/.venv`, then install and start the service:
+`/opt/kinetic/.venv`. Configure a persistent `KINETIC_STORAGE_SECRET` using a protected
+systemd environment file or a service override before starting the service; the value must
+be at least 32 characters and should be generated with `secrets.token_urlsafe(32)`.
+Then install and start the service:
 
 ```bash
 sudo install -m 0644 kinetic.service /etc/systemd/system/kinetic.service

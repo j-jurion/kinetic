@@ -3,6 +3,7 @@
 Run with:  python -m app.main
 """
 
+import os
 from functools import partial
 
 from fastapi import FastAPI
@@ -206,12 +207,18 @@ async def startup():
 
 
 def main():
+    storage_secret = os.environ.get("KINETIC_STORAGE_SECRET")
+    if not storage_secret or len(storage_secret.strip()) < 32:
+        raise RuntimeError(
+            "Set KINETIC_STORAGE_SECRET to a securely generated value of at least 32 characters"
+        )
+
     ui.run_with(
         fastapi_app,
         title="Kinetic",
         favicon="⚡",
         dark=None,  # respect system preference initially
-        storage_secret="kinetic-secret-change-me",
+        storage_secret=storage_secret,
     )
 
     import uvicorn
