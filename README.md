@@ -18,8 +18,24 @@ Activity tracking web app: a React (Vite) frontend in `web/` on top of a FastAPI
   marking the best effort of each year
 - Most elevation and longest activity rankings (top 10, with a full sortable table)
 - Dedicated page listing every attempt at a given distance, with progression chart
+- Activity page: route coloured by speed, profile (heart rate, pace and grade-adjusted pace,
+  elevation, cadence, power, running dynamics, temperature) with hover synced to the map,
+  heart-rate and power zones, laps with elevation, climbs and pool-swim lengths (SWOLF)
+- Training page: fitness, fatigue and form, weekly load and ramp rate, intensity distribution,
+  discipline balance, consistency calendar and streaks, running efficiency and dynamics trends,
+  heat vs pace, brick runs, swim efficiency and aerobic decoupling
+- Race predictor, personal-record timeline, power curve and FTP; triathlon race breakdown
 - Friends management
 - Dark / light mode toggle
+
+### Training metrics
+
+Charts that look across many activities use a few numbers per activity (heart-rate histogram,
+power curve, moving time, running dynamics, …) read once from its FIT file and stored in the
+`activitymetrics` table. They are computed when an activity is imported; for activities that
+existed before, use **Analyse now** on the Training page (it takes about half a second per
+activity). Zones and training load use the maximum and threshold heart rate, FTP and weight
+configured on the watch, as recorded in the FIT files, and fall back to estimates.
 
 ## Setup
 
@@ -63,6 +79,8 @@ uv run python run.py
 ```
 
 `KINETIC_API_HOST` and `KINETIC_API_PORT` change the listen address (default `127.0.0.1:8000`).
+`KINETIC_UPLOAD_DIR` sets the folder holding the imported FIT files (default `uploads` in the
+working directory); the activity charts and training metrics read them back from there.
 The interactive API documentation is at `/api/docs`.
 
 The insecure HTTP option is for local development only and is rejected for non-local origins.

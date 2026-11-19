@@ -10,15 +10,19 @@ import {
   formatDistance,
   formatDuration,
   formatPace,
+  resolveSports,
   sportLabel,
 } from '../lib/format'
 import { TOP_METRICS, topActivitiesUrl } from '../lib/topMetrics'
 import type { TopMetric } from '../lib/topMetrics'
-import type { BestEffortsOverview } from '../lib/types'
+import type { BestEffortRow, BestEffortsOverview } from '../lib/types'
 import { useFilters } from '../lib/useFilters'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { SportSelect, StatTile, YearSelect } from '../components/fields'
 import { Icon } from '../components/icons'
+import { PowerSection } from '../components/performance/PowerSection'
+import { RacePredictor } from '../components/performance/RacePredictor'
+import { RecordTimeline } from '../components/performance/RecordTimeline'
 import '../styles/trophy.css'
 
 interface TileProps {
@@ -64,11 +68,21 @@ function TrophyTile({ title, icon, value, activityName, activityDate, url, detai
 export function BestEffortsPage() {
   const { sport, year, setSport, setYear } = useFilters(ALL_RUNNING)
   const [overview, setOverview] = useState<BestEffortsOverview | null>(null)
+  // Every effort of the sport over all seasons: predictions and record progressions need history
+  const [efforts, setEfforts] = useState<BestEffortRow[] | null>(null)
   const latest = useLatestRequest()
+  const latestEfforts = useLatestRequest()
 
   useEffect(() => {
     latest(api.get<BestEffortsOverview>(`/best-efforts/overview${qs({ sport, year })}`), setOverview)
   }, [sport, year, latest])
+
+  useEffect(() => {
+    latestEfforts(api.get<BestEffortRow[]>(`/best-efforts${qs({ sport })}`), setEfforts)
+  }, [sport, latestEfforts])
+
+  const sports = resolveSports(sport || ALL_RUNNING) ?? []
+  const running = sports.length > 0 && sports.every((s) => s === 'running' || s === 'trail_running')
 
   const standouts = overview
     ? (Object.keys(TOP_METRICS) as TopMetric[]).filter((m) => overview.standouts[m])
@@ -181,6 +195,12 @@ export function BestEffortsPage() {
           </div>
         </div>
       )}
+
+      <div className="column w-full gap-6 q-mt-lg">
+        {running && efforts && <RacePredictor efforts={efforts} sport={sport || ALL_RUNNING} />}
+        {efforts && <RecordTimeline efforts={efforts} sport={sport || ALL_RUNNING} year={year} />}
+        <PowerSection preferRunning={running} />
+      </div>
     </>
   )
 }

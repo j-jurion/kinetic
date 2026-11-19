@@ -31,6 +31,7 @@ import {
   yearlyTotals,
 } from '../lib/graphs'
 import type { Metric, MetricConfig } from '../lib/graphs'
+import { formatClock, heartRateAxis, paceAxis } from '../lib/speed'
 import type { BestEffortRow, GraphPoint, GraphStats } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { SelectField, SportSelect, YearSelect } from '../components/fields'
@@ -348,13 +349,15 @@ export function GraphsPage() {
       if (trend.length) {
         const x = trend.map((t) => t.point.date)
         const withHr = trend.filter((t) => t.point.avg_heart_rate)
+        const average = rollingAverage(trend.map((t) => t.pace), PACE_WINDOW)
+        const axis = paceAxis(trend.map((t) => t.pace))
         pace = [
           [
             {
               type: 'scatter',
               mode: 'markers',
               x,
-              y: trend.map((t) => paceAsTime(t.pace)),
+              y: trend.map((t) => t.pace),
               name: `Pace (${per.slice(1)})`,
               marker: { color, size: 7, opacity: 0.55 },
               customdata: trend.map((t) => [
@@ -368,10 +371,11 @@ export function GraphsPage() {
               type: 'scatter',
               mode: 'lines',
               x,
-              y: rollingAverage(trend.map((t) => t.pace), PACE_WINDOW).map(paceAsTime),
+              y: average,
+              customdata: average.map((s) => `${formatClock(s)} ${per}`) as never,
               name: `Pace, ${PACE_WINDOW}-activity average`,
               line: { color, width: 3, shape: 'spline' },
-              hovertemplate: `Average pace: %{y|%-M:%S} ${per}<extra></extra>`,
+              hovertemplate: 'Average pace: %{customdata}<extra></extra>',
             },
             {
               type: 'scatter',
@@ -387,9 +391,18 @@ export function GraphsPage() {
           {
             title: { text: `Pace & Heart Rate – ${sportTitle}${yearSuffix}` },
             xaxis: { type: 'date', tickformat: '%b %Y' },
-            // Faster paces higher up
-            yaxis: { title: { text: `Pace (min${per})` }, type: 'date', tickformat: '%-M:%S', autorange: 'reversed' },
-            yaxis2: { title: { text: 'Avg HR (bpm)' }, overlaying: 'y', side: 'right', showgrid: false },
+            // Faster paces higher up, with evenly spaced m:ss labels
+            yaxis: {
+              title: { text: `Pace (min${per})` },
+              ...(axis ? { range: axis.range, tickvals: axis.tickvals, ticktext: axis.ticktext } : { autorange: 'reversed' }),
+            },
+            yaxis2: {
+              title: { text: 'Avg HR (bpm)' },
+              overlaying: 'y',
+              side: 'right',
+              showgrid: false,
+              ...heartRateAxis(rollingAverage(withHr.map((t) => t.point.avg_heart_rate!), PACE_WINDOW)),
+            },
             legend: { orientation: 'h', y: -0.18 },
             margin: { l: 60, r: 60, t: 50, b: 40 },
           },

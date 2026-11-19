@@ -19,6 +19,7 @@ import { SyncPage } from './pages/Sync'
 
 // The chart pages pull in Plotly (several MB), so they load on first visit only
 const GraphsPage = lazy(() => import('./pages/Graphs').then((m) => ({ default: m.GraphsPage })))
+const TrainingPage = lazy(() => import('./pages/Training').then((m) => ({ default: m.TrainingPage })))
 const BestEffortDistancePage = lazy(() =>
   import('./pages/BestEffortDistance').then((m) => ({ default: m.BestEffortDistancePage })),
 )
@@ -37,6 +38,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/races" element={<RacesPage />} />
               <Route path="/map" element={<MapPage />} />
               <Route path="/graphs" element={<Suspense><GraphsPage /></Suspense>} />
+              <Route path="/training" element={<Suspense><TrainingPage /></Suspense>} />
               <Route path="/best-efforts" element={<BestEffortsPage />} />
               <Route path="/best-efforts/top/:metric" element={<TopActivitiesPage />} />
               <Route path="/best-efforts/:distance" element={<Suspense><BestEffortDistancePage /></Suspense>} />

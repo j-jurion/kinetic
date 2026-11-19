@@ -109,6 +109,16 @@ export function sportColor(sport: string | null | undefined, fallback = '#f97316
   return SPORT_COLORS[sport] ?? fallback
 }
 
+// Sports on foot: the watch's average cadence counts one foot
+const STEP_SPORTS = new Set(['running', 'trail_running', 'walking', 'hiking'])
+
+/** Average cadence as shown: steps per minute on foot (twice the stored value), rpm otherwise. */
+export function stepsPerMinute(cadence: number, sport: string): number {
+  return STEP_SPORTS.has(sport) ? cadence * 2 : cadence
+}
+
+export const cadenceUnit = (sport: string) => (STEP_SPORTS.has(sport) ? 'spm' : 'rpm')
+
 export function isSwimming(sport: string | null | undefined): boolean {
   const sports = resolveSports(sport)
   return !!sports && sports.length > 0 && sports.every((s) => s === 'swimming')

@@ -195,3 +195,53 @@
     .trophy-filter-controls { width: 100%; }
     .trophy-filter { flex: 1; width: auto !important; min-width: 130px; }
 }
+
+/* Performance sections: race predictor, record timeline, power */
+.perf-section-heading { flex-wrap: wrap; }
+.perf-prediction-tile:hover { transform: none; }
+.perf-link { color: #a8681f; text-decoration: none; }
+.perf-link:hover, .perf-link:focus-visible { text-decoration: underline; }
+.perf-faster { color: #15803d; font-weight: 600; }
+.perf-pr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+    gap: 16px;
+    align-items: start;
+}
+.perf-pr-row {
+    padding: 6px 4px;
+    border-top: 1px solid rgba(133, 101, 53, .12);
+    color: inherit;
+    text-decoration: none;
+    border-radius: 6px;
+}
+.perf-pr-row:first-child { border-top: none; }
+.perf-pr-row:hover, .perf-pr-row:focus-visible { background: rgba(226, 183, 94, .12); outline: none; }
+.perf-pr-date { width: 78px; flex-shrink: 0; }
+.perf-pr-time { color: #7e4a18; min-width: 64px; flex-shrink: 0; }
+.perf-improvement {
+    flex-shrink: 0;
+    font-size: .75rem;
+    font-weight: 700;
+    color: #15803d;
+    background: rgba(34, 197, 94, .12);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+.perf-improvement--first { color: #81571f; background: rgba(226, 183, 94, .17); }
+.perf-more {
+    align-self: flex-start;
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    color: #a8681f;
+    font-weight: 600;
+}
+.perf-more:hover { text-decoration: underline; }
+.body--dark .perf-link, .body--dark .perf-more { color: #efd18e; }
+.body--dark .perf-faster { color: #4ade80; }
+.body--dark .perf-pr-row { border-top-color: rgba(255, 255, 255, .08); }
+.body--dark .perf-pr-time { color: #f4cf7a; }
+.body--dark .perf-improvement { color: #4ade80; background: rgba(74, 222, 128, .12); }
+.body--dark .perf-improvement--first { color: #efd18e; background: rgba(226, 183, 94, .12); }

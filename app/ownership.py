@@ -10,6 +10,7 @@ from sqlmodel import SQLModel, col
 from app.models import (
     Activity,
     ActivityFriend,
+    ActivityMetrics,
     BestEffort,
     Friend,
     Lap,
@@ -48,6 +49,11 @@ def scope_queries(execute_state):
         with_loader_criteria(Lap, col(Lap.activity_id).in_(activity_ids), include_aliases=True),
         with_loader_criteria(
             BestEffort, col(BestEffort.activity_id).in_(activity_ids), include_aliases=True
+        ),
+        with_loader_criteria(
+            ActivityMetrics,
+            col(ActivityMetrics.activity_id).in_(activity_ids),
+            include_aliases=True,
         ),
         with_loader_criteria(
             RaceResult, col(RaceResult.activity_id).in_(activity_ids), include_aliases=True
@@ -102,7 +108,7 @@ def validate_writes(session, _flush_context, _instances):
                     raise PermissionError("Cannot change record ownership")
             if isinstance(item, Activity) and item.parent_id is not None:
                 require_owned(activity, item.parent_id)
-        elif isinstance(item, (Lap, BestEffort, RaceResult, ActivityFriend)):
+        elif isinstance(item, (Lap, BestEffort, RaceResult, ActivityFriend, ActivityMetrics)):
             if item not in session.new:
                 state = inspect(item)
                 if state is None:

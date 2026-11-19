@@ -115,12 +115,14 @@ def import_fit_bytes(
             be.activity_id = parent_id
             session.add(be)
 
+        imported = [parent_id]
         for child, child_laps, child_bes, *_ in children:
             child.parent_id = parent_id
             session.add(child)
             session.commit()
             session.refresh(child)
             child_id = require_id(child.id)
+            imported.append(child_id)
             for lap in child_laps:
                 lap.activity_id = child_id
                 session.add(lap)
@@ -129,7 +131,12 @@ def import_fit_bytes(
                 session.add(be)
 
         session.commit()
-        return parent_id
+
+    # Training metrics for the charts; imported here to avoid a circular import
+    from app import metrics
+
+    metrics.store_quietly(imported)
+    return parent_id
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────

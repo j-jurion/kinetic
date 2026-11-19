@@ -40,6 +40,13 @@ def create_db_and_tables() -> None:
         conn.execute(
             sqlalchemy.text("CREATE INDEX IF NOT EXISTS ix_friend_owner_id ON friend(owner_id)")
         )
+        metrics_columns = {
+            row[1] for row in conn.execute(sqlalchemy.text("PRAGMA table_info(activitymetrics)"))
+        }
+        if "moving_seconds" not in metrics_columns:
+            conn.execute(
+                sqlalchemy.text("ALTER TABLE activitymetrics ADD COLUMN moving_seconds FLOAT")
+            )
         conn.commit()
 
 
