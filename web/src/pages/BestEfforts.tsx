@@ -16,6 +16,7 @@ import { TOP_METRICS, topActivitiesUrl } from '../lib/topMetrics'
 import type { TopMetric } from '../lib/topMetrics'
 import type { BestEffortsOverview } from '../lib/types'
 import { useFilters } from '../lib/useFilters'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { SportSelect, StatTile, YearSelect } from '../components/fields'
 import { Icon } from '../components/icons'
 import '../styles/trophy.css'
@@ -63,10 +64,11 @@ function TrophyTile({ title, icon, value, activityName, activityDate, url, detai
 export function BestEffortsPage() {
   const { sport, year, setSport, setYear } = useFilters(ALL_RUNNING)
   const [overview, setOverview] = useState<BestEffortsOverview | null>(null)
+  const latest = useLatestRequest()
 
   useEffect(() => {
-    api.get<BestEffortsOverview>(`/best-efforts/overview${qs({ sport, year })}`).then(setOverview)
-  }, [sport, year])
+    latest(api.get<BestEffortsOverview>(`/best-efforts/overview${qs({ sport, year })}`), setOverview)
+  }, [sport, year, latest])
 
   const standouts = overview
     ? (Object.keys(TOP_METRICS) as TopMetric[]).filter((m) => overview.standouts[m])

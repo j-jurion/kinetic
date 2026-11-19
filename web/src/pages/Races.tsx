@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatDate, formatDuration, kindLabel } from '../lib/format'
 import type { RaceRow } from '../lib/types'
@@ -13,7 +13,6 @@ function formatRank(rank: number | null, total: number | null): string | null {
 }
 
 export function RacesPage() {
-  const navigate = useNavigate()
   const [results, setResults] = useState<RaceRow[] | null>(null)
 
   useEffect(() => {
@@ -51,7 +50,7 @@ export function RacesPage() {
             ]
             return (
               <div key={r.id} className="card w-full q-pa-sm q-mb-sm races-result-card">
-                <div className="row items-center no-wrap gap-3 w-full clickable" onClick={() => navigate(`/activity/${a.id}`)}>
+                <Link to={`/activity/${a.id}`} className="row items-center no-wrap gap-3 w-full card-link">
                   <SportIcon sport={a.sport} size={28} />
                   <div className="column gap-0 min-w-0">
                     <div className="row items-center no-wrap gap-1">
@@ -74,7 +73,7 @@ export function RacesPage() {
                         ),
                     )}
                   </div>
-                </div>
+                </Link>
               </div>
             )
           })}

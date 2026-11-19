@@ -3,6 +3,7 @@ import type { Data, Layout } from 'plotly.js-dist-min'
 import { api, qs } from '../lib/api'
 import { isSwimming, sportColor, sportLabel } from '../lib/format'
 import type { GraphStats, Totals } from '../lib/types'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { SelectField, SportSelect, YearSelect } from '../components/fields'
 import { Plot, noDataLayout } from '../components/Plot'
 
@@ -31,10 +32,11 @@ export function GraphsPage() {
   const [year, setYear] = useState<number | null>(null)
   const [metric, setMetric] = useState<Metric>('distance')
   const [stats, setStats] = useState<GraphStats | null>(null)
+  const latest = useLatestRequest()
 
   useEffect(() => {
-    api.get<GraphStats>(`/stats/graphs${qs({ sport, year })}`).then(setStats)
-  }, [sport, year])
+    latest(api.get<GraphStats>(`/stats/graphs${qs({ sport, year })}`), setStats)
+  }, [sport, year, latest])
 
   const charts = useMemo(() => {
     if (!stats) return null

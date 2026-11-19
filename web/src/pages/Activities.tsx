@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Button, IconButton } from '@mui/material'
 import { api, qs } from '../lib/api'
 import { formatDate, formatDistance, formatDuration, formatPace, kindLabel } from '../lib/format'
 import type { Activity, ActivityRow } from '../lib/types'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog, UploadDialog } from '../components/ActivityDialogs'
 import { SportSelect, YearSelect } from '../components/fields'
 import { Icon, MultisportMarker, SportIcon } from '../components/icons'
@@ -18,7 +19,7 @@ function Metric({ value, label }: { value: string; label: string }) {
 }
 
 export function ActivitiesPage() {
-  const navigate = useNavigate()
+  const latest = useLatestRequest()
   const [sport, setSport] = useState('')
   const [year, setYear] = useState<number | null>(null)
   const [activities, setActivities] = useState<ActivityRow[] | null>(null)
@@ -27,8 +28,8 @@ export function ActivitiesPage() {
   const [uploading, setUploading] = useState(false)
 
   const refresh = useCallback(() => {
-    api.get<ActivityRow[]>(`/activities${qs({ sport, year })}`).then(setActivities)
-  }, [sport, year])
+    latest(api.get<ActivityRow[]>(`/activities${qs({ sport, year })}`), setActivities)
+  }, [sport, year, latest])
 
   useEffect(refresh, [refresh])
 
@@ -60,7 +61,7 @@ export function ActivitiesPage() {
           return (
             <div key={a.id} className="card w-full q-pa-sm q-mb-sm hover-shadow">
               <div className="row items-center no-wrap w-full gap-2">
-                <div className="row items-center no-wrap gap-3 flex-1 clickable" onClick={() => navigate(`/activity/${a.id}`)}>
+                <Link to={`/activity/${a.id}`} className="row items-center no-wrap gap-3 flex-1 card-link">
                   <SportIcon sport={a.sport} size={28} />
                   <div className="column gap-0 min-w-0">
                     <div className="row items-center no-wrap gap-1">
@@ -78,7 +79,7 @@ export function ActivitiesPage() {
                     {!!dist && !!dur && <Metric value={formatPace(dist, dur, a.sport)} label="Pace" />}
                     {!!a.avg_heart_rate && <Metric value={`${a.avg_heart_rate} bpm`} label="Avg HR" />}
                   </div>
-                </div>
+                </Link>
                 <div className="row no-wrap gap-1 shrink-0">
                   <IconButton size="small" onClick={() => setEditing(a)} aria-label="Edit">
                     <Icon name="edit" size={18} />

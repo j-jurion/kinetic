@@ -84,7 +84,22 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {visible.map((row) => (
-            <tr key={rowKey(row)} onClick={onRowClick ? () => onRowClick(row) : undefined}>
+            <tr
+              key={rowKey(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              // Clickable rows are reachable with Tab and open with Enter or Space
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onRowClick(row)
+                      }
+                    }
+                  : undefined
+              }
+            >
               {columns.map((c) => (
                 <td key={c.name} className={`align-${c.align ?? 'left'}`}>
                   {c.render(row)}

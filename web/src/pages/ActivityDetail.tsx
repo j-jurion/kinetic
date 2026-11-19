@@ -16,6 +16,7 @@ import {
   sportLabel,
 } from '../lib/format'
 import type { Activity, ActivityDetail, Friend, RaceResult, RaceSplit } from '../lib/types'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
 import { DataTable } from '../components/DataTable'
 import { Icon, Medal, SportIcon } from '../components/icons'
@@ -254,12 +255,15 @@ export function ActivityDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [raceDialog, setRaceDialog] = useState(false)
 
+  const latest = useLatestRequest()
+
   const load = useCallback(() => {
-    api
-      .get<ActivityDetail>(`/activities/${activityId}/detail`)
-      .then(setDetail)
-      .catch(() => setDetail('missing'))
-  }, [activityId])
+    // Moving between a multisport event and its legs must not show a slower, older response
+    latest(
+      api.get<ActivityDetail>(`/activities/${activityId}/detail`).catch((): 'missing' => 'missing'),
+      setDetail,
+    )
+  }, [activityId, latest])
 
   useEffect(load, [load])
 

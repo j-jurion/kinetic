@@ -192,6 +192,12 @@ body:not(.body--dark) .app-header { background: #ffffff; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td { background: var(--hover); }
 .data-table.clickable-rows tbody td { cursor: pointer; }
+.data-table.clickable-rows tbody tr:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.data-table.clickable-rows tbody tr:focus-visible td { background: var(--hover); }
+
+/* Cards that are links: keep the card look, show the keyboard focus */
+a.card-link { color: inherit; text-decoration: none; }
+a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 8px; }
 .data-table .align-right { text-align: right; }
 .data-table .align-center { text-align: center; }
 .table-footer {
