@@ -512,11 +512,14 @@ def _best_effort_rows(
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
         results = session.exec(stmt).all()
         parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
+        raced = set(session.exec(select(RaceResult.activity_id)).all())
         return [
             {
                 **_dump(effort),
                 "activity_name": activity.name,
                 "kind": activity.kind.value,
+                # A race is an activity marked as one or with an official result entered
+                "is_race": activity.kind == ActivityKind.race or activity.id in raced,
                 # Climb of the whole activity, not just the best-effort segment
                 "elevation_gain_meters": activity.elevation_gain_meters,
                 "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
@@ -648,40 +651,34 @@ def delete_friend(friend_id: int) -> None:
 
 
 @router.get("/stats/graphs")
-def graph_stats(sport: Optional[str] = None, year: Optional[int] = None) -> dict:
-    """Monthly totals (for the year filter), yearly totals and totals per sport."""
+def graph_stats(sport: Optional[str] = None) -> dict:
+    """One compact row per activity of the sport, oldest first, for the Graphs page.
+
+    The page aggregates these in the browser (weekly/monthly/yearly volume, breakdowns,
+    year-over-year progress, pace trend), so changing the year filter needs no new request.
+    """
     with Session(engine) as session:
         stmt = select(Activity)
         sport_types = _sport_types(sport)
         if sport_types:
             stmt = stmt.where(col(Activity.sport).in_(sport_types))
-        activities = session.exec(stmt).all()
-
-    def bucket(store: dict, key, **extra) -> dict:
-        if key not in store:
-            store[key] = {**extra, "count": 0, "distance_meters": 0.0, "duration_seconds": 0.0}
-        return store[key]
-
-    monthly: dict[Any, dict] = {}
-    yearly: dict[Any, dict] = {}
-    by_sport: dict[Any, dict] = {}
-    for a in activities:
-        in_year = not year or a.date.year == year
-        targets = [bucket(yearly, a.date.year, year=a.date.year)]
-        if in_year:
-            targets.append(
-                bucket(monthly, (a.date.year, a.date.month), year=a.date.year, month=a.date.month)
-            )
-            targets.append(bucket(by_sport, a.sport.value, sport=a.sport.value))
-        for target in targets:
-            target["count"] += 1
-            target["distance_meters"] += a.distance_meters or 0
-            target["duration_seconds"] += a.duration_seconds or 0
+        activities = session.exec(stmt.order_by(col(Activity.date))).all()
 
     return {
-        "monthly": [monthly[k] for k in sorted(monthly)],
-        "yearly": [yearly[k] for k in sorted(yearly)],
-        "by_sport": list(by_sport.values()),
+        "activities": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "date": a.date.isoformat(),
+                "sport": a.sport.value,
+                "kind": a.kind.value,
+                "distance_meters": a.distance_meters,
+                "duration_seconds": a.duration_seconds,
+                "elevation_meters": a.elevation_gain_meters,
+                "avg_heart_rate": a.avg_heart_rate,
+            }
+            for a in activities
+        ],
     }
 
 

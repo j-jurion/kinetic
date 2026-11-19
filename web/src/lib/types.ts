@@ -52,6 +52,8 @@ export interface RankedBestEffort extends BestEffort {
 export interface BestEffortRow extends BestEffort {
   activity_name: string
   kind: string
+  /** Marked as a race, or has an official race result. */
+  is_race: boolean
   elevation_gain_meters: number | null
   parent_sport: string | null
 }
@@ -114,10 +116,25 @@ export interface BestEffortsOverview {
   summary: Totals
 }
 
+export interface GraphTotals extends Totals {
+  elevation_meters: number
+}
+
+/** One activity, reduced to what the Graphs page charts need. */
+export interface GraphPoint {
+  id: number
+  name: string
+  date: string
+  sport: string
+  kind: string
+  distance_meters: number | null
+  duration_seconds: number
+  elevation_meters: number | null
+  avg_heart_rate: number | null
+}
+
 export interface GraphStats {
-  monthly: (Totals & { year: number; month: number })[]
-  yearly: (Totals & { year: number })[]
-  by_sport: (Totals & { sport: string })[]
+  activities: GraphPoint[]
 }
 
 export interface MapRoute extends Activity {

@@ -32,7 +32,8 @@ export function Plot({ data, layout, style }: PlotProps) {
         yaxis: { gridcolor: gridColor, ...(layout.yaxis ?? {}) },
         autosize: true,
       },
-      { responsive: true, displaylogo: false },
+      // No "share chart" button: it would upload the chart's data to Plotly's cloud service
+      { responsive: true, displaylogo: false, showSendToCloud: false },
     )
   }, [data, layout, dark])
 

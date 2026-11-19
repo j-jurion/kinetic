@@ -19,10 +19,10 @@ from sqlmodel import select
 
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
+from app.formatting import format_date
 from app.models import Activity
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
-from app.formatting import format_date
 
 UPLOAD_DIR = Path("uploads")
 TOKEN_ROOT = Path("garmin_tokens")
