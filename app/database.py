@@ -6,6 +6,8 @@ engine = create_engine(DATABASE_URL, echo=False, connect_args={"check_same_threa
 
 
 def create_db_and_tables() -> None:
+    import app.models  # noqa: F401  (registers the tables on SQLModel.metadata)
+
     SQLModel.metadata.create_all(engine)
     # Add columns introduced after initial schema (safe to run repeatedly)
     with engine.connect() as conn:

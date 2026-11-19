@@ -1,0 +1,55 @@
+.kin-hover {
+  position: absolute; z-index: 1000; display: none;
+  background: #fff; color: #111827;
+  border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
+  font-family: Inter, Roboto, sans-serif; font-size: 12px; line-height: 1.35;
+  padding: 8px 10px; min-width: 200px; max-width: 320px;
+  max-height: 70%; overflow-y: auto; overflow-x: hidden;
+  box-sizing: border-box;
+}
+.kin-hover * { box-sizing: border-box; }
+.kin-head {
+  font-size: 11px; font-weight: 700; color: #6b7280;
+  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px;
+}
+.kin-more { font-size: 11px; color: #6b7280; padding: 4px 2px 0; }
+.kin-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.kin-sport {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
+}
+.kin-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.kin-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+.kin-name {
+  flex: 1; font-weight: 600; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kin-date { font-weight: 400; color: #6b7280; }
+.kin-btn {
+  flex: none; cursor: pointer; border: none; background: none; padding: 2px;
+  display: flex; align-items: center; color: #6b7280; border-radius: 4px;
+}
+.kin-btn:hover { color: #f97316; background: rgba(249,115,22,.1); }
+.kin-btn svg { width: 14px; height: 14px; }
+.kin-chev { transition: transform .15s ease; }
+.kin-row.is-open .kin-chev { transform: rotate(90deg); }
+.kin-detail { padding-left: 15px; }
+.kin-stats { width: 100%; margin: 2px 0 6px; table-layout: fixed; }
+.kin-stats td { padding: 0 0 1px 0; overflow-wrap: anywhere; }
+.kin-stats .kin-k { color: #6b7280; padding-right: 10px; }
+.kin-stats .kin-v { text-align: right; font-weight: 600; }
+.kin-link {
+  display: inline-block; margin-top: 6px; color: #f97316;
+  font-weight: 600; text-decoration: none;
+}
+.kin-hover.is-locked {
+  box-shadow: 0 0 0 2px #f97316, 0 6px 24px rgba(0,0,0,.22);
+}
+.kin-close {
+  display: none; position: absolute; top: 4px; right: 4px;
+  cursor: pointer; border: none; background: none; padding: 2px;
+  align-items: center; color: #6b7280; border-radius: 4px;
+}
+.kin-close svg { width: 14px; height: 14px; display: block; }
+.kin-close:hover { color: #f97316; background: rgba(249,115,22,.1); }
+.kin-hover.is-locked .kin-close { display: flex; }
+.kin-hover.is-locked .kin-body { padding-right: 16px; }

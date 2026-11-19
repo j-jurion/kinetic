@@ -13,8 +13,7 @@ class AccountIntegrationTests(unittest.TestCase):
         env.update(
             {
                 "PYTHONPATH": str(root),
-                "KINETIC_STORAGE_SECRET": "s" * 32,
-                "KINETIC_PUBLIC_ORIGIN": "http://localhost:8081",
+                "KINETIC_PUBLIC_ORIGIN": "http://localhost:5173",
                 "KINETIC_ALLOW_INSECURE_HTTP": "1",
             }
         )

@@ -1,14 +1,11 @@
 """Run the account integration scenario in an isolated process and database."""
 
-import re
-from unittest.mock import patch
-
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.auth import COOKIE_NAME, User, password_hash, reset_password
 from app.database import engine
-from app.main import fastapi_app, main
+from app.main import fastapi_app
 
 
 def create_test_users():
@@ -20,23 +17,16 @@ def create_test_users():
         session.commit()
 
 
-with patch("uvicorn.run"):
-    main()
-
-origin = {"Origin": "http://localhost:8081"}
-with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
+origin = {"Origin": "http://localhost:5173"}
+with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
     create_test_users()
     assert client.get("/api/activities").status_code == 401
-    assert client.get("/").status_code == 200  # follows the redirect to login
-    wrong_host = client.get(
-        "/register?x=1", headers={"Host": "127.0.0.1:8081"}, follow_redirects=False
-    )
-    assert wrong_host.status_code == 307
-    assert wrong_host.headers["location"] == "http://localhost:8081/register?x=1"
+    assert client.get("/api/auth/me").status_code == 401
+    assert client.get("/api/health").status_code == 200
 
     def login(username, password="correct-horse-battery"):
         response = client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": username, "password": password},
             headers=origin,
         )
@@ -48,19 +38,35 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
         client.cookies.set(COOKIE_NAME, token, domain="localhost.local", path="/")
 
     alice = login("alice")
-    activity = {"name": "Alice's run", "date": "2026-01-01T10:00:00", "duration_seconds": 60}
+    assert client.get("/api/auth/me").json() == {"username": "alice"}
+    friend = client.post("/api/friends", json={"name": "Eve"}, headers=origin).json()
+    activity = {
+        "name": "Alice's run",
+        "date": "2026-01-01T10:00:00",
+        "duration_seconds": 60,
+        "friend_ids": [friend["id"]],
+    }
     response = client.post("/api/activities", json=activity, headers=origin)
     assert response.status_code == 201, response.text
     activity_id = response.json()["id"]
-    page = client.get("/")
-    assert page.status_code == 200
-    match = re.search(r'["\']client_id["\']\s*:\s*["\']([0-9a-f-]{36})', page.text)
-    assert match, "NiceGUI page did not contain a client identifier"
-    alice_client = match.group(1)
+    detail = client.get(f"/api/activities/{activity_id}/detail").json()
+    assert [f["name"] for f in detail["friends"]] == ["Eve"]
+    race = {"official_time_seconds": 59, "splits": [{"label": "Run", "duration_seconds": 59}]}
+    assert (
+        client.put(
+            f"/api/activities/{activity_id}/race-result", json=race, headers=origin
+        ).status_code
+        == 200
+    )
+    assert len(client.get("/api/races").json()) == 1
+
     client.cookies.clear()
     bob = login("bob")
     assert client.get("/api/activities").json() == []
+    assert client.get("/api/races").json() == []
+    assert client.get("/api/friends").json() == []
     assert client.get(f"/api/activities/{activity_id}").status_code == 404
+    assert client.get(f"/api/activities/{activity_id}/detail").status_code == 404
     assert (
         client.patch(
             f"/api/activities/{activity_id}", json={"name": "stolen"}, headers=origin
@@ -68,75 +74,46 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
         == 404
     )
     assert client.delete(f"/api/activities/{activity_id}", headers=origin).status_code == 404
+    assert (
+        client.put(
+            f"/api/activities/{activity_id}/race-result", json=race, headers=origin
+        ).status_code
+        == 404
+    )
     assert client.get(f"/api/activities/{activity_id}/laps").json() == []
+    bob_activity = client.post(
+        "/api/activities", json={**activity, "friend_ids": []}, headers=origin
+    ).json()
+    # Alice's friend cannot be attached to Bob's activity
+    assert (
+        client.put(
+            f"/api/activities/{bob_activity['id']}/friends/{friend['id']}", headers=origin
+        ).status_code
+        == 404
+    )
     assert (
         client.post(
             "/api/activities", json=activity, headers={"Origin": "https://evil.example"}
         ).status_code
         == 403
     )
-    socket_path = (
-        "/_nicegui_ws/socket.io/?EIO=4&transport=websocket&implicit_handshake=true"
-        f"&client_id={alice_client}&document_id=test-document&tab_id=test-tab"
-    )
-    ws_headers = {**origin, "Upgrade": "websocket", "Connection": "Upgrade"}
-    with client.websocket_connect(
-        "ws://localhost:8081" + socket_path, headers=ws_headers
-    ) as socket:
-        assert socket.receive_text().startswith("0")
-        socket.send_text("40")
-        assert socket.receive_text().startswith("44")
+
     use_token(alice)
-    with client.websocket_connect(
-        "ws://localhost:8081" + socket_path, headers=ws_headers
-    ) as socket:
-        assert socket.receive_text().startswith("0")
-        socket.send_text("40")
-        assert socket.receive_text().startswith("40")
-        assert [row["name"] for row in client.get("/api/activities").json()] == ["Alice's run"]
-        use_token(bob)
-        bob_page = client.get("/")
-        bob_match = re.search(
-            r'["\']client_id["\']\s*:\s*["\']([0-9a-f-]{36})', bob_page.text
-        )
-        assert bob_match
-        bob_path = socket_path.replace(alice_client, bob_match.group(1))
-        with client.websocket_connect(
-            "ws://localhost:8081" + bob_path, headers=ws_headers
-        ) as bob_socket:
-            assert bob_socket.receive_text().startswith("0")
-            bob_socket.send_text("40")
-            assert bob_socket.receive_text().startswith("40")
-            bob_socket.send_text(
-                f'421["event",{{"client_id":"{alice_client}","id":0,'
-                '"listener_id":"invalid","args":[]}]'
-            )
-            while True:
-                message = bob_socket.receive_text()
-                if message.startswith("431"):
-                    assert message == "431[false]", message
-                    break
-        use_token(alice)
-        assert client.post("/auth/logout", headers=origin).status_code == 204
-        socket.send_text(
-            f'422["event",{{"client_id":"{alice_client}","id":0,'
-            '"listener_id":"invalid","args":[]}]'
-        )
-        while True:
-            message = socket.receive_text()
-            if message.startswith("432"):
-                assert message == "432[false]", message
-                break
+    assert [row["name"] for row in client.get("/api/activities").json()] == ["Alice's run"]
+    assert client.delete(f"/api/activities/{activity_id}", headers=origin).status_code == 204
+    assert client.get("/api/races").json() == []
+    assert client.post("/api/auth/logout", headers=origin).status_code == 204
     use_token(alice)
     assert client.get("/api/activities").status_code == 401
     use_token(bob)
     assert client.get("/api/activities").status_code == 200
 
-
     def register(username, password="correct-horse-battery"):
         client.cookies.clear()
         return client.post(
-            "/auth/register", json={"username": username, "password": password}, headers=origin
+            "/api/auth/register",
+            json={"username": username, "password": password},
+            headers=origin,
         )
 
     response = register(" Carol ")
@@ -149,7 +126,7 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
     assert register("dave", "too-short").status_code == 400
     assert (
         client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "carol", "password": "wrong-horse-battery"},
             headers=origin,
         ).status_code
@@ -162,7 +139,7 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
     client.cookies.clear()
     assert (
         client.post(
-            "/auth/login",
+            "/api/auth/login",
             json={"username": "carol", "password": "correct-horse-battery"},
             headers=origin,
         ).status_code
