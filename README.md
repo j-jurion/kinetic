@@ -111,7 +111,7 @@ are not implemented yet. Do not expose this test configuration publicly.
 Every state-changing API request must carry an `Origin` header equal to
 `KINETIC_PUBLIC_ORIGIN`; this protects the session cookie against cross-site requests.
 
-Some database, FIT and old NiceGUI storage files are already tracked by Git. Ignore rules do not
+Some database and FIT files are already tracked by Git. Ignore rules do not
 remove tracked files or their history; review them before making the repository public.
 
 ### Run with systemd (Ubuntu)

@@ -24,3 +24,6 @@ garmin_tokens/
 # Web frontend
 web/node_modules/
 web/dist/
+
+# Build metadata
+*.egg-info/
