@@ -28,6 +28,11 @@ with TestClient(fastapi_app, base_url="http://localhost:8081") as client:
     create_test_users()
     assert client.get("/api/activities").status_code == 401
     assert client.get("/").status_code == 200  # follows the redirect to login
+    wrong_host = client.get(
+        "/register?x=1", headers={"Host": "127.0.0.1:8081"}, follow_redirects=False
+    )
+    assert wrong_host.status_code == 307
+    assert wrong_host.headers["location"] == "http://localhost:8081/register?x=1"
 
     def login(username, password="correct-horse-battery"):
         response = client.post(

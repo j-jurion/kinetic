@@ -19,3 +19,4 @@ __pycache__/
 uploads/
 kinetic.db
 app.db
+garmin_tokens/

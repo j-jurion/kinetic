@@ -2,13 +2,14 @@
 
 from datetime import date, timedelta
 
-from nicegui import app as nicegui_app
-from nicegui import run, ui
-from sqlmodel import Session, col, select
+from nicegui import ui
+from sqlmodel import col, select
 
 from app import garmin_sync
+from app import user_run as run
 from app.database import engine
 from app.models import Activity
+from app.ownership import UserSession as Session
 from app.ui_helpers import DATE_MASK, format_date, parse_date_input
 
 
@@ -38,7 +39,7 @@ async def sync_page() -> None:
     _sync_running = [False]
 
     # ── Status card ──────────────────────────────────────────────────────────
-    stored_email: str = nicegui_app.storage.general.get("garmin_email", "")
+    stored_email: str = await run.io_bound(garmin_sync.saved_email)
 
     with ui.card().classes("w-full q-pa-md q-mb-md"):
         with ui.row().classes("items-center gap-3 q-mb-md"):
@@ -48,13 +49,13 @@ async def sync_page() -> None:
                 "flat dense color=negative size=sm"
             )
 
-        def _refresh_status() -> None:
-            ok = garmin_sync.tokens_exist()
+        async def _refresh_status() -> None:
+            ok = await run.io_bound(garmin_sync.tokens_exist)
             status_icon.props(
                 f"name={'check_circle' if ok else 'error'} color={'positive' if ok else 'negative'}"
             )
             if ok:
-                logged_in_email = nicegui_app.storage.general.get("garmin_email", "")
+                logged_in_email = await run.io_bound(garmin_sync.saved_email)
                 status_label.text = (
                     f"Logged in as {logged_in_email}"
                     if logged_in_email
@@ -64,12 +65,12 @@ async def sync_page() -> None:
                 status_label.text = "Not authenticated — enter credentials below"
             logout_btn.set_visibility(ok)
 
-        def _do_logout() -> None:
-            garmin_sync.logout()
-            _refresh_status()
+        async def _do_logout() -> None:
+            await run.io_bound(garmin_sync.logout)
+            await _refresh_status()
             ui.notify("Logged out — tokens removed", type="info")
 
-        _refresh_status()
+        await _refresh_status()
 
         ui.label("Garmin Connect").classes("text-h6 text-weight-bold")
         ui.separator().classes("q-my-sm")
@@ -89,7 +90,6 @@ async def sync_page() -> None:
             if not email or not password:
                 ui.notify("Email and password are required", type="negative")
                 return
-            nicegui_app.storage.general["garmin_email"] = email
             auth_btn.props("loading")
             auth_status.text = "Authenticating…"
             try:
@@ -103,11 +103,13 @@ async def sync_page() -> None:
             if result and result.get("needs_mfa"):
                 _mfa_holder["client"] = result["_client"]
                 _mfa_holder["state"] = result["_state"]
+                _mfa_holder["email"] = email
                 auth_status.text = "MFA code required — check your authenticator app"
                 mfa_dialog.open()
             else:
+                await run.io_bound(garmin_sync.save_email, email)
                 auth_status.text = ""
-                _refresh_status()
+                await _refresh_status()
                 ui.notify("Authenticated successfully!", type="positive")
 
         with ui.row().classes("items-center gap-3"):
@@ -138,7 +140,8 @@ async def sync_page() -> None:
                     _mfa_holder["state"],
                     code,
                 )
-                _refresh_status()
+                await run.io_bound(garmin_sync.save_email, _mfa_holder["email"])
+                await _refresh_status()
                 auth_status.text = ""
                 ui.notify("MFA complete — tokens saved!", type="positive")
             except Exception as exc:
@@ -168,7 +171,7 @@ async def sync_page() -> None:
             if _sync_running[0]:
                 ui.notify("Sync already in progress", type="warning")
                 return
-            if not garmin_sync.tokens_exist():
+            if not await run.io_bound(garmin_sync.tokens_exist):
                 email = (email_input.value or "").strip()
                 password = pw_input.value
                 if not email or not password:
@@ -178,7 +181,7 @@ async def sync_page() -> None:
                     )
                     return
             else:
-                email = nicegui_app.storage.general.get("garmin_email", "")
+                email = await run.io_bound(garmin_sync.saved_email)
                 password = ""
 
             since_str = (since_input.value or "").strip()

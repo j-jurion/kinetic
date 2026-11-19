@@ -51,8 +51,12 @@ For HTTPS, set `KINETIC_PUBLIC_ORIGIN` to the exact public origin and unset
 
 Activities, friends and related data are private to the account that created them. Existing
 unassigned records are not visible to any account. Friend records are labels, not yet
-connections between accounts; activity sharing is not implemented. Garmin sync is disabled
-until its credentials and data can be isolated per user.
+connections between accounts; activity sharing is not implemented.
+
+Each account connects its own Garmin account on the **Sync** page. Garmin tokens are stored
+per account under `garmin_tokens/<account id>/` in the working directory (keep it private and
+out of the repository), and synced activities are imported only into that account. Tokens
+from earlier versions in `~/.garminconnect` are not reused; authenticate again once.
 
 Anyone can create an account on the **Register** page with a username and a password of at
 least 12 characters; no email address is needed. Usernames are 3 to 32 characters (letters,
