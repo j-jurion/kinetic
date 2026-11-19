@@ -27,6 +27,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
   const [dark, setDark] = useState(initialDark)
 
   useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
     document.body.classList.toggle('body--dark', dark)
   }, [dark])
 

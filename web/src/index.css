@@ -21,6 +21,9 @@
   color-scheme: light;
 }
 
+/* Set on <html> as well as <body>: the browser paints the page background from <html>, so
+   with the dark values only on <body> any area below short pages stayed light. */
+html.dark,
 body.body--dark {
   --page-bg: #121212;
   --surface: #1d1d1d;
