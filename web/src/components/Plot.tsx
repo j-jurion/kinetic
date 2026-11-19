@@ -20,6 +20,14 @@ export function Plot({ data, layout, style }: PlotProps) {
     if (!el) return
     const fontColor = dark ? '#e5e7eb' : '#444'
     const gridColor = dark ? 'rgba(255,255,255,0.12)' : '#eee'
+    // Theme every axis, including extra ones such as yaxis2 in stacked or dual-axis charts
+    const axes: Record<string, object> = { xaxis: {}, yaxis: {} }
+    for (const [key, value] of Object.entries(layout)) {
+      if (/^[xy]axis\d*$/.test(key)) axes[key] = value as object
+    }
+    const themedAxes = Object.fromEntries(
+      Object.entries(axes).map(([key, value]) => [key, { gridcolor: gridColor, ...value }]),
+    )
     Plotly.react(
       el,
       data,
@@ -27,9 +35,8 @@ export function Plot({ data, layout, style }: PlotProps) {
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
         ...layout,
+        ...themedAxes,
         font: { family: 'Inter, sans-serif', color: fontColor, ...(layout.font ?? {}) },
-        xaxis: { gridcolor: gridColor, ...(layout.xaxis ?? {}) },
-        yaxis: { gridcolor: gridColor, ...(layout.yaxis ?? {}) },
         autosize: true,
       },
       // No "share chart" button: it would upload the chart's data to Plotly's cloud service

@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from app import garmin_sync
+from app import garmin_sync, streams
 from app.database import engine, require_id
 from app.formatting import SPORTS, resolve_sports
 from app.models import (
@@ -300,6 +300,35 @@ def get_route(activity_id: int) -> dict:
         activity = _get_activity(session, activity_id)
         coords = json.loads(activity.route_json) if activity.route_json else []
     return {"coords": coords}
+
+
+@router.get("/activities/{activity_id}/streams")
+async def get_streams(activity_id: int) -> dict:
+    """Heart rate, speed, altitude, cadence and power over the activity, from its FIT file.
+
+    ``available`` is false when the FIT file is no longer on disk (for example activities
+    added by hand); the page then shows only the charts built from laps.
+    """
+    with Session(engine) as session:
+        activity = _get_activity(session, activity_id)
+        # Zones are relative to the highest heart rate recorded on this account
+        account_max_hr = session.exec(select(func.max(Activity.max_heart_rate))).one()
+    path = streams.fit_path_for(activity.fit_file_path)
+    if path is None:
+        return {"available": False}
+    leg = activity.parent_id is not None
+    try:
+        data = await _run_in_thread(
+            streams.read_streams,
+            path,
+            activity.sport.value,
+            activity.date if leg else None,
+            activity.duration_seconds if leg else None,
+            account_max_hr,
+        )
+    except Exception:
+        return {"available": False}
+    return {"available": bool(data["points"]["t"]), **data}
 
 
 def _race_result(session, activity_id: int) -> Optional[dict]:

@@ -104,6 +104,23 @@ export interface ActivityDetail {
   friends: Friend[]
 }
 
+/** Per-second data of an activity, averaged into a few hundred points. */
+export interface ActivityStreams {
+  available: boolean
+  points?: {
+    t: number[]
+    distance: (number | null)[]
+    heart_rate: (number | null)[]
+    speed: (number | null)[]
+    altitude: (number | null)[]
+    cadence: (number | null)[]
+    power: (number | null)[]
+  }
+  zones?: { zone: string; low: number; high: number; seconds: number }[]
+  /** The maximum heart rate the zones are based on. */
+  zone_max_hr?: number | null
+}
+
 export interface Totals {
   count: number
   distance_meters: number

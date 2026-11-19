@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, IconButton, MenuItem, TextField } from '@mui/material'
 import { api } from '../lib/api'
@@ -23,6 +23,9 @@ import { Icon, Medal, SportIcon } from '../components/icons'
 import { RaceResultDialog } from '../components/RaceResultDialog'
 import { RouteMap } from '../components/RouteMap'
 import '../styles/detail.css'
+
+// The charts pull in Plotly (several MB), so they load only once an activity is opened
+const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -367,6 +370,10 @@ export function ActivityDetailPage() {
           <RouteMap activityId={activityId} />
         </div>
       )}
+
+      <Suspense>
+        <ActivityCharts activity={a} laps={detail.laps} />
+      </Suspense>
 
       {a.notes && (
         <div className="card w-full q-pa-md q-mb-md gap-0">

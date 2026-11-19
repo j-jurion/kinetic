@@ -5,6 +5,7 @@ goes through the account-scoped session, so accounts never share Garmin data.
 """
 
 import io
+import os
 import threading
 import time
 import uuid
@@ -24,7 +25,8 @@ from app.models import Activity
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
 
-UPLOAD_DIR = Path("uploads")
+# Where imported FIT files are kept; the activity charts read them back from here
+UPLOAD_DIR = Path(os.environ.get("KINETIC_UPLOAD_DIR", "uploads"))
 TOKEN_ROOT = Path("garmin_tokens")
 _TOKEN_FILE = "garmin_tokens.json"
 _EMAIL_FILE = "garmin_email"
