@@ -1,6 +1,6 @@
 # Kinetic
 
-Activity tracking web app built with NiceGUI + FastAPI.
+Activity tracking web app: a React (Vite) frontend in `web/` on top of a FastAPI backend in `app/`.
 
 ## Features
 - Upload Garmin `.fit` files or add activities manually
@@ -23,25 +23,47 @@ Activity tracking web app built with NiceGUI + FastAPI.
 
 ## Setup
 
+Requirements: Python 3.12+ with [uv](https://docs.astral.sh/uv/), and Node.js 20+.
+
+### Development
+
+Run the API and the web app in two terminals. Vite serves the frontend on
+http://localhost:5173 and proxies `/api` to the API on port 8000, so the browser sees one origin.
+
 ```bash
 uv sync --frozen
-export KINETIC_STORAGE_SECRET="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
-export KINETIC_PUBLIC_ORIGIN="http://localhost:8081"
+export KINETIC_PUBLIC_ORIGIN="http://localhost:5173"
 export KINETIC_ALLOW_INSECURE_HTTP=1
 uv run python run.py
 ```
 
-Open http://localhost:8081. Store the generated secret securely and reuse it across restarts;
-changing it invalidates existing browser sessions.
+```bash
+cd web
+npm install
+npm run dev
+```
 
-On PowerShell, set the secret for the current process with:
+On PowerShell, set the variables for the API with:
 
 ```powershell
-$env:KINETIC_STORAGE_SECRET = python -c "import secrets; print(secrets.token_urlsafe(32))"
-$env:KINETIC_PUBLIC_ORIGIN = "http://localhost:8081"
+$env:KINETIC_PUBLIC_ORIGIN = "http://localhost:5173"
 $env:KINETIC_ALLOW_INSECURE_HTTP = "1"
 uv run python run.py
 ```
+
+### Production
+
+Build the web app once; FastAPI then serves it from `web/dist` next to the API, so a single
+process (see the systemd section) runs everything:
+
+```bash
+cd web && npm ci && npm run build && cd ..
+export KINETIC_PUBLIC_ORIGIN="https://kinetic.example.com"
+uv run python run.py
+```
+
+`KINETIC_API_HOST` and `KINETIC_API_PORT` change the listen address (default `127.0.0.1:8000`).
+The interactive API documentation is at `/api/docs`.
 
 The insecure HTTP option is for local development only and is rejected for non-local origins.
 For HTTPS, set `KINETIC_PUBLIC_ORIGIN` to the exact public origin and unset
@@ -86,21 +108,20 @@ overwrite a nonempty destination. Keep the printed password and backups secure.
 
 Account export and deletion, production rate limits and public-deployment security review
 are not implemented yet. Do not expose this test configuration publicly.
-NiceGUI is pinned because its socket event handlers are used to bind each event to its
-authenticated account; review and test that integration before upgrading NiceGUI.
+Every state-changing API request must carry an `Origin` header equal to
+`KINETIC_PUBLIC_ORIGIN`; this protects the session cookie against cross-site requests.
 
-Some database, FIT and NiceGUI storage files are already tracked by Git. Ignore rules do not
+Some database, FIT and old NiceGUI storage files are already tracked by Git. Ignore rules do not
 remove tracked files or their history; review them before making the repository public.
 
 ### Run with systemd (Ubuntu)
 
 The service file assumes the checkout and virtual environment are at `/opt/kinetic`,
 owned by a `kinetic` system user. Install the project dependencies into
-`/opt/kinetic/.venv`. Configure a persistent `KINETIC_STORAGE_SECRET` and HTTPS
-`KINETIC_PUBLIC_ORIGIN` using a protected systemd environment file or a service override
-before starting the service; the secret must
-be at least 32 characters and should be generated with `secrets.token_urlsafe(32)`.
-Then install and start the service:
+`/opt/kinetic/.venv` and build the web app (`npm ci && npm run build` in `web/`). Configure
+the HTTPS `KINETIC_PUBLIC_ORIGIN` using a protected systemd environment file or a service
+override before starting the service. The app listens on `127.0.0.1:8000`; put a reverse proxy
+or tunnel in front of it for HTTPS. Then install and start the service:
 
 ```bash
 sudo install -m 0644 kinetic.service /etc/systemd/system/kinetic.service
@@ -111,8 +132,7 @@ sudo systemctl enable --now kinetic
 Check logs with `sudo journalctl -u kinetic -f`.
 
 ## Stack
-- **NiceGUI** – reactive UI framework
-- **FastAPI** – REST API (served at `/api`)
+- **React + Vite** – web frontend (`web/`), with MUI components, Plotly charts and Leaflet maps
+- **FastAPI** – JSON API (served at `/api`)
 - **SQLModel** – ORM with SQLite
 - **fitparse** – Garmin .fit file parsing
-- **Plotly** – interactive charts

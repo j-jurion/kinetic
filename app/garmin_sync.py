@@ -22,7 +22,7 @@ from app.fit_parser import parse_fit_file
 from app.models import Activity
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
-from app.ui_helpers import format_date
+from app.formatting import format_date
 
 UPLOAD_DIR = Path("uploads")
 TOKEN_ROOT = Path("garmin_tokens")
@@ -78,7 +78,14 @@ def _garmin_id_exists(garmin_activity_id: int) -> bool:
 def _save_fit_and_import(
     garmin_activity_id: int, fit_bytes: bytes, garmin_name: str | None = None
 ) -> None:
-    """Write FIT bytes to uploads/ and import into the database."""
+    """Import an activity downloaded from Garmin Connect."""
+    import_fit_bytes(fit_bytes, garmin_activity_id=garmin_activity_id, name=garmin_name)
+
+
+def import_fit_bytes(
+    fit_bytes: bytes, garmin_activity_id: int | None = None, name: str | None = None
+) -> int:
+    """Write FIT bytes to uploads/, import them with any multisport legs and return the id."""
     UPLOAD_DIR.mkdir(exist_ok=True)
     fit_path = UPLOAD_DIR / f"{uuid.uuid4().hex}.fit"
     fit_path.write_bytes(fit_bytes)
@@ -89,8 +96,8 @@ def _save_fit_and_import(
         fit_path.unlink(missing_ok=True)
         raise
 
-    if garmin_name:
-        activity.name = garmin_name
+    if name:
+        activity.name = name
 
     with Session(engine) as session:
         activity.garmin_activity_id = garmin_activity_id
@@ -120,6 +127,7 @@ def _save_fit_and_import(
                 session.add(be)
 
         session.commit()
+        return parent_id
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────

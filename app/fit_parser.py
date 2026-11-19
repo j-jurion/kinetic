@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from app.models import Activity, ActivityKind, BestEffort, Lap, SportType
-from app.ui_helpers import DATE_FORMAT
+from app.formatting import DATE_FORMAT
 
 _SEMICIRCLES_TO_DEG = 180.0 / (2**31)
 

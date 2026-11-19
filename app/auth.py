@@ -110,7 +110,7 @@ def _start_session(session: Session, user_id: str, request: Request, response: R
     )
 
 
-router = APIRouter(prefix="/auth")
+router = APIRouter(prefix="/api/auth")
 
 
 @router.post("/register", status_code=201)
@@ -162,6 +162,18 @@ def logout(request: Request, response: Response) -> None:
     response.delete_cookie(
         COOKIE_NAME, httponly=True, secure=_secure_cookies(), samesite="strict"
     )
+
+
+@router.get("/me")
+def me(request: Request) -> dict:
+    owner_id = request.scope.get("state", {}).get("owner_id")
+    if owner_id is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    with Session(engine) as session:
+        user = session.get(User, owner_id)
+        if user is None:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        return {"username": user.username}
 
 
 def reset_password(username: str) -> str:

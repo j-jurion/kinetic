@@ -5,7 +5,7 @@ Mobile app / browser
         ↓ HTTPS
 Cloudflare DNS + WAF + Tunnel
         ↓
-Ubuntu: NiceGUI + FastAPI
+Ubuntu: FastAPI (API + built React app)
         ↓
 PostgreSQL + private file storage
 ```
@@ -23,7 +23,7 @@ Decide the initial registration rules, supported countries, data retention, stor
 ### 2. Add accounts and authentication
 
 - Use username and password accounts (no email); reset forgotten passwords with the server-side `app.reset_password` command.
-- Protect both NiceGUI pages and FastAPI endpoints, including WebSocket connections.
+- Protect every FastAPI endpoint; the React app only holds data the API returns to the signed-in account.
 - Use secure, HTTP-only cookies, session expiration and revocation, and CSRF protection.
 - Replace the hard-coded secret in `main.py` with a protected environment secret.
 - Provide account export and deletion flows.
@@ -59,20 +59,20 @@ Garmin tokens and the Garmin email are now stored per account under `garmin_toke
 
 ### 7. Prepare Ubuntu and deploy
 
-1. Install security updates, Python 3.12+, PostgreSQL and `uv`.
+1. Install security updates, Python 3.12+, Node.js 20+ (to build `web/`), PostgreSQL and `uv`.
 2. Run the app under a dedicated, minimally privileged service account.
 3. Install locked dependencies. Create a persistent environment file outside the repository,
    readable only by root and the `kinetic` group:
 
    ```bash
    sudo install -d -o root -g kinetic -m 0750 /etc/kinetic
-   sudo sh -c 'umask 027; printf "KINETIC_STORAGE_SECRET=%s\n" "$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")" > /etc/kinetic/kinetic.env'
+   sudo sh -c 'umask 027; printf "KINETIC_PUBLIC_ORIGIN=https://kinetic.example.com\n" > /etc/kinetic/kinetic.env'
    sudo chown root:kinetic /etc/kinetic/kinetic.env
    sudo chmod 0640 /etc/kinetic/kinetic.env
    ```
 
-   Set `KINETIC_PUBLIC_ORIGIN` to the exact HTTPS origin in the same file. Keep the generated
-   secret stable across restarts; changing it invalidates existing browser sessions.
+   Replace the example with the exact HTTPS origin the app is served from. Build the web app
+   with `npm ci && npm run build` in `web/` on every deploy.
 4. Add `EnvironmentFile=/etc/kinetic/kinetic.env` under `[Service]` in `kinetic.service`;
    keep the app listening on localhost.
 5. Verify migrations, service restart, logs, database connectivity and backups before public launch.

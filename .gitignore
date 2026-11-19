@@ -20,3 +20,7 @@ uploads/
 kinetic.db
 app.db
 garmin_tokens/
+
+# Web frontend
+web/node_modules/
+web/dist/

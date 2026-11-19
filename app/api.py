@@ -1,477 +1,86 @@
-import json
-import uuid
-from datetime import datetime, timezone
-from typing import Optional
+"""JSON API used by the React web app.
 
-import aiofiles
-import folium
+Every query goes through the account-scoped ``UserSession``, so a request only ever sees the
+records of the account that made it. Values are returned raw (metres, seconds, ISO dates);
+the web app formats them.
+"""
+
+import json
+import queue
+import threading
+import time
+from contextvars import copy_context
+from datetime import date, datetime, timedelta, timezone
+from typing import Any, Optional
+
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import col, select
 
+from app import garmin_sync
 from app.database import engine, require_id
-from app.fit_parser import parse_fit_file
-from app.garmin_sync import UPLOAD_DIR
-from app.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
+from app.formatting import SPORTS, resolve_sports
+from app.models import (
+    Activity,
+    ActivityFriend,
+    ActivityKind,
+    BestEffort,
+    Friend,
+    Lap,
+    RaceResult,
+    RaceResultSplit,
+    SportType,
+)
 from app.ownership import UserSession as Session
-from app.ui_helpers import format_date, format_distance, format_pace
+from app.ownership import current_owner
+from app.queries import multisport_parent_sports
 
 router = APIRouter()
 
-UPLOAD_DIR.mkdir(exist_ok=True)
+MAX_FIT_BYTES = 50 * 1024 * 1024
 
 
-# ── Route map endpoint ────────────────────────────────────────────────────────
-
-# OpenStreetMap's standard tiles — free and keyless, unlike CARTO's basemaps
-# which now return an "API key required" placeholder image.
-_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-_TILES_ATTR = (
-    '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-)
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _base_map(**kwargs) -> folium.Map:
-    """A blank map with the shared base layer used across the app."""
-    return folium.Map(tiles=_TILES, attr=_TILES_ATTR, max_zoom=19, **kwargs)
+def _sport_types(sport: Optional[str]) -> Optional[list[SportType]]:
+    """Resolve a sport filter (sport, group or umbrella) into concrete sport types."""
+    try:
+        sports = resolve_sports(sport)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Unknown sport: {sport}") from None
+    return [SportType(s) for s in sports] if sports else None
 
 
-@router.get("/activity/{activity_id}/map", response_class=HTMLResponse)
-def get_activity_map(activity_id: int) -> HTMLResponse:
-    with Session(engine) as session:
-        activity = session.get(Activity, activity_id)
-    if not activity or not activity.route_json:
-        raise HTTPException(status_code=404, detail="No route data for this activity")
-
-    coords: list[list[float]] = json.loads(activity.route_json)
-    lats = [c[0] for c in coords]
-    lons = [c[1] for c in coords]
-    bounds = [[min(lats), min(lons)], [max(lats), max(lons)]]
-    m = _base_map()
-    m.fit_bounds(bounds, padding=(20, 20))
-    folium.PolyLine(coords, color="#3b82f6", weight=3, opacity=0.85).add_to(m)
-    folium.Marker(coords[0], tooltip="Start", icon=folium.Icon(color="green", icon="play")).add_to(
-        m
-    )
-    folium.Marker(coords[-1], tooltip="Finish", icon=folium.Icon(color="red", icon="stop")).add_to(
-        m
-    )
-    return HTMLResponse(content=m.get_root().render())
+def _in_year(stmt, column, year: Optional[int]):
+    if year:
+        stmt = stmt.where(col(column) >= datetime(year, 1, 1))
+        stmt = stmt.where(col(column) < datetime(year + 1, 1, 1))
+    return stmt
 
 
-# ── All-activities map endpoint ───────────────────────────────────────────────
-
-_MAX_POINTS_PER_ROUTE = 250
-
-
-def _simplify(coords: list[list[float]]) -> list[list[float]]:
-    """Evenly decimate a route so the combined map stays responsive."""
-    if len(coords) <= _MAX_POINTS_PER_ROUTE:
-        simplified = coords
-    else:
-        step = len(coords) / _MAX_POINTS_PER_ROUTE
-        simplified = [coords[int(i * step)] for i in range(_MAX_POINTS_PER_ROUTE)]
-        simplified.append(coords[-1])
-    return [[round(float(c[0]), 5), round(float(c[1]), 5)] for c in simplified]
+def _dump(model) -> dict:
+    return model.model_dump(mode="json")
 
 
-def _format_duration(seconds: float) -> str:
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    if h > 0:
-        return f"{h}h {m:02d}m {s:02d}s"
-    return f"{m}:{s:02d}"
+def _activity_dump(activity: Activity) -> dict:
+    """An activity without its (large) GPS route."""
+    data = _dump(activity)
+    data.pop("route_json", None)
+    data["has_route"] = bool(activity.route_json)
+    return data
 
 
-def _activity_stat_rows(activity: Activity) -> list[list[str]]:
-    """The compact stat list shown when hovering a single route."""
-    sport = activity.sport.value if hasattr(activity.sport, "value") else str(activity.sport)
-    rows: list[list[str]] = [["Date", format_date(activity.date)]]
-    if activity.distance_meters:
-        rows.append(["Distance", format_distance(activity.distance_meters, sport)])
-    rows.append(["Duration", _format_duration(activity.duration_seconds or 0)])
-    if activity.distance_meters and activity.duration_seconds:
-        rows.append(
-            ["Pace", format_pace(activity.distance_meters, activity.duration_seconds, sport)]
-        )
-    if activity.elevation_gain_meters:
-        rows.append(["Elevation", f"{activity.elevation_gain_meters:.0f} m"])
-    if activity.avg_heart_rate:
-        rows.append(["Avg HR", f"{activity.avg_heart_rate} bpm"])
-    return rows
+def _get_activity(session, activity_id: int) -> Activity:
+    activity = session.get(Activity, activity_id)
+    if not activity:
+        raise HTTPException(status_code=404, detail="Activity not found")
+    return activity
 
 
-_HOVER_CSS = """
-.kin-hover {
-  position: absolute; z-index: 1000; display: none;
-  background: #fff; color: #111827;
-  border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18);
-  font-family: Inter, Roboto, sans-serif; font-size: 12px; line-height: 1.35;
-  padding: 8px 10px; min-width: 200px; max-width: 320px;
-  max-height: 70%; overflow-y: auto; overflow-x: hidden;
-  box-sizing: border-box;
-}
-.kin-hover * { box-sizing: border-box; }
-.kin-head {
-  font-size: 11px; font-weight: 700; color: #6b7280;
-  text-transform: uppercase; letter-spacing: .4px; margin-bottom: 5px;
-}
-.kin-more { font-size: 11px; color: #6b7280; padding: 4px 2px 0; }
-.kin-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
-.kin-sport {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px;
-}
-.kin-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
-.kin-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
-.kin-name {
-  flex: 1; font-weight: 600; min-width: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.kin-date { font-weight: 400; color: #6b7280; }
-.kin-btn {
-  flex: none; cursor: pointer; border: none; background: none; padding: 2px;
-  display: flex; align-items: center; color: #6b7280; border-radius: 4px;
-}
-.kin-btn:hover { color: #f97316; background: rgba(249,115,22,.1); }
-.kin-btn svg { width: 14px; height: 14px; }
-.kin-chev { transition: transform .15s ease; }
-.kin-row.is-open .kin-chev { transform: rotate(90deg); }
-.kin-detail { padding-left: 15px; }
-.kin-stats { width: 100%; margin: 2px 0 6px; table-layout: fixed; }
-.kin-stats td { padding: 0 0 1px 0; overflow-wrap: anywhere; }
-.kin-stats .kin-k { color: #6b7280; padding-right: 10px; }
-.kin-stats .kin-v { text-align: right; font-weight: 600; }
-.kin-link {
-  display: inline-block; margin-top: 6px; color: #f97316;
-  font-weight: 600; text-decoration: none;
-}
-.kin-hover.is-locked {
-  box-shadow: 0 0 0 2px #f97316, 0 6px 24px rgba(0,0,0,.22);
-}
-.kin-close {
-  display: none; position: absolute; top: 4px; right: 4px;
-  cursor: pointer; border: none; background: none; padding: 2px;
-  align-items: center; color: #6b7280; border-radius: 4px;
-}
-.kin-close svg { width: 14px; height: 14px; display: block; }
-.kin-close:hover { color: #f97316; background: rgba(249,115,22,.1); }
-.kin-hover.is-locked .kin-close { display: flex; }
-.kin-hover.is-locked .kin-body { padding-right: 16px; }
-"""
-
-# Routes are drawn as non-interactive polylines; hit-testing is done manually so
-# that *every* route under the cursor is found, not just the topmost one.
-_HOVER_JS = """
-(function () {
-  function init() {
-  var map = __MAP__;
-  var ROUTES = __ROUTES__;
-  var TOL = 10;
-  var MAX_LIST = 15;
-  var CHEVRON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' +
-    'class="kin-chev"><polyline points="9 18 15 12 9 6"></polyline></svg>';
-  var OPEN_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>' +
-    '<polyline points="15 3 21 3 21 9"></polyline>' +
-    '<line x1="10" y1="14" x2="21" y2="3"></line></svg>';
-  var CLOSE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-    'stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"></line>' +
-    '<line x1="6" y1="6" x2="18" y2="18"></line></svg>';
-
-  function esc(s) {
-    return String(s).replace(/[&<>"']/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-    });
-  }
-
-  var items = ROUTES.map(function (r) {
-    var line = L.polyline(r.coords, {
-      color: r.color, weight: 3, opacity: 0.75, interactive: false
-    }).addTo(map);
-    return { r: r, line: line, pts: [], bb: null };
-  });
-
-  function project() {
-    items.forEach(function (it) {
-      var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      it.pts = it.r.coords.map(function (c) {
-        var p = map.latLngToLayerPoint(L.latLng(c[0], c[1]));
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-        return p;
-      });
-      it.bb = [minX, minY, maxX, maxY];
-    });
-  }
-  project();
-  map.on('zoomend', project);
-  map.on('moveend', project);
-
-  function hitsAt(p) {
-    var out = [];
-    for (var i = 0; i < items.length; i++) {
-      var it = items[i], bb = it.bb;
-      if (p.x < bb[0] - TOL || p.x > bb[2] + TOL) continue;
-      if (p.y < bb[1] - TOL || p.y > bb[3] + TOL) continue;
-      var pts = it.pts;
-      for (var j = 1; j < pts.length; j++) {
-        if (L.LineUtil.pointToSegmentDistance(p, pts[j - 1], pts[j]) <= TOL) {
-          out.push(it);
-          break;
-        }
-      }
-    }
-    return out;
-  }
-
-  var panel = L.DomUtil.create('div', 'kin-hover');
-  var closeBtn = L.DomUtil.create('button', 'kin-close', panel);
-  closeBtn.type = 'button';
-  closeBtn.title = 'Close (Esc)';
-  closeBtn.innerHTML = CLOSE_ICON;
-  var body = L.DomUtil.create('div', 'kin-body', panel);
-  map.getContainer().appendChild(panel);
-  L.DomEvent.disableClickPropagation(panel);
-  L.DomEvent.disableScrollPropagation(panel);
-
-  // Clicking a route pins the card open so the cursor can travel to its links
-  // without the card vanishing on the way.
-  var locked = false;
-  function setLocked(v) {
-    locked = v;
-    if (v) { L.DomUtil.addClass(panel, 'is-locked'); }
-    else { L.DomUtil.removeClass(panel, 'is-locked'); }
-  }
-
-  var highlighted = [];
-  function highlight(list) {
-    highlighted.forEach(function (it) {
-      it.line.setStyle({ weight: 3, opacity: 0.75 });
-    });
-    highlighted = list;
-    highlighted.forEach(function (it) {
-      it.line.setStyle({ weight: 7, opacity: 1 });
-      it.line.bringToFront();
-    });
-  }
-
-  function statsTable(r) {
-    return '<table class="kin-stats">' + r.stats.map(function (row) {
-      return '<tr><td class="kin-k">' + esc(row[0]) + '</td>' +
-        '<td class="kin-v">' + esc(row[1]) + '</td></tr>';
-    }).join('') + '</table>';
-  }
-
-  function singleHtml(r) {
-    return '<div class="kin-title">' + esc(r.name) + '</div>' +
-      '<div class="kin-sport" style="color:' + esc(r.color) + '">' + esc(r.sport) + '</div>' +
-      statsTable(r) +
-      '<a class="kin-link" target="_top" href="/activity/' + r.id + '">View activity \\u2192</a>';
-  }
-
-  function listHtml(list) {
-    var shown = list.slice(0, MAX_LIST);
-    var html = '<div class="kin-head">' + list.length + ' overlapping activities</div>' +
-      shown.map(function (it, i) {
-        var r = it.r;
-        return '<div class="kin-row" data-i="' + i + '">' +
-          '<span class="kin-dot" style="background:' + esc(r.color) + '"></span>' +
-          '<span class="kin-name" title="' + esc(r.name) + '">' + esc(r.name) +
-          '<span class="kin-date"> \\u00b7 ' + esc(r.date) + '</span></span>' +
-          '<button type="button" class="kin-btn kin-expand" title="Show details">' +
-          CHEVRON + '</button>' +
-          '<a class="kin-btn" target="_top" title="Open activity" ' +
-          'href="/activity/' + r.id + '">' + OPEN_ICON + '</a>' +
-          '</div>' +
-          '<div class="kin-detail" data-i="' + i + '" hidden>' + statsTable(r) + '</div>';
-      }).join('');
-    if (list.length > shown.length) {
-      html += '<div class="kin-more">+' + (list.length - shown.length) +
-        ' more \\u00b7 zoom in to narrow down</div>';
-    }
-    return html;
-  }
-
-  var current = [];
-  function sameAs(list) {
-    if (list.length !== current.length) return false;
-    for (var i = 0; i < list.length; i++) {
-      if (list[i] !== current[i]) return false;
-    }
-    return true;
-  }
-
-  function show(list, containerPoint) {
-    if (!sameAs(list)) {
-      current = list;
-      body.innerHTML = list.length === 1 ? singleHtml(list[0].r) : listHtml(list);
-      highlight(list);
-    }
-    panel.style.display = 'block';
-    var box = map.getContainer().getBoundingClientRect();
-    var w = panel.offsetWidth, h = panel.offsetHeight;
-    var x = Math.min(containerPoint.x + 14, box.width - w - 8);
-    var y = Math.min(containerPoint.y + 14, box.height - h - 8);
-    panel.style.left = Math.max(8, x) + 'px';
-    panel.style.top = Math.max(8, y) + 'px';
-  }
-
-  function hide() {
-    setLocked(false);
-    panel.style.display = 'none';
-    body.innerHTML = '';
-    current = [];
-    highlight([]);
-  }
-
-  var hideTimer = null;
-  function scheduleHide() {
-    if (locked) return;
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(hide, 250);
-  }
-  function cancelHide() { clearTimeout(hideTimer); }
-
-  map.on('click', function (e) {
-    var list = hitsAt(e.layerPoint);
-    if (list.length) {
-      cancelHide();
-      setLocked(true);
-      show(list, e.containerPoint);
-    } else if (locked) {
-      hide();
-    }
-  });
-  closeBtn.addEventListener('click', function (ev) {
-    ev.preventDefault();
-    hide();
-  });
-  document.addEventListener('keydown', function (ev) {
-    if (ev.key === 'Escape' && locked) hide();
-  });
-
-  panel.addEventListener('mouseenter', cancelHide);
-  panel.addEventListener('mouseleave', scheduleHide);
-  panel.addEventListener('click', function (ev) {
-    var btn = ev.target.closest('.kin-expand');
-    if (!btn) return;
-    ev.preventDefault();
-    var row = btn.closest('.kin-row');
-    var detail = panel.querySelector('.kin-detail[data-i="' + row.dataset.i + '"]');
-    var open = detail.hasAttribute('hidden');
-    if (open) { detail.removeAttribute('hidden'); } else { detail.setAttribute('hidden', ''); }
-    row.classList.toggle('is-open', open);
-    btn.title = open ? 'Hide details' : 'Show details';
-  });
-
-  var throttled = false;
-  map.on('mousemove', function (e) {
-    if (locked) return;
-    if (panel.contains(e.originalEvent.target)) return;
-    if (throttled) return;
-    throttled = true;
-    setTimeout(function () { throttled = false; }, 40);
-
-    var list = hitsAt(e.layerPoint);
-    map.getContainer().style.cursor = list.length ? 'pointer' : '';
-    if (list.length) {
-      cancelHide();
-      show(list, e.containerPoint);
-    } else if (current.length) {
-      scheduleHide();
-    }
-  });
-  map.on('mouseout', scheduleHide);
-  map.on('movestart zoomstart', function () { if (!locked) hide(); });
-  }
-
-  // folium emits this block before it creates the map, so wait for the
-  // document to finish parsing before touching the map object.
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-})();
-"""
-
-
-def select_map_activities(wanted: Optional[set[str]] = None) -> list[Activity]:
-    """Activities that can be drawn on the all-activities map.
-
-    A multisport parent and its legs share the same GPS track, so a leg is
-    dropped whenever its parent is also part of the selection.
-    """
-    with Session(engine) as session:
-        stmt = select(Activity).where(col(Activity.route_json).is_not(None))
-        if wanted:
-            stmt = stmt.where(col(Activity.sport).in_([SportType(s) for s in wanted]))
-        activities = session.exec(stmt.order_by(col(Activity.date).desc())).all()
-
-    selected_ids = {a.id for a in activities}
-    return [a for a in activities if a.parent_id not in selected_ids]
-
-
-@router.get("/activities/map", response_class=HTMLResponse)
-def get_activities_map(sports: Optional[str] = None) -> HTMLResponse:
-    """Render every activity with GPS data on a single map.
-
-    ``sports`` is an optional comma-separated list of sport names to include.
-    """
-    from app.ui_helpers import SPORT_COLORS
-
-    wanted: Optional[set[str]] = None
-    if sports:
-        wanted = {s.strip() for s in sports.split(",") if s.strip()}
-
-    activities = select_map_activities(wanted)
-
-    routes: list[dict] = []
-    lats: list[float] = []
-    lons: list[float] = []
-    for activity in activities:
-        try:
-            raw = json.loads(activity.route_json or "[]")
-        except (ValueError, TypeError):
-            continue
-        coords = [c for c in raw if c and len(c) >= 2 and c[0] is not None and c[1] is not None]
-        if len(coords) < 2:
-            continue
-        coords = _simplify(coords)
-        sport = activity.sport.value if hasattr(activity.sport, "value") else str(activity.sport)
-        lats.extend(c[0] for c in coords)
-        lons.extend(c[1] for c in coords)
-        routes.append(
-            {
-                "id": activity.id,
-                "name": activity.name,
-                "sport": sport,
-                "color": SPORT_COLORS.get(sport, "#6b7280"),
-                "date": format_date(activity.date),
-                "stats": _activity_stat_rows(activity),
-                "coords": coords,
-            }
-        )
-
-    m = _base_map(location=[50.85, 4.35], zoom_start=8)
-    if lats and lons:
-        m.fit_bounds([[min(lats), min(lons)], [max(lats), max(lons)]], padding=(20, 20))
-
-    m.get_root().header.add_child(folium.Element(f"<style>{_HOVER_CSS}</style>"))
-    payload = json.dumps(routes, separators=(",", ":")).replace("</", "<\\/")
-    m.get_root().script.add_child(
-        folium.Element(
-            _HOVER_JS.replace("__MAP__", m.get_name()).replace("__ROUTES__", payload)
-        )
-    )
-
-    return HTMLResponse(content=m.get_root().render())
+# ── Request bodies ────────────────────────────────────────────────────────────
 
 
 class ActivityCreate(BaseModel):
@@ -490,6 +99,7 @@ class ActivityCreate(BaseModel):
     avg_power: Optional[int] = None
     calories: Optional[int] = None
     notes: Optional[str] = None
+    friend_ids: Optional[list[int]] = None
 
 
 class ActivityUpdate(BaseModel):
@@ -508,6 +118,7 @@ class ActivityUpdate(BaseModel):
     avg_power: Optional[int] = None
     calories: Optional[int] = None
     notes: Optional[str] = None
+    friend_ids: Optional[list[int]] = None
 
 
 class FriendCreate(BaseModel):
@@ -515,156 +126,507 @@ class FriendCreate(BaseModel):
     email: Optional[str] = None
 
 
+class RaceSplitIn(BaseModel):
+    label: str
+    duration_seconds: Optional[float] = None
+    rank: Optional[int] = None
+
+
+class RaceResultIn(BaseModel):
+    official_time_seconds: Optional[float] = None
+    bib_number: Optional[str] = None
+    age_group: Optional[str] = None
+    overall_rank: Optional[int] = None
+    overall_total: Optional[int] = None
+    gender_rank: Optional[int] = None
+    gender_total: Optional[int] = None
+    age_group_rank: Optional[int] = None
+    age_group_total: Optional[int] = None
+    results_url: Optional[str] = None
+    notes: Optional[str] = None
+    splits: list[RaceSplitIn] = []
+
+
 # ── Activities ────────────────────────────────────────────────────────────────
 
 
 @router.get("/activities")
-def list_activities(
-    sport: Optional[SportType] = None,
-    kind: Optional[ActivityKind] = None,
-    year: Optional[int] = None,
-) -> list[Activity]:
+def list_activities(sport: Optional[str] = None, year: Optional[int] = None) -> list[dict]:
+    """Activities, newest first.
+
+    Without a sport filter only top-level activities are listed (a multisport event stands
+    for its legs); with a filter, legs of that sport are listed on their own.
+    """
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == sport)
-        if kind:
-            stmt = stmt.where(Activity.kind == kind)
-        if year:
-            stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
-            stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
-        stmt = stmt.order_by(col(Activity.date).desc())
-        return list(session.exec(stmt).all())
+        sport_types = _sport_types(sport)
+        if sport_types:
+            stmt = stmt.where(col(Activity.sport).in_(sport_types))
+        else:
+            stmt = stmt.where(col(Activity.parent_id).is_(None))
+        stmt = _in_year(stmt, Activity.date, year).order_by(col(Activity.date).desc())
+        activities = session.exec(stmt).all()
+
+        ids = [a.id for a in activities]
+        with_result: set[int] = set()
+        if ids:
+            with_result = set(
+                session.exec(
+                    select(RaceResult.activity_id).where(col(RaceResult.activity_id).in_(ids))
+                ).all()
+            )
+        parents = multisport_parent_sports(session, (a.parent_id for a in activities))
+        rows = []
+        for activity in activities:
+            data = _activity_dump(activity)
+            data["has_race_result"] = activity.id in with_result
+            data["parent_sport"] = parents.get(activity.parent_id) if activity.parent_id else None
+            rows.append(data)
+        return rows
+
+
+def _set_activity_friends(session, activity_id: int, friend_ids: list[int]) -> None:
+    """Replace the friends of an activity and of its multisport legs."""
+    owned = {f.id for f in session.exec(select(Friend)).all()}
+    unknown = set(friend_ids) - owned
+    if unknown:
+        raise HTTPException(status_code=400, detail="Unknown friend")
+    child_ids = session.exec(select(Activity.id).where(Activity.parent_id == activity_id)).all()
+    for target_id in [activity_id, *child_ids]:
+        for link in session.exec(
+            select(ActivityFriend).where(ActivityFriend.activity_id == target_id)
+        ).all():
+            session.delete(link)
+        session.flush()
+        for friend_id in dict.fromkeys(friend_ids):
+            session.add(ActivityFriend(activity_id=target_id, friend_id=friend_id))
 
 
 @router.post("/activities", status_code=201)
-def create_activity(data: ActivityCreate) -> Activity:
+def create_activity(data: ActivityCreate) -> dict:
     with Session(engine) as session:
-        activity = Activity(**data.model_dump())
+        activity = Activity(**data.model_dump(exclude={"friend_ids"}))
         session.add(activity)
         session.commit()
         session.refresh(activity)
-        return activity
+        if data.friend_ids is not None:
+            _set_activity_friends(session, require_id(activity.id), data.friend_ids)
+            session.commit()
+            session.refresh(activity)
+        return _activity_dump(activity)
 
 
 @router.get("/activities/{activity_id}")
-def get_activity(activity_id: int) -> Activity:
+def get_activity(activity_id: int) -> dict:
     with Session(engine) as session:
-        activity = session.get(Activity, activity_id)
-        if not activity:
-            raise HTTPException(status_code=404, detail="Activity not found")
-        return activity
+        return _activity_dump(_get_activity(session, activity_id))
 
 
 @router.patch("/activities/{activity_id}")
-def update_activity(activity_id: int, data: ActivityUpdate) -> Activity:
+def update_activity(activity_id: int, data: ActivityUpdate) -> dict:
     with Session(engine) as session:
-        activity = session.get(Activity, activity_id)
-        if not activity:
-            raise HTTPException(status_code=404, detail="Activity not found")
-        for key, value in data.model_dump(exclude_unset=True).items():
+        activity = _get_activity(session, activity_id)
+        for key, value in data.model_dump(exclude_unset=True, exclude={"friend_ids"}).items():
             setattr(activity, key, value)
         activity.updated_at = datetime.now(timezone.utc)
         session.add(activity)
+        if data.friend_ids is not None:
+            _set_activity_friends(session, activity_id, data.friend_ids)
         session.commit()
         session.refresh(activity)
-        return activity
+        return _activity_dump(activity)
+
+
+def _delete_activity_rows(session, activity: Activity) -> None:
+    activity_id = activity.id
+    for model in (Lap, BestEffort, ActivityFriend):
+        for row in session.exec(select(model).where(model.activity_id == activity_id)).all():
+            session.delete(row)
+    result = session.exec(select(RaceResult).where(RaceResult.activity_id == activity_id)).first()
+    if result:
+        for split in session.exec(
+            select(RaceResultSplit).where(RaceResultSplit.race_result_id == result.id)
+        ).all():
+            session.delete(split)
+        session.delete(result)
+    session.delete(activity)
 
 
 @router.delete("/activities/{activity_id}", status_code=204)
 def delete_activity(activity_id: int) -> None:
     with Session(engine) as session:
-        activity = session.get(Activity, activity_id)
-        if not activity:
-            raise HTTPException(status_code=404, detail="Activity not found")
-        # Delete related laps and best efforts
-        for lap in session.exec(select(Lap).where(Lap.activity_id == activity_id)).all():
-            session.delete(lap)
-        for be in session.exec(
-            select(BestEffort).where(BestEffort.activity_id == activity_id)
-        ).all():
-            session.delete(be)
-        session.delete(activity)
+        activity = _get_activity(session, activity_id)
+        for child in session.exec(select(Activity).where(Activity.parent_id == activity_id)).all():
+            _delete_activity_rows(session, child)
+        session.flush()
+        _delete_activity_rows(session, activity)
         session.commit()
-
-
-# ── FIT upload ────────────────────────────────────────────────────────────────
 
 
 @router.post("/activities/upload-fit", status_code=201)
-async def upload_fit(file: UploadFile) -> Activity:
-    if not file.filename or not file.filename.endswith(".fit"):
+async def upload_fit(file: UploadFile) -> dict:
+    if not file.filename or not file.filename.lower().endswith(".fit"):
         raise HTTPException(status_code=400, detail="Only .fit files are accepted")
-
-    dest = UPLOAD_DIR / f"{uuid.uuid4().hex}.fit"
-    async with aiofiles.open(dest, "wb") as f:
-        await f.write(await file.read())
-
-    activity, laps, best_efforts, _children = parse_fit_file(dest)
-
-    with Session(engine) as session:
-        session.add(activity)
-        session.commit()
-        session.refresh(activity)
-
-        new_activity_id = require_id(activity.id)
-        for lap in laps:
-            lap.activity_id = new_activity_id
-            session.add(lap)
-
-        for be in best_efforts:
-            be.activity_id = new_activity_id
-            session.add(be)
-
-        session.commit()
-        session.refresh(activity)
-        return activity
+    content = await file.read(MAX_FIT_BYTES + 1)
+    if len(content) > MAX_FIT_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large")
+    try:
+        activity_id = await _run_in_thread(garmin_sync.import_fit_bytes, content)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not import file: {exc}") from None
+    return get_activity(activity_id)
 
 
-# ── Laps ──────────────────────────────────────────────────────────────────────
+async def _run_in_thread(fn, *args):
+    """Run blocking work in a thread while keeping the account context."""
+    from starlette.concurrency import run_in_threadpool
+
+    context = copy_context()
+    return await run_in_threadpool(context.run, fn, *args)
 
 
 @router.get("/activities/{activity_id}/laps")
-def get_laps(activity_id: int) -> list[Lap]:
+def get_laps(activity_id: int) -> list[dict]:
     with Session(engine) as session:
-        return list(session.exec(select(Lap).where(Lap.activity_id == activity_id)).all())
+        laps = session.exec(
+            select(Lap).where(Lap.activity_id == activity_id).order_by(col(Lap.lap_number))
+        ).all()
+        return [_dump(lap) for lap in laps]
 
 
-# ── Best Efforts ──────────────────────────────────────────────────────────────
-
-
-@router.get("/best-efforts")
-def list_best_efforts(
-    sport: Optional[SportType] = None,
-    year: Optional[int] = None,
-) -> list[BestEffort]:
+@router.get("/activities/{activity_id}/route")
+def get_route(activity_id: int) -> dict:
     with Session(engine) as session:
-        stmt = select(BestEffort)
-        if sport:
-            stmt = stmt.where(BestEffort.sport == sport)
+        activity = _get_activity(session, activity_id)
+        coords = json.loads(activity.route_json) if activity.route_json else []
+    return {"coords": coords}
+
+
+def _race_result(session, activity_id: int) -> Optional[dict]:
+    result = session.exec(select(RaceResult).where(RaceResult.activity_id == activity_id)).first()
+    if not result:
+        return None
+    splits = session.exec(
+        select(RaceResultSplit)
+        .where(RaceResultSplit.race_result_id == result.id)
+        .order_by(col(RaceResultSplit.order))
+    ).all()
+    return {**_dump(result), "splits": [_dump(s) for s in splits]}
+
+
+def _activity_friends(session, activity_id: int) -> list[dict]:
+    friends = session.exec(
+        select(Friend)
+        .join(ActivityFriend, col(ActivityFriend.friend_id) == col(Friend.id))
+        .where(ActivityFriend.activity_id == activity_id)
+    ).all()
+    return [_dump(f) for f in friends]
+
+
+@router.get("/activities/{activity_id}/detail")
+def get_activity_detail(activity_id: int) -> dict:
+    with Session(engine) as session:
+        activity = _get_activity(session, activity_id)
+        laps = session.exec(
+            select(Lap).where(Lap.activity_id == activity_id).order_by(col(Lap.lap_number))
+        ).all()
+        efforts = session.exec(
+            select(BestEffort)
+            .where(BestEffort.activity_id == activity_id)
+            .order_by(col(BestEffort.distance_meters))
+        ).all()
+        ranked = []
+        for effort in efforts:
+            faster = session.exec(
+                select(func.count(BestEffort.id)).where(
+                    BestEffort.sport == effort.sport,
+                    BestEffort.distance_meters == effort.distance_meters,
+                    BestEffort.duration_seconds < effort.duration_seconds,
+                )
+            ).one()
+            ranked.append({**_dump(effort), "rank": faster + 1})
+
+        children: list[dict] = []
+        parent: Optional[dict] = None
+        if activity.parent_id is None:
+            children = [
+                _activity_dump(c)
+                for c in session.exec(
+                    select(Activity)
+                    .where(Activity.parent_id == activity_id)
+                    .order_by(col(Activity.date))
+                ).all()
+            ]
+        else:
+            parent_activity = session.get(Activity, activity.parent_id)
+            if parent_activity:
+                parent = _activity_dump(parent_activity)
+
+        return {
+            "activity": _activity_dump(activity),
+            "laps": [_dump(lap) for lap in laps],
+            "best_efforts": ranked,
+            "children": children,
+            "parent": parent,
+            "race_result": _race_result(session, activity_id),
+            "friends": _activity_friends(session, activity_id),
+        }
+
+
+# ── Activity friends ──────────────────────────────────────────────────────────
+
+
+@router.get("/activities/{activity_id}/friends")
+def list_activity_friends(activity_id: int) -> list[dict]:
+    with Session(engine) as session:
+        _get_activity(session, activity_id)
+        return _activity_friends(session, activity_id)
+
+
+@router.put("/activities/{activity_id}/friends/{friend_id}", status_code=204)
+def add_activity_friend(activity_id: int, friend_id: int) -> None:
+    with Session(engine) as session:
+        _get_activity(session, activity_id)
+        if not session.get(Friend, friend_id):
+            raise HTTPException(status_code=404, detail="Friend not found")
+        if not session.get(ActivityFriend, (activity_id, friend_id)):
+            session.add(ActivityFriend(activity_id=activity_id, friend_id=friend_id))
+            session.commit()
+
+
+@router.delete("/activities/{activity_id}/friends/{friend_id}", status_code=204)
+def remove_activity_friend(activity_id: int, friend_id: int) -> None:
+    with Session(engine) as session:
+        link = session.get(ActivityFriend, (activity_id, friend_id))
+        if link:
+            session.delete(link)
+            session.commit()
+
+
+# ── Race results ──────────────────────────────────────────────────────────────
+
+
+@router.put("/activities/{activity_id}/race-result")
+def save_race_result(activity_id: int, data: RaceResultIn) -> dict:
+    with Session(engine) as session:
+        _get_activity(session, activity_id)
+        fields = data.model_dump(exclude={"splits"})
+        result = session.exec(
+            select(RaceResult).where(RaceResult.activity_id == activity_id)
+        ).first()
+        if result:
+            for key, value in fields.items():
+                setattr(result, key, value)
+        else:
+            result = RaceResult(activity_id=activity_id, **fields)
+        session.add(result)
+        session.commit()
+        session.refresh(result)
+        result_id = require_id(result.id)
+        for split in session.exec(
+            select(RaceResultSplit).where(RaceResultSplit.race_result_id == result_id)
+        ).all():
+            session.delete(split)
+        for order, split in enumerate(s for s in data.splits if s.label.strip()):
+            session.add(
+                RaceResultSplit(
+                    race_result_id=result_id,
+                    label=split.label.strip(),
+                    order=order,
+                    duration_seconds=split.duration_seconds,
+                    rank=split.rank,
+                )
+            )
+        session.commit()
+        return _race_result(session, activity_id) or {}
+
+
+@router.delete("/activities/{activity_id}/race-result", status_code=204)
+def delete_race_result(activity_id: int) -> None:
+    with Session(engine) as session:
+        result = session.exec(
+            select(RaceResult).where(RaceResult.activity_id == activity_id)
+        ).first()
+        if result:
+            for split in session.exec(
+                select(RaceResultSplit).where(RaceResultSplit.race_result_id == result.id)
+            ).all():
+                session.delete(split)
+            session.delete(result)
+            session.commit()
+
+
+@router.get("/races")
+def list_races() -> list[dict]:
+    with Session(engine) as session:
+        results = session.exec(
+            select(RaceResult, Activity)
+            .join(Activity, col(RaceResult.activity_id) == col(Activity.id))
+            .order_by(col(Activity.date).desc(), col(Activity.id).desc())
+        ).all()
+        parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
+        result_ids = [r.id for r, _ in results if r.id is not None]
+        splits_by_result: dict[int, list[dict]] = {}
+        if result_ids:
+            for split in session.exec(
+                select(RaceResultSplit)
+                .where(col(RaceResultSplit.race_result_id).in_(result_ids))
+                .order_by(col(RaceResultSplit.order))
+            ).all():
+                splits_by_result.setdefault(split.race_result_id, []).append(_dump(split))
+        return [
+            {
+                **_dump(result),
+                "activity": _activity_dump(activity),
+                "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
+                "splits": splits_by_result.get(result.id or -1, []),
+            }
+            for result, activity in results
+        ]
+
+
+# ── Best efforts ──────────────────────────────────────────────────────────────
+
+# Stored distances come from a fixed set of targets that are far apart, so a small
+# tolerance safely absorbs float rounding from the URL round-trip.
+_DISTANCE_TOLERANCE = 0.5
+
+TOP_METRIC_FIELDS = {"elevation": "elevation_gain_meters", "distance": "distance_meters"}
+
+
+def _best_effort_rows(
+    sport: Optional[str], year: Optional[int], distance: Optional[float] = None
+) -> list[dict]:
+    with Session(engine) as session:
+        stmt = select(BestEffort, Activity).join(
+            Activity, col(BestEffort.activity_id) == col(Activity.id)
+        )
+        if distance is not None:
+            stmt = stmt.where(col(BestEffort.distance_meters) >= distance - _DISTANCE_TOLERANCE)
+            stmt = stmt.where(col(BestEffort.distance_meters) <= distance + _DISTANCE_TOLERANCE)
+        sport_types = _sport_types(sport)
+        if sport_types:
+            stmt = stmt.where(col(BestEffort.sport).in_(sport_types))
         if year:
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
-        return list(session.exec(stmt).all())
+        results = session.exec(stmt).all()
+        parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
+        return [
+            {
+                **_dump(effort),
+                "activity_name": activity.name,
+                "kind": activity.kind.value,
+                # Climb of the whole activity, not just the best-effort segment
+                "elevation_gain_meters": activity.elevation_gain_meters,
+                "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
+            }
+            for effort, activity in results
+        ]
+
+
+def _top_activities(
+    metric: str, sport: Optional[str], year: Optional[int], limit: Optional[int] = None
+) -> list[dict]:
+    """Activities ranked by the metric, best first; multisport legs count per sport."""
+    if metric not in TOP_METRIC_FIELDS:
+        raise HTTPException(status_code=404, detail=f"Unknown ranking '{metric}'")
+    ranked = col(getattr(Activity, TOP_METRIC_FIELDS[metric]))
+    with Session(engine) as session:
+        stmt = select(Activity).where(ranked.is_not(None)).where(ranked > 0)
+        sport_types = _sport_types(sport)
+        if sport_types:
+            stmt = stmt.where(col(Activity.sport).in_(sport_types))
+        else:
+            # Without a sport filter a multisport parent already covers its legs
+            stmt = stmt.where(col(Activity.parent_id).is_(None))
+        stmt = _in_year(stmt, Activity.date, year).order_by(ranked.desc())
+        if limit:
+            stmt = stmt.limit(limit)
+        activities = session.exec(stmt).all()
+        parents = multisport_parent_sports(session, (a.parent_id for a in activities))
+        rows = []
+        for activity in activities:
+            data = _activity_dump(activity)
+            data["parent_sport"] = parents.get(activity.parent_id) if activity.parent_id else None
+            rows.append(data)
+        return rows
+
+
+@router.get("/best-efforts")
+def list_best_efforts(sport: Optional[str] = None, year: Optional[int] = None) -> list[dict]:
+    return _best_effort_rows(sport, year)
+
+
+@router.get("/best-efforts/overview")
+def best_efforts_overview(sport: Optional[str] = None, year: Optional[int] = None) -> dict:
+    """Everything the trophy case shows: the record per distance, standouts and totals."""
+    records: dict[float, dict] = {}
+    for effort in _best_effort_rows(sport, year):
+        records.setdefault(effort["distance_meters"], effort)
+
+    with Session(engine) as session:
+        stmt = select(Activity)
+        sport_types = _sport_types(sport)
+        if sport_types:
+            stmt = stmt.where(col(Activity.sport).in_(sport_types))
+        activities = session.exec(_in_year(stmt, Activity.date, year)).all()
+
+    standouts = {}
+    for metric in TOP_METRIC_FIELDS:
+        top = _top_activities(metric, sport, year, limit=1)
+        if top:
+            standouts[metric] = top[0]
+
+    return {
+        "records": [records[d] for d in sorted(records)],
+        "standouts": standouts,
+        "summary": {
+            "count": len(activities),
+            "distance_meters": sum(a.distance_meters or 0 for a in activities),
+            "duration_seconds": sum(a.duration_seconds for a in activities),
+        },
+    }
+
+
+@router.get("/best-efforts/attempts")
+def best_effort_attempts(
+    distance: float, sport: Optional[str] = None, year: Optional[int] = None
+) -> list[dict]:
+    rows = _best_effort_rows(sport, year, distance)
+    return sorted(rows, key=lambda r: r["duration_seconds"])
+
+
+@router.get("/top-activities/{metric}")
+def top_activities(
+    metric: str,
+    sport: Optional[str] = None,
+    year: Optional[int] = None,
+    limit: Optional[int] = None,
+) -> list[dict]:
+    return _top_activities(metric, sport, year, limit)
 
 
 # ── Friends ───────────────────────────────────────────────────────────────────
 
 
 @router.get("/friends")
-def list_friends() -> list[Friend]:
+def list_friends() -> list[dict]:
     with Session(engine) as session:
-        return list(session.exec(select(Friend)).all())
+        return [_dump(f) for f in session.exec(select(Friend).order_by(col(Friend.name))).all()]
 
 
 @router.post("/friends", status_code=201)
-def create_friend(data: FriendCreate) -> Friend:
+def create_friend(data: FriendCreate) -> dict:
+    name = data.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name is required")
     with Session(engine) as session:
-        friend = Friend(**data.model_dump())
+        friend = Friend(name=name, email=data.email)
         session.add(friend)
         session.commit()
         session.refresh(friend)
-        return friend
+        return _dump(friend)
 
 
 @router.delete("/friends/{friend_id}", status_code=204)
@@ -673,6 +635,11 @@ def delete_friend(friend_id: int) -> None:
         friend = session.get(Friend, friend_id)
         if not friend:
             raise HTTPException(status_code=404, detail="Friend not found")
+        for link in session.exec(
+            select(ActivityFriend).where(ActivityFriend.friend_id == friend_id)
+        ).all():
+            session.delete(link)
+        session.flush()
         session.delete(friend)
         session.commit()
 
@@ -680,51 +647,238 @@ def delete_friend(friend_id: int) -> None:
 # ── Stats for charts ──────────────────────────────────────────────────────────
 
 
-@router.get("/stats/monthly")
-def monthly_stats(sport: Optional[SportType] = None, year: Optional[int] = None) -> list[dict]:
-    """Returns aggregated distance/duration per month."""
+@router.get("/stats/graphs")
+def graph_stats(sport: Optional[str] = None, year: Optional[int] = None) -> dict:
+    """Monthly totals (for the year filter), yearly totals and totals per sport."""
     with Session(engine) as session:
         stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == sport)
-        if year:
-            stmt = stmt.where(col(Activity.date) >= datetime(year, 1, 1))
-            stmt = stmt.where(col(Activity.date) < datetime(year + 1, 1, 1))
+        sport_types = _sport_types(sport)
+        if sport_types:
+            stmt = stmt.where(col(Activity.sport).in_(sport_types))
         activities = session.exec(stmt).all()
 
-    monthly: dict[tuple[int, int], dict] = {}
+    def bucket(store: dict, key, **extra) -> dict:
+        if key not in store:
+            store[key] = {**extra, "count": 0, "distance_meters": 0.0, "duration_seconds": 0.0}
+        return store[key]
+
+    monthly: dict[Any, dict] = {}
+    yearly: dict[Any, dict] = {}
+    by_sport: dict[Any, dict] = {}
     for a in activities:
-        key = (a.date.year, a.date.month)
-        if key not in monthly:
-            monthly[key] = {
-                "year": key[0],
-                "month": key[1],
-                "count": 0,
-                "distance_km": 0.0,
-                "duration_hours": 0.0,
-            }
-        monthly[key]["count"] += 1
-        monthly[key]["distance_km"] += (a.distance_meters or 0) / 1000
-        monthly[key]["duration_hours"] += a.duration_seconds / 3600
+        in_year = not year or a.date.year == year
+        targets = [bucket(yearly, a.date.year, year=a.date.year)]
+        if in_year:
+            targets.append(
+                bucket(monthly, (a.date.year, a.date.month), year=a.date.year, month=a.date.month)
+            )
+            targets.append(bucket(by_sport, a.sport.value, sport=a.sport.value))
+        for target in targets:
+            target["count"] += 1
+            target["distance_meters"] += a.distance_meters or 0
+            target["duration_seconds"] += a.duration_seconds or 0
 
-    return sorted(monthly.values(), key=lambda x: (x["year"], x["month"]))
+    return {
+        "monthly": [monthly[k] for k in sorted(monthly)],
+        "yearly": [yearly[k] for k in sorted(yearly)],
+        "by_sport": list(by_sport.values()),
+    }
 
 
-@router.get("/stats/yearly")
-def yearly_stats(sport: Optional[SportType] = None) -> list[dict]:
+# ── Map ───────────────────────────────────────────────────────────────────────
+
+_MAX_POINTS_PER_ROUTE = 250
+
+
+def _simplify(coords: list[list[float]]) -> list[list[float]]:
+    """Evenly decimate a route so the combined map stays responsive."""
+    if len(coords) <= _MAX_POINTS_PER_ROUTE:
+        simplified = coords
+    else:
+        step = len(coords) / _MAX_POINTS_PER_ROUTE
+        simplified = [coords[int(i * step)] for i in range(_MAX_POINTS_PER_ROUTE)]
+        simplified.append(coords[-1])
+    return [[round(float(c[0]), 5), round(float(c[1]), 5)] for c in simplified]
+
+
+@router.get("/map")
+def map_routes(sports: Optional[str] = None) -> dict:
+    """Every activity with GPS data, for the all-activities map.
+
+    ``sports`` is an optional comma-separated list of sports; by default every sport that has
+    a route is drawn. A multisport leg is dropped when its parent is drawn as well, since
+    both share the same GPS track.
+    """
     with Session(engine) as session:
-        stmt = select(Activity)
-        if sport:
-            stmt = stmt.where(Activity.sport == sport)
-        activities = session.exec(stmt).all()
+        present = {
+            s.value
+            for s in session.exec(
+                select(Activity.sport).where(col(Activity.route_json).is_not(None)).distinct()
+            ).all()
+        }
+        available = [s for s in SPORTS if s in present]
+        wanted = (
+            [s.strip() for s in sports.split(",") if s.strip()] if sports is not None else available
+        )
+        if any(s not in SPORTS for s in wanted):
+            raise HTTPException(status_code=400, detail="Unknown sport")
+        candidates = (
+            session.exec(
+                select(Activity)
+                .where(col(Activity.sport).in_([SportType(s) for s in wanted]))
+                .order_by(col(Activity.date).desc())
+            ).all()
+            if wanted
+            else []
+        )
 
-    yearly: dict[int, dict] = {}
-    for a in activities:
-        y = a.date.year
-        if y not in yearly:
-            yearly[y] = {"year": y, "count": 0, "distance_km": 0.0, "duration_hours": 0.0}
-        yearly[y]["count"] += 1
-        yearly[y]["distance_km"] += (a.distance_meters or 0) / 1000
-        yearly[y]["duration_hours"] += a.duration_seconds / 3600
+    ids = {a.id for a in candidates}
+    candidates = [a for a in candidates if a.parent_id not in ids]
+    routes = []
+    for activity in candidates:
+        if not activity.route_json:
+            continue
+        try:
+            raw = json.loads(activity.route_json)
+        except (ValueError, TypeError):
+            continue
+        coords = [c for c in raw if c and len(c) >= 2 and c[0] is not None and c[1] is not None]
+        if len(coords) < 2:
+            continue
+        data = _activity_dump(activity)
+        data["coords"] = _simplify(coords)
+        routes.append(data)
 
-    return sorted(yearly.values(), key=lambda x: x["year"])
+    return {
+        "available": available,
+        "routes": routes,
+        "counts": {
+            "drawn": len(routes),
+            "total": len(candidates),
+            "without_gps": sum(1 for a in candidates if not a.route_json),
+        },
+    }
+
+
+# ── Garmin sync ───────────────────────────────────────────────────────────────
+
+
+class GarminLogin(BaseModel):
+    email: str
+    password: str
+
+
+class GarminMfa(BaseModel):
+    code: str
+
+
+class GarminSyncRequest(BaseModel):
+    since: date
+    until: Optional[date] = None
+    email: str = ""
+    password: str = ""
+
+
+_MFA_SECONDS = 10 * 60
+# Logins waiting for an MFA code, per account: (client, state, email, started)
+_pending_mfa: dict[str, tuple[Any, Any, str, float]] = {}
+_pending_lock = threading.Lock()
+
+
+def _owner() -> str:
+    owner_id = current_owner.get()
+    if not owner_id:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    return owner_id
+
+
+@router.get("/garmin/status")
+def garmin_status() -> dict:
+    with Session(engine) as session:
+        latest = session.exec(select(Activity.date).order_by(col(Activity.date).desc())).first()
+    default_since = (latest.date() - timedelta(days=1)) if latest else (
+        date.today() - timedelta(days=90)
+    )
+    return {
+        "authenticated": garmin_sync.tokens_exist(),
+        "email": garmin_sync.saved_email(),
+        "default_since": default_since.isoformat(),
+    }
+
+
+@router.post("/garmin/login")
+def garmin_login(data: GarminLogin) -> dict:
+    email = data.email.strip()
+    if not email or not data.password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+    try:
+        result = garmin_sync.attempt_login(email, data.password)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    if result.get("needs_mfa"):
+        with _pending_lock:
+            _pending_mfa[_owner()] = (result["_client"], result["_state"], email, time.time())
+        return {"needs_mfa": True}
+    garmin_sync.save_email(email)
+    return {"needs_mfa": False}
+
+
+@router.post("/garmin/mfa")
+def garmin_mfa(data: GarminMfa) -> dict:
+    with _pending_lock:
+        pending = _pending_mfa.pop(_owner(), None)
+    if not pending or time.time() - pending[3] > _MFA_SECONDS:
+        raise HTTPException(status_code=400, detail="No login is waiting for a code; sign in again")
+    client, state, email, _ = pending
+    try:
+        garmin_sync.complete_mfa(client, state, data.code.strip())
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"MFA failed: {exc}") from None
+    garmin_sync.save_email(email)
+    return {"ok": True}
+
+
+@router.post("/garmin/logout", status_code=204)
+def garmin_logout() -> None:
+    garmin_sync.logout()
+
+
+@router.post("/garmin/sync")
+def garmin_sync_activities(data: GarminSyncRequest) -> StreamingResponse:
+    """Run a sync and stream its progress as newline-delimited JSON messages."""
+    if garmin_sync.tokens_exist():
+        email, password = garmin_sync.saved_email(), ""
+    else:
+        email, password = data.email.strip(), data.password
+        if not email or not password:
+            raise HTTPException(
+                status_code=400,
+                detail="No cached tokens — authenticate first or enter credentials",
+            )
+
+    messages: "queue.Queue[Optional[dict]]" = queue.Queue()
+
+    def work() -> None:
+        try:
+            result = garmin_sync.sync_garmin_activities(
+                data.since,
+                data.until,
+                email,
+                password,
+                lambda msg: messages.put({"type": "progress", "message": msg}),
+            )
+            messages.put({"type": "result", **result})
+        except Exception as exc:
+            messages.put({"type": "error", "message": str(exc)})
+        finally:
+            messages.put(None)
+
+    context = copy_context()
+    threading.Thread(target=context.run, args=(work,), daemon=True).start()
+
+    def stream():
+        while (message := messages.get()) is not None:
+            yield json.dumps(message) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
+
