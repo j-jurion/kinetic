@@ -1,9 +1,10 @@
 """Activity detail page."""
 
-from nicegui import run, ui
+from nicegui import ui
 from sqlalchemy import func
-from sqlmodel import Session, col, select
+from sqlmodel import col, select
 
+from app import user_run as run
 from app.database import engine, require_id
 from app.models import (
     Activity,
@@ -14,7 +15,10 @@ from app.models import (
     RaceResult,
     RaceResultSplit,
 )
+from app.ownership import UserSession as Session
 from app.ui_helpers import (
+    MEDAL_COLORS,
+    MEDAL_LABELS,
     SPORT_COLORS,
     SPORT_ICONS,
     add_rank_medal_cell,
@@ -584,7 +588,8 @@ def _show_race_result_dialog(
                 )
                 if invalid_split:
                     ui.notify(
-                        f"Invalid time for {invalid_split.label or 'split'}; use M:SS with seconds from 00 to 59.",
+                        f"Invalid time for {invalid_split.label or 'split'}; "
+                        "use M:SS with seconds from 00 to 59.",
                         type="negative",
                     )
                     return
@@ -941,7 +946,8 @@ async def activity_detail_page(activity_id: int) -> None:
                     label = distance_label(be["distance_meters"], be.get("sport", sport))
                     with ui.element("div").classes("activity-best-effort-tile"):
                         with ui.row().classes(
-                            "items-center justify-between no-wrap w-full activity-best-effort-heading"
+                            "items-center justify-between no-wrap w-full "
+                            "activity-best-effort-heading"
                         ):
                             with ui.row().classes("items-center gap-2 min-w-0"):
                                 ui.icon(

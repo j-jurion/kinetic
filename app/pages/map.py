@@ -1,12 +1,14 @@
 """Map page — every activity with GPS data drawn on a single map."""
 from urllib.parse import urlencode
 
-from nicegui import run, ui
-from sqlmodel import Session, col, select
+from nicegui import ui
+from sqlmodel import col, select
 
+from app import user_run as run
 from app.api import select_map_activities
 from app.database import engine
 from app.models import Activity
+from app.ownership import UserSession as Session
 from app.ui_helpers import SPORT_COLORS, SPORT_ICONS, SPORTS, sport_label
 
 

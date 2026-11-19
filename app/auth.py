@@ -1,0 +1,256 @@
+"""Username/password accounts and revocable browser sessions."""
+
+import os
+import re
+import secrets
+import uuid
+from datetime import datetime, timedelta, timezone
+from http.cookies import CookieError, SimpleCookie
+from urllib.parse import urlparse
+
+from fastapi import APIRouter, HTTPException, Request, Response
+from pwdlib import PasswordHash
+from pydantic import BaseModel, Field
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, delete, inspect, select, text
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+
+from app.database import engine
+
+COOKIE_NAME = "kinetic_auth"
+SESSION_SECONDS = 12 * 60 * 60
+USERNAME_PATTERN = re.compile(r"[a-z0-9][a-z0-9_.-]{2,31}")
+USERNAME_RULES = "Username must be 3 to 32 characters: letters, digits, '.', '_' or '-'"
+PASSWORD_RULES = "Password must be 12 to 1024 characters"
+INVALID_LOGIN = "Invalid username or password"
+
+password_hash = PasswordHash.recommended()
+# Verified against unknown usernames so failed logins take similar time either way.
+_DUMMY_HASH = password_hash.hash(secrets.token_urlsafe(16))
+
+
+class AuthBase(DeclarativeBase):
+    pass
+
+
+class User(AuthBase):
+    __tablename__ = "user"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    username: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    hashed_password: Mapped[str] = mapped_column(String(1024))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class AccessToken(AuthBase):
+    __tablename__ = "accesstoken"
+
+    token: Mapped[str] = mapped_column(String(43), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, index=True, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Credentials(BaseModel):
+    username: str = Field(max_length=64)
+    password: str = Field(max_length=1024)
+
+
+def public_origin() -> str:
+    origin = os.environ.get("KINETIC_PUBLIC_ORIGIN", "")
+    parsed = urlparse(origin)
+    local_http = parsed.scheme == "http" and parsed.hostname in ("localhost", "127.0.0.1")
+    insecure_allowed = os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") == "1"
+    if (
+        not origin
+        or parsed.path not in ("", "/")
+        or parsed.params
+        or parsed.query
+        or parsed.fragment
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or (parsed.scheme != "https" and not (insecure_allowed and local_http))
+        or (insecure_allowed and not local_http)
+    ):
+        raise RuntimeError("Set KINETIC_PUBLIC_ORIGIN to the app's HTTPS origin")
+    return origin.rstrip("/")
+
+
+def normalize_username(username: str) -> str:
+    return username.strip().lower()
+
+
+def validate_password(password: str) -> None:
+    if not 12 <= len(password) <= 1024:
+        raise ValueError(PASSWORD_RULES)
+
+
+def _secure_cookies() -> bool:
+    return os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") != "1"
+
+
+def _start_session(session: Session, user_id: str, request: Request, response: Response) -> None:
+    previous = request.cookies.get(COOKIE_NAME)
+    if previous:
+        session.execute(delete(AccessToken).where(AccessToken.token == previous))
+    token = secrets.token_urlsafe(32)
+    session.add(AccessToken(token=token, user_id=user_id))
+    session.commit()
+    response.set_cookie(
+        COOKIE_NAME,
+        token,
+        max_age=SESSION_SECONDS,
+        httponly=True,
+        secure=_secure_cookies(),
+        samesite="strict",
+    )
+
+
+router = APIRouter(prefix="/auth")
+
+
+@router.post("/register", status_code=201)
+def register(credentials: Credentials, request: Request, response: Response):
+    username = normalize_username(credentials.username)
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise HTTPException(status_code=400, detail=USERNAME_RULES)
+    try:
+        validate_password(credentials.password)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from None
+    with Session(engine) as session:
+        user = User(username=username, hashed_password=password_hash.hash(credentials.password))
+        session.add(user)
+        try:
+            session.commit()
+        except IntegrityError:
+            raise HTTPException(status_code=400, detail="Username is already taken") from None
+        _start_session(session, user.id, request, response)
+    return {"username": username}
+
+
+@router.post("/login", status_code=204)
+def login(credentials: Credentials, request: Request, response: Response) -> None:
+    with Session(engine) as session:
+        user = session.scalar(
+            select(User).where(User.username == normalize_username(credentials.username))
+        )
+        if user is None:
+            password_hash.verify(credentials.password, _DUMMY_HASH)
+            raise HTTPException(status_code=400, detail=INVALID_LOGIN)
+        valid, updated_hash = password_hash.verify_and_update(
+            credentials.password, user.hashed_password
+        )
+        if not valid or not user.is_active:
+            raise HTTPException(status_code=400, detail=INVALID_LOGIN)
+        if updated_hash:
+            user.hashed_password = updated_hash
+        _start_session(session, user.id, request, response)
+
+
+@router.post("/logout", status_code=204)
+def logout(request: Request, response: Response) -> None:
+    token = request.cookies.get(COOKIE_NAME)
+    if token:
+        with Session(engine) as session:
+            session.execute(delete(AccessToken).where(AccessToken.token == token))
+            session.commit()
+    response.delete_cookie(
+        COOKIE_NAME, httponly=True, secure=_secure_cookies(), samesite="strict"
+    )
+
+
+def reset_password(username: str) -> str:
+    """Set a generated password for an account, revoke its sessions and return the password."""
+    password = secrets.token_urlsafe(18)
+    with Session(engine) as session:
+        user = session.scalar(select(User).where(User.username == normalize_username(username)))
+        if user is None:
+            raise LookupError(f"No account named {username!r}")
+        user.hashed_password = password_hash.hash(password)
+        session.execute(delete(AccessToken).where(AccessToken.user_id == user.id))
+        session.commit()
+    return password
+
+
+def _username_from_email(email: str, taken: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9_.-]", "", email.split("@")[0].lower())
+    base = re.sub(r"^[^a-z0-9]+", "", base)[:28]
+    if len(base) < 3:
+        base = "user"
+    candidate, suffix = base, 2
+    while candidate in taken:
+        candidate, suffix = f"{base}-{suffix}", suffix + 1
+    taken.add(candidate)
+    return candidate
+
+
+def _migrate_email_accounts(connection) -> None:
+    """Convert accounts from the former email-based schema to usernames."""
+    rows = connection.execute(
+        text('SELECT id, email, hashed_password, is_active FROM "user" ORDER BY email')
+    ).all()
+    taken: set[str] = set()
+    connection.execute(
+        text(
+            "CREATE TABLE user_new (id CHAR(36) NOT NULL PRIMARY KEY, "
+            "username VARCHAR(32) NOT NULL, hashed_password VARCHAR(1024) NOT NULL, "
+            "is_active BOOLEAN NOT NULL)"
+        )
+    )
+    for row in rows:
+        connection.execute(
+            text("INSERT INTO user_new VALUES (:id, :username, :hashed_password, :is_active)"),
+            {
+                "id": row.id,
+                "username": _username_from_email(row.email, taken),
+                "hashed_password": row.hashed_password,
+                "is_active": row.is_active,
+            },
+        )
+    connection.execute(text('DROP TABLE "user"'))
+    connection.execute(text('ALTER TABLE user_new RENAME TO "user"'))
+    connection.execute(text('CREATE UNIQUE INDEX ix_user_username ON "user" (username)'))
+
+
+def create_auth_tables() -> None:
+    with engine.begin() as connection:
+        inspector = inspect(connection)
+        if inspector.has_table("user") and "username" not in {
+            column["name"] for column in inspector.get_columns("user")
+        }:
+            _migrate_email_accounts(connection)
+    AuthBase.metadata.create_all(engine)
+
+
+def authenticated_owner(scope) -> str | None:
+    cookie_header = next(
+        (value.decode("latin-1") for name, value in scope.get("headers", []) if name == b"cookie"),
+        "",
+    )
+    cookie = SimpleCookie()
+    try:
+        cookie.load(cookie_header)
+    except CookieError:
+        return None
+    if COOKIE_NAME not in cookie:
+        return None
+    token = cookie[COOKIE_NAME].value
+    with Session(engine) as session:
+        result = session.execute(
+            select(User.id, AccessToken.created_at)
+            .join(AccessToken, AccessToken.user_id == User.id)
+            .where(AccessToken.token == token, User.is_active.is_(True))
+        ).first()
+        if not result:
+            return None
+        user_id, created = result
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - created >= timedelta(seconds=SESSION_SECONDS):
+            return None
+        return user_id

@@ -1,10 +1,12 @@
 """Friends page."""
 
-from nicegui import run, ui
-from sqlmodel import Session, select
+from nicegui import ui
+from sqlmodel import select
 
+from app import user_run as run
 from app.database import engine
 from app.models import Friend
+from app.ownership import UserSession as Session
 
 
 def _db_get_friends() -> list[dict]:

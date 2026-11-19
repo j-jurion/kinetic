@@ -3,6 +3,7 @@
 Run with:  python -m app.main
 """
 
+import os
 from functools import partial
 
 from fastapi import FastAPI
@@ -10,6 +11,10 @@ from nicegui import app as nicegui_app
 from nicegui import ui
 
 from app.api import router
+from app.auth import create_auth_tables, public_origin
+from app.auth import router as auth_router
+from app.auth_guard import AuthGuard, install_socket_guards
+from app.auth_pages import router as auth_pages_router
 from app.database import create_db_and_tables
 from app.pages.activities import activities_page
 from app.pages.activity_detail import activity_detail_page
@@ -18,11 +23,14 @@ from app.pages.best_efforts import best_efforts_page
 from app.pages.friends import friends_page
 from app.pages.graphs import graphs_page
 from app.pages.map import map_page
-from app.pages.sync import sync_page
+from app.pages.races import races_page
 from app.pages.top_activities import top_activities_page
 
 # ── FastAPI setup ─────────────────────────────────────────────────────────────
 fastapi_app = FastAPI(title="Kinetic API")
+fastapi_app.add_middleware(AuthGuard)
+fastapi_app.include_router(auth_pages_router)
+fastapi_app.include_router(auth_router)
 fastapi_app.include_router(router, prefix="/api")
 
 # ── Shared CSS ────────────────────────────────────────────────────────────────
@@ -80,7 +88,6 @@ async def _shell(title: str, dark_ref: list, content_fn):
                 ("Graphs", "bar_chart", "/graphs"),
                 ("Best Efforts", "emoji_events", "/best-efforts"),
                 ("Friends", "people", "/friends"),
-                ("Sync", "sync", "/sync"),
             ]
             for label, icon, path in nav_items:
                 with ui.item(
@@ -107,6 +114,20 @@ async def _shell(title: str, dark_ref: list, content_fn):
                 nicegui_app.storage.user["dark_mode"] = dark.value
 
             ui.button(icon="dark_mode", on_click=toggle_dark).props("flat round dense")
+
+            # Runs entirely in the browser: once the token is revoked, the socket guard
+            # rejects further events from this client, so no reply could reach the server.
+            ui.button("Sign out").props("flat").on(
+                "click",
+                js_handler="""() => {
+                    fetch('/auth/logout', {method: 'POST', credentials: 'same-origin'})
+                      .then(response => {
+                        if (response.ok) location.assign('/login');
+                        else alert('Sign out failed');
+                      })
+                      .catch(() => alert('Sign out failed'));
+                }""",
+            )
 
     with ui.page_sticky(position="top-right", x_offset=20, y_offset=70):
         pass  # reserved
@@ -183,8 +204,7 @@ async def page_friends_route():
 
 @ui.page("/sync")
 async def page_sync_route():
-    dark_ref = []
-    await _shell(title="Garmin Sync", dark_ref=dark_ref, content_fn=sync_page)
+    ui.label("Garmin sync is disabled until it supports separate accounts.")
 
 
 @ui.page("/activity/{activity_id}")
@@ -203,16 +223,29 @@ async def page_activity_detail(activity_id: int):
 @nicegui_app.on_startup
 async def startup():
     create_db_and_tables()
+    create_auth_tables()
 
 
 def main():
+    storage_secret = os.environ.get("KINETIC_STORAGE_SECRET")
+    if not storage_secret or len(storage_secret.strip()) < 32:
+        raise RuntimeError(
+            "Set KINETIC_STORAGE_SECRET to a securely generated value of at least 32 characters"
+        )
+    public_origin()
+
     ui.run_with(
         fastapi_app,
         title="Kinetic",
         favicon="⚡",
         dark=None,  # respect system preference initially
-        storage_secret="kinetic-secret-change-me",
+        storage_secret=storage_secret,
+        session_middleware_kwargs={
+            "https_only": os.environ.get("KINETIC_ALLOW_INSECURE_HTTP") != "1",
+            "same_site": "strict",
+        },
     )
+    install_socket_guards()
 
     import uvicorn
 

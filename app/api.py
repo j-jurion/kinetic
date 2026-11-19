@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -7,12 +8,13 @@ import folium
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlmodel import Session, col, select
+from sqlmodel import col, select
 
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
 from app.garmin_sync import UPLOAD_DIR
 from app.models import Activity, ActivityKind, BestEffort, Friend, Lap, SportType
+from app.ownership import UserSession as Session
 from app.ui_helpers import format_date, format_distance, format_pace
 
 router = APIRouter()
@@ -594,7 +596,7 @@ async def upload_fit(file: UploadFile) -> Activity:
     if not file.filename or not file.filename.endswith(".fit"):
         raise HTTPException(status_code=400, detail="Only .fit files are accepted")
 
-    dest = UPLOAD_DIR / file.filename
+    dest = UPLOAD_DIR / f"{uuid.uuid4().hex}.fit"
     async with aiofiles.open(dest, "wb") as f:
         await f.write(await file.read())
 

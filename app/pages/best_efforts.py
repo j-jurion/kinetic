@@ -3,11 +3,13 @@
 from datetime import datetime
 from typing import Optional
 
-from nicegui import run, ui
-from sqlmodel import Session, col, select
+from nicegui import ui
+from sqlmodel import col, select
 
+from app import user_run as run
 from app.database import engine
 from app.models import Activity, BestEffort, SportType
+from app.ownership import UserSession as Session
 from app.pages.top_activities import (
     TOP_METRICS,
     db_get_top_activities,
