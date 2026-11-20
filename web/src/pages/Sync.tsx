@@ -10,8 +10,9 @@ import {
 } from '@mui/material'
 import { api } from '../lib/api'
 import { formatDate, parseDateInput } from '../lib/format'
-import { StatTile } from '../components/fields'
+import { Stat } from '../components/fields'
 import { Icon } from '../components/icons'
+import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
 
 interface Status {
@@ -37,7 +38,7 @@ function DateField({ label, value, onChange }: { label: string; value: string; o
       variant="outlined"
       size="small"
       onChange={(e) => onChange(e.target.value)}
-      sx={{ width: 250 }}
+      sx={{ flex: '1 1 220px', minWidth: 0 }}
       slotProps={{
         input: {
           endAdornment: (
@@ -205,136 +206,143 @@ export function SyncPage() {
 
   return (
     <>
-      <div className="card w-full q-pa-md q-mb-md gap-0">
-        <div className="row items-center gap-3 q-mb-md">
-          <Icon
-            name={status.authenticated ? 'check_circle' : 'error'}
-            size={24}
-            className={status.authenticated ? 'text-positive' : 'text-negative'}
-          />
-          <span>
-            {status.authenticated
-              ? status.email
-                ? `Logged in as ${status.email}`
-                : 'Garmin tokens cached — ready to sync'
-              : 'Not authenticated — enter credentials below'}
-          </span>
-          {status.authenticated && (
-            <Button size="small" color="error" startIcon={<Icon name="logout" size={18} />} onClick={logout}>
-              Log out
+      <PageHeader icon="sync" kicker="Import" title="Garmin Sync" subtitle="Connect your Garmin account and pull in new activities." />
+
+      <div className="sync-grid">
+        <div className="card">
+          <div className="card-heading">
+            <span className="card-heading-icon">
+              <Icon name="watch" size={22} />
+            </span>
+            <div className="column gap-0 flex-1 min-w-0">
+              <span className="card-title">Garmin Connect</span>
+              <span className="text-caption text-grey-6 ellipsis">
+                {status.authenticated
+                  ? status.email
+                    ? `Logged in as ${status.email}`
+                    : 'Garmin tokens cached — ready to sync'
+                  : 'Enter your credentials to connect'}
+              </span>
+            </div>
+            <span className={`status-pill ${status.authenticated ? 'status-pill--ok' : 'status-pill--off'}`}>
+              <Icon name={status.authenticated ? 'check_circle' : 'error_outline'} size={16} />
+              {status.authenticated ? 'Connected' : 'Not connected'}
+            </span>
+          </div>
+
+          <div className="column w-full gap-3">
+            <TextField
+              label="Garmin email"
+              variant="outlined"
+              size="small"
+              fullWidth
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="off"
+              slotProps={{
+                input: email
+                  ? {
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton size="small" onClick={() => setEmail('')} aria-label="Clear">
+                            <Icon name="cancel" size={18} />
+                          </IconButton>
+                        </InputAdornment>
+                      ),
+                    }
+                  : undefined,
+              }}
+            />
+            <TextField
+              label="Password (not stored)"
+              variant="outlined"
+              size="small"
+              fullWidth
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="off"
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setShowPassword((s) => !s)} aria-label="Show password">
+                        <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                      </IconButton>
+                    </InputAdornment>
+                  ),
+                },
+              }}
+            />
+          </div>
+
+          <div className="row items-center gap-3 w-full">
+            <Button
+              variant="outlined"
+              startIcon={authBusy ? <CircularProgress size={16} /> : <Icon name="login" size={18} />}
+              onClick={authenticate}
+              disabled={authBusy}
+            >
+              Authenticate
             </Button>
+            {status.authenticated && (
+              <Button color="error" startIcon={<Icon name="logout" size={18} />} onClick={logout}>
+                Log out
+              </Button>
+            )}
+            <span className="text-caption text-grey-6">{authStatus}</span>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-heading">
+            <span className="card-heading-icon">
+              <Icon name="cloud_download" size={22} />
+            </span>
+            <div className="column gap-0 flex-1 min-w-0">
+              <span className="card-title">Sync activities</span>
+              <span className="text-caption text-grey-6">Activities already imported are skipped.</span>
+            </div>
+          </div>
+          <div className="row items-center gap-3 w-full">
+            <DateField label="Sync since (dd-mm-yyyy)" value={since} onChange={setSince} />
+            <DateField label="Until (optional)" value={until} onChange={setUntil} />
+          </div>
+          <Button
+            variant="contained"
+            startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : <Icon name="sync" size={18} />}
+            onClick={sync}
+            disabled={syncing}
+          >
+            {syncing ? 'Syncing…' : 'Sync now'}
+          </Button>
+
+          {progress.length > 0 && (
+            <div className="console">
+              {progress.map((line, i) => (
+                <div key={i} className="console-line">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {result && (
+            <div className="column w-full gap-2">
+              <span className="card-label">Sync complete</span>
+              <div className="stat-grid">
+                <Stat label="Imported" value={result.imported} valueClass="text-positive" />
+                <Stat label="Skipped" value={result.skipped} valueClass="text-grey-6" />
+                <Stat label="Errors" value={result.errors.length} valueClass={result.errors.length ? 'text-negative' : 'text-grey-6'} />
+              </div>
+              {result.errors.map((err, i) => (
+                <div key={i} className="text-caption text-negative">
+                  • {err}
+                </div>
+              ))}
+            </div>
           )}
         </div>
-
-        <div className="text-h6 text-weight-bold">Garmin Connect</div>
-        <div className="separator q-my-sm" />
-
-        <div className="row items-start gap-4 flex-wrap q-mt-sm">
-          <TextField
-            label="Garmin email"
-            variant="outlined"
-            size="small"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            sx={{ width: 280 }}
-            autoComplete="off"
-            slotProps={{
-              input: email
-                ? {
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton size="small" onClick={() => setEmail('')} aria-label="Clear">
-                          <Icon name="cancel" size={18} />
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }
-                : undefined,
-            }}
-          />
-          <TextField
-            label="Password (not stored)"
-            variant="outlined"
-            size="small"
-            type={showPassword ? 'text' : 'password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            sx={{ width: 280 }}
-            autoComplete="off"
-            slotProps={{
-              input: {
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setShowPassword((s) => !s)} aria-label="Show password">
-                      <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              },
-            }}
-          />
-        </div>
-
-        <div className="row items-center gap-3 q-mt-md">
-          <Button
-            variant="outlined"
-            startIcon={authBusy ? <CircularProgress size={16} /> : <Icon name="login" size={18} />}
-            onClick={authenticate}
-            disabled={authBusy}
-          >
-            Authenticate
-          </Button>
-          <span className="text-caption text-grey-6">{authStatus}</span>
-        </div>
-      </div>
-
-      <div className="card w-full q-pa-md gap-0">
-        <div className="text-h6 text-weight-bold q-mb-sm">Sync Activities</div>
-        <div className="separator q-my-sm" />
-        <div className="row items-center gap-4 q-mb-md flex-wrap q-mt-sm">
-          <DateField label="Sync since (dd-mm-yyyy)" value={since} onChange={setSince} />
-          <DateField label="Until (optional, dd-mm-yyyy)" value={until} onChange={setUntil} />
-        </div>
-        <Button
-          variant="contained"
-          startIcon={syncing ? <CircularProgress size={16} color="inherit" /> : <Icon name="sync" size={18} />}
-          onClick={sync}
-          disabled={syncing}
-        >
-          Sync
-        </Button>
-
-        {progress.length > 0 && (
-          <div className="column w-full gap-0 q-mt-md">
-            {progress.map((line, i) => (
-              <div key={i} className="text-caption text-grey-7">
-                › {line}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {result && (
-          <div className="card w-full q-pa-md q-mt-md gap-0">
-            <div className="text-h6 text-weight-bold q-mb-sm">Sync complete</div>
-            <div className="row gap-6 q-mb-sm">
-              <StatTile label="Imported" value={result.imported} valueClass="text-positive" />
-              <StatTile label="Skipped" value={result.skipped} valueClass="text-grey-6" />
-              <StatTile label="Errors" value={result.errors.length} valueClass={result.errors.length ? 'text-negative' : 'text-grey-6'} />
-            </div>
-            {result.errors.length > 0 && (
-              <>
-                <div className="separator q-my-sm" />
-                <div className="text-subtitle2 q-mb-xs">Errors</div>
-                {result.errors.map((err, i) => (
-                  <div key={i} className="text-caption text-negative">
-                    • {err}
-                  </div>
-                ))}
-              </>
-            )}
-          </div>
-        )}
       </div>
 
       <Dialog open={mfaOpen} onClose={() => setMfaOpen(false)}>

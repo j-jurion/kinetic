@@ -1,6 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
-import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 import type { Data, Layout } from 'plotly.js-dist-min'
 import { api, qs } from '../lib/api'
 import {
@@ -34,7 +32,9 @@ import type { Metric, MetricConfig } from '../lib/graphs'
 import { formatClock, heartRateAxis, paceAxis } from '../lib/speed'
 import type { BestEffortRow, GraphPoint, GraphStats } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
+import { ChartCard, Toggle } from '../components/ChartCard'
 import { SelectField, SportSelect, YearSelect } from '../components/fields'
+import { PageHeader } from '../components/PageHeader'
 import { Plot, noDataLayout } from '../components/Plot'
 
 // Colours for the earlier years on the year-over-year chart; the highlighted year uses the sport colour
@@ -45,40 +45,6 @@ const PACE_WINDOW = 10
 type Chart = [Data[], Partial<Layout>]
 type Period = 'weekly' | 'monthly' | 'yearly'
 type Breakdown = 'sport' | 'kind'
-
-/** A chart card with an optional row of controls above the chart. */
-function ChartCard({ controls, children }: { controls?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="card w-full q-pa-sm gap-0">
-      {controls && <div className="row items-center justify-end w-full gap-2 q-pa-xs">{controls}</div>}
-      {children}
-    </div>
-  )
-}
-
-function Toggle<T extends string>({ value, options, onChange, label }: {
-  value: T
-  options: [T, string][]
-  onChange: (value: T) => void
-  label: string
-}) {
-  return (
-    <ToggleButtonGroup
-      exclusive
-      size="small"
-      color="primary"
-      value={value}
-      aria-label={label}
-      onChange={(_, next: T | null) => next && onChange(next)}
-    >
-      {options.map(([key, text]) => (
-        <ToggleButton key={key} value={key} sx={{ px: 1.5, py: 0.25 }}>
-          {text}
-        </ToggleButton>
-      ))}
-    </ToggleButtonGroup>
-  )
-}
 
 const hoverFor = (mc: MetricConfig, x: string) =>
   `<b>${x}</b><br>${mc.label}: %{y:${mc.fmt}}${mc.unit ? ` ${mc.unit}` : ''}<extra></extra>`
@@ -251,7 +217,7 @@ function DistanceResultsCard({ sport, year }: { sport: string; year: number | nu
         <Plot data={chart[0]} layout={chart[1]} style={{ height: 360 }} />
       ) : (
         efforts && (
-          <div className="column items-center w-full q-pa-xl gap-0">
+          <div className="column items-center w-full q-pa-xl gap-1 text-center">
             <div className="text-subtitle1 text-weight-medium">Distance results</div>
             <div className="text-grey-6">
               No {sportLabel(resultsSport).toLowerCase()} best efforts{year ? ` in ${year}` : ''} yet.
@@ -417,9 +383,7 @@ export function GraphsPage() {
 
   return (
     <>
-      <div className="row items-center justify-between w-full q-mb-md flex-wrap gap-3">
-        <div className="text-h5 text-weight-bold">Graphs</div>
-        <div className="row gap-2">
+      <PageHeader icon="bar_chart" kicker="Insights" title="Graphs" subtitle="Volume, trends and progress over time.">
           <SportSelect value={sport} onChange={setSport} />
           <YearSelect value={year} onChange={setYear} />
           <SelectField
@@ -434,8 +398,7 @@ export function GraphsPage() {
             ]}
             onChange={(v) => setMetric(v as Metric)}
           />
-        </div>
-      </div>
+      </PageHeader>
 
       {charts && (
         <div className="column w-full gap-4">
@@ -483,7 +446,7 @@ export function GraphsPage() {
             {charts.pace ? (
               <Plot data={charts.pace[0]} layout={charts.pace[1]} style={{ height: 360 }} />
             ) : (
-              <div className="column items-center w-full q-pa-xl gap-0">
+              <div className="column items-center w-full q-pa-xl gap-1 text-center">
                 <div className="text-subtitle1 text-weight-medium">Pace &amp; Heart Rate</div>
                 <div className="text-grey-6">Pick a sport to see how your pace and heart rate develop.</div>
               </div>

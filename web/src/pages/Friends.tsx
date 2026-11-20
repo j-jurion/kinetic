@@ -1,9 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Avatar, Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
+import { Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
 import { api } from '../lib/api'
 import type { Friend } from '../lib/types'
+import { EmptyCard } from '../components/fields'
 import { Icon } from '../components/icons'
+import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
+
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg, #fb923c, #ea580c)',
+  'linear-gradient(135deg, #60a5fa, #2563eb)',
+  'linear-gradient(135deg, #34d399, #059669)',
+  'linear-gradient(135deg, #a78bfa, #7c3aed)',
+  'linear-gradient(135deg, #f472b6, #db2777)',
+  'linear-gradient(135deg, #2dd4bf, #0f766e)',
+]
+
+/** A stable colour per name, so each friend keeps the same avatar. */
+function avatarColor(name: string): string {
+  let hash = 0
+  for (const ch of name) hash = (hash * 31 + ch.charCodeAt(0)) | 0
+  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length]
+}
 
 export function FriendsPage() {
   const notify = useNotify()
@@ -33,29 +51,29 @@ export function FriendsPage() {
 
   return (
     <>
-      <div className="row items-center justify-between w-full q-mb-md">
-        <div className="text-h5 text-weight-bold">Friends</div>
+      <PageHeader icon="people" kicker="Training partners" title="Friends" subtitle="People you train with. Tag them on an activity from its detail page.">
         <Button
           variant="contained"
-          size="small"
           startIcon={<Icon name="person_add" size={20} />}
           onClick={() => {
             setName('')
             setAdding(true)
           }}
         >
-          + Add Friend
+          Add friend
         </Button>
-      </div>
+      </PageHeader>
 
-      <div className="column w-full gap-3">
-        {friends?.length === 0 && <div className="text-grey-6 q-mt-lg">No friends added yet.</div>}
+      {friends?.length === 0 && <EmptyCard icon="group_add">No friends added yet.</EmptyCard>}
+      <div className="friend-grid">
         {friends?.map((f) => (
-          <div key={f.id} className="card w-full q-pa-sm">
-            <div className="row items-center justify-between no-wrap w-full">
-              <div className="row items-center no-wrap gap-3">
-                <Avatar sx={{ bgcolor: 'primary.main', color: '#fff' }}>{f.name[0]?.toUpperCase()}</Avatar>
-                <span className="text-weight-medium text-body1">{f.name}</span>
+          <div key={f.id} className="card friend-card">
+              <span className="friend-avatar" style={{ background: avatarColor(f.name) }}>
+                {f.name[0]?.toUpperCase()}
+              </span>
+              <div className="column gap-0 flex-1 min-w-0">
+                <span className="text-weight-bold text-body1 ellipsis">{f.name}</span>
+                {f.email && <span className="text-caption text-grey-6 ellipsis">{f.email}</span>}
               </div>
               <IconButton
                 size="small"
@@ -68,7 +86,6 @@ export function FriendsPage() {
               >
                 <Icon name="delete" size={18} />
               </IconButton>
-            </div>
           </div>
         ))}
       </div>

@@ -4,10 +4,10 @@ import { ToggleButton, ToggleButtonGroup } from '@mui/material'
 /** A chart card with an optional row of controls above the chart and a caption below it. */
 export function ChartCard({ controls, caption, children }: { controls?: ReactNode; caption?: ReactNode; children: ReactNode }) {
   return (
-    <div className="card w-full q-pa-sm gap-0">
-      {controls && <div className="row items-center justify-end w-full gap-2 q-pa-xs">{controls}</div>}
+    <div className="card w-full chart-card">
+      {controls && <div className="chart-card-controls">{controls}</div>}
       {children}
-      {caption && <div className="text-caption text-grey-6" style={{ padding: '0 8px 4px' }}>{caption}</div>}
+      {caption && <div className="chart-card-caption">{caption}</div>}
     </div>
   )
 }

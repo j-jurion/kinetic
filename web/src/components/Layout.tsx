@@ -6,16 +6,32 @@ import { useDarkMode } from '../theme'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 
-const NAV_ITEMS: [string, string, string][] = [
-  ['Activities', 'list', '/'],
-  ['Races', 'flag', '/races'],
-  ['Map', 'map', '/map'],
-  ['Graphs', 'bar_chart', '/graphs'],
-  ['Training', 'monitor_heart', '/training'],
-  ['Best Efforts', 'emoji_events', '/best-efforts'],
-  ['Friends', 'people', '/friends'],
-  ['Sync', 'sync', '/sync'],
+const NAV_SECTIONS: [string, [string, string, string][]][] = [
+  [
+    'Log',
+    [
+      ['Activities', 'list', '/'],
+      ['Races', 'flag', '/races'],
+      ['Map', 'map', '/map'],
+    ],
+  ],
+  [
+    'Insights',
+    [
+      ['Graphs', 'bar_chart', '/graphs'],
+      ['Training', 'monitor_heart', '/training'],
+      ['Best Efforts', 'emoji_events', '/best-efforts'],
+    ],
+  ],
+  [
+    'Account',
+    [
+      ['Friends', 'people', '/friends'],
+      ['Sync', 'sync', '/sync'],
+    ],
+  ],
 ]
+const NAV_ITEMS = NAV_SECTIONS.flatMap(([, items]) => items)
 
 function pageTitle(path: string): string {
   if (path === '/') return 'Activities'
@@ -56,36 +72,49 @@ export function Layout() {
           <IconButton className="menu-button" size="small" onClick={() => setDrawerOpen((o) => !o)} aria-label="Menu">
             <Icon name="menu" />
           </IconButton>
-          <Icon name="bolt" size={24} className="text-primary" />
-          <div className="text-h6 text-weight-bold">Kinetic</div>
-          <div className="separator separator--vertical" style={{ opacity: 0.3, margin: '0 8px' }} />
-          <div className="text-body1 text-weight-medium">{title}</div>
+          <NavLink to="/" className="brand" aria-label="Kinetic home">
+            <span className="brand-mark">
+              <Icon name="bolt" size={22} />
+            </span>
+            <span className="brand-name">Kinetic</span>
+          </NavLink>
+          {title && (
+            <>
+              <Icon name="chevron_right" size={18} className="text-grey-5 header-crumb-sep" />
+              <span className="header-crumb">{title}</span>
+            </>
+          )}
         </div>
         <div className="row items-center no-wrap gap-2">
           <IconButton size="small" onClick={toggle} aria-label={dark ? 'Light mode' : 'Dark mode'} color="inherit">
-            <Icon name="dark_mode" />
+            <Icon name={dark ? 'light_mode' : 'dark_mode'} size={20} />
           </IconButton>
-          <Button color="inherit" onClick={signOut}>
+          <Button color="inherit" size="small" startIcon={<Icon name="logout" size={18} />} onClick={signOut}>
             Sign out
           </Button>
         </div>
       </header>
 
       <nav className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-label="Main navigation">
-        {NAV_ITEMS.map(([label, icon, to]) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={to === '/'}
-            className={({ isActive }) => {
-              const active =
-                isActive || (to === '/' && location.pathname.startsWith('/activity/'))
-              return `nav-item ${active ? 'active' : ''}`
-            }}
-          >
-            <Icon name={icon} />
-            <span>{label}</span>
-          </NavLink>
+        {NAV_SECTIONS.map(([section, items]) => (
+          <div key={section}>
+            <div className="nav-section-label">{section}</div>
+            {items.map(([label, icon, to]) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) => {
+                  const active =
+                    isActive || (to === '/' && location.pathname.startsWith('/activity/'))
+                  return `nav-item ${active ? 'active' : ''}`
+                }}
+              >
+                <Icon name={icon} />
+                <span>{label}</span>
+              </NavLink>
+            ))}
+          </div>
         ))}
       </nav>
       <div className={`drawer-backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
