@@ -14,6 +14,37 @@ interface PlotProps {
   onUnhover?: () => void
 }
 
+const LIGHT = {
+  text: '#111827',
+  muted: '#6b7280',
+  grid: '#eef0f3',
+  zeroline: '#d1d5db',
+  tooltip: '#ffffff',
+  tooltipBorder: '#e5e7eb',
+  surface: '#ffffff',
+}
+const DARK = {
+  text: '#f3f4f6',
+  muted: '#9ca3af',
+  grid: 'rgba(255,255,255,0.07)',
+  zeroline: 'rgba(255,255,255,0.2)',
+  tooltip: '#1d2129',
+  tooltipBorder: 'rgba(255,255,255,0.12)',
+  surface: '#171a21',
+}
+
+/**
+ * Bars without outlines, so the rounded corners stay clean, and pie slices split by a thin
+ * line in the card colour. An explicit outline is kept.
+ */
+function modernTrace(trace: Data, surface: string): Data {
+  if (trace.type !== 'bar' && trace.type !== 'pie') return trace
+  const marker = (trace.marker ?? {}) as { line?: { width?: number } }
+  if (marker.line?.width) return trace
+  const line = trace.type === 'bar' ? { width: 0 } : { color: surface, width: 2 }
+  return { ...trace, marker: { ...marker, line: { ...marker.line, ...line } } } as Data
+}
+
 /** A Plotly chart, like ui.plotly(); follows the light/dark theme. */
 export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
   const ref = useRef<HTMLDivElement>(null)
@@ -28,25 +59,49 @@ export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
   useEffect(() => {
     const el = ref.current
     if (!el) return
-    const fontColor = dark ? '#e5e7eb' : '#444'
-    const gridColor = dark ? 'rgba(255,255,255,0.12)' : '#eee'
+    const theme = dark ? DARK : LIGHT
     // Theme every axis, including extra ones such as yaxis2 in stacked or dual-axis charts
     const axes: Record<string, object> = { xaxis: {}, yaxis: {} }
     for (const [key, value] of Object.entries(layout)) {
       if (/^[xy]axis\d*$/.test(key)) axes[key] = value as object
     }
     const themedAxes = Object.fromEntries(
-      Object.entries(axes).map(([key, value]) => [key, { gridcolor: gridColor, ...value }]),
+      Object.entries(axes).map(([key, value]) => [
+        key,
+        {
+          gridcolor: theme.grid,
+          zerolinecolor: theme.zeroline,
+          linecolor: theme.grid,
+          tickfont: { color: theme.muted, size: 11 },
+          title: { font: { color: theme.muted, size: 12 } },
+          ...value,
+        },
+      ]),
     )
+    // A chart title, left-aligned and bolder, like the card titles around it
+    const title =
+      typeof layout.title === 'object' && layout.title?.text
+        ? { x: 0.01, xanchor: 'left' as const, ...layout.title, font: { size: 15, weight: 600, color: theme.text, ...layout.title.font } }
+        : layout.title
     Plotly.react(
       el,
-      data,
+      data.map((trace) => modernTrace(trace, theme.surface)),
       {
         plot_bgcolor: 'rgba(0,0,0,0)',
         paper_bgcolor: 'rgba(0,0,0,0)',
+        // Rounded bars with some air between them; stacks are rounded at their ends only
+        barcornerradius: 5,
+        bargap: 0.3,
+        hoverlabel: {
+          bgcolor: theme.tooltip,
+          bordercolor: theme.tooltipBorder,
+          font: { family: 'Inter, sans-serif', size: 12, color: theme.text },
+        },
         ...layout,
         ...themedAxes,
-        font: { family: 'Inter, sans-serif', color: fontColor, ...(layout.font ?? {}) },
+        title,
+        legend: { font: { size: 11, color: theme.muted }, ...layout.legend },
+        font: { family: 'Inter, sans-serif', color: theme.text, ...(layout.font ?? {}) },
         autosize: true,
       },
       // No "share chart" button: it would upload the chart's data to Plotly's cloud service

@@ -6,6 +6,7 @@ import { breakdownEvents } from '../lib/performance'
 import type { MultisportEvent, RaceRow } from '../lib/types'
 import { EmptyCard } from '../components/fields'
 import { MultisportMarker, SportIcon } from '../components/icons'
+import { PageHeader } from '../components/PageHeader'
 import '../styles/races.css'
 
 // Plotly is large: the multisport charts load only when there are such races
@@ -32,13 +33,16 @@ export function RacesPage() {
 
   return (
     <>
-      <div className="row items-center justify-between w-full q-mb-md">
-        <div className="text-h5 text-weight-bold">Races</div>
-        <div className="text-caption text-grey-6">{results.length} results</div>
-      </div>
+      <PageHeader
+        variant="race"
+        icon="flag"
+        kicker="Race results"
+        title="Races"
+        subtitle={`${results.length} ${results.length === 1 ? 'result' : 'results'} on record — official times, rankings and splits.`}
+      />
 
       {multisport.length > 0 && (
-        <div className="w-full q-mb-md">
+        <div className="w-full">
           <Suspense fallback={<div style={{ height: 160 + 44 * multisport.length }} />}>
             <RaceBreakdownCharts events={multisport} />
           </Suspense>

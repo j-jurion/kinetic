@@ -1,4 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, IconButton, MenuItem, TextField } from '@mui/material'
 import { api } from '../lib/api'
@@ -18,6 +19,7 @@ import {
   sportLabel,
 } from '../lib/format'
 import { createHoverBus } from '../lib/hoverBus'
+import { routeLegs } from '../lib/performance'
 import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
@@ -32,11 +34,11 @@ import '../styles/detail.css'
 // The charts pull in Plotly (several MB), so they load only once an activity is opened
 const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
 
-function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
+function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="card q-pa-md items-center gap-0" style={{ minWidth: 96 }}>
-      <div className="text-h6 text-weight-bold" style={{ color }}>{value}</div>
-      <div className="text-caption text-grey-6">{label}</div>
+    <div className="stat">
+      <div className="stat-label">{label}</div>
+      <div className="stat-value" style={{ color }}>{value}</div>
     </div>
   )
 }
@@ -215,7 +217,7 @@ function FriendsCard({ activityId, current, onChange }: { activityId: number; cu
 
   return (
     <div className="card w-full q-pa-md q-mb-md gap-0">
-      <div className="text-caption text-grey-6 q-mb-sm">Friends</div>
+      <div className="card-label q-mb-sm">Friends</div>
       <div className="row items-center flex-wrap gap-2">
         {current.map((f) => (
           <span key={f.id} className="friend-pill">
@@ -287,6 +289,15 @@ export function ActivityDetailPage() {
     )
   }, [activityId, latestStreams])
 
+  // A multisport event's route is coloured per leg, like its breakdown bar
+  const legs = useMemo(
+    () =>
+      detail && detail !== 'missing' && detail.children.length >= 2
+        ? routeLegs(detail.activity.date, detail.children, sportLabel)
+        : undefined,
+    [detail],
+  )
+
   if (detail === 'missing' || Number.isNaN(activityId)) {
     return (
       <div className="column items-center q-mt-xl w-full gap-0">
@@ -306,23 +317,50 @@ export function ActivityDetailPage() {
   return (
     <div className="column w-full gap-0">
       {/* Header */}
-      <div className="row items-center no-wrap gap-3 w-full q-mb-md">
-        <IconButton size="small" onClick={() => navigate(-1)} aria-label="Back">
-          <Icon name="arrow_back" />
-        </IconButton>
-        <SportIcon sport={sport} size={32} />
-        <div className="column gap-0 flex-1">
-          <div className="text-h5 text-weight-bold">{a.name}</div>
-          <div className="text-caption text-grey-6">
-            {formatDate(a.date)}&nbsp;&nbsp;•&nbsp;&nbsp;{kindLabel(a.kind)}&nbsp;&nbsp;•&nbsp;&nbsp;{sportLabel(sport)}
+      <div className="card activity-hero q-mb-md" style={{ '--accent': color } as CSSProperties}>
+        <div className="row items-center no-wrap gap-3 w-full">
+          <IconButton size="small" onClick={() => navigate(-1)} aria-label="Back">
+            <Icon name="arrow_back" />
+          </IconButton>
+          <span className="sport-badge">
+            <SportIcon sport={sport} size={30} />
+          </span>
+          <div className="column gap-0 flex-1 min-w-0">
+            <h1 className="activity-hero-title">{a.name}</h1>
+            <div className="activity-sub">
+              <span>{formatDate(a.date)}</span>
+              <span className="kind-chip" data-kind={a.kind}>
+                {kindLabel(a.kind)}
+              </span>
+              <span>{sportLabel(sport)}</span>
+            </div>
+          </div>
+          <div className="row no-wrap gap-0 shrink-0">
+            <IconButton size="small" onClick={() => setEditing(true)} aria-label="Edit">
+              <Icon name="edit" />
+            </IconButton>
+            <IconButton size="small" color="error" onClick={() => setDeleting(true)} aria-label="Delete">
+              <Icon name="delete" />
+            </IconButton>
           </div>
         </div>
-        <IconButton size="small" onClick={() => setEditing(true)} aria-label="Edit">
-          <Icon name="edit" />
-        </IconButton>
-        <IconButton size="small" color="error" onClick={() => setDeleting(true)} aria-label="Delete">
-          <Icon name="delete" />
-        </IconButton>
+        <div className="stat-grid">
+          {!!dist && <StatCard label="Distance" value={formatDistance(dist, sport)} />}
+          <StatCard label="Duration" value={formatDuration(dur)} />
+          {!!dist && !!dur && <StatCard label="Pace" value={formatPace(dist, dur, sport)} />}
+          {!!a.avg_heart_rate && <StatCard label="Avg HR" value={`${a.avg_heart_rate} bpm`} color="#ef4444" />}
+          {!!a.max_heart_rate && <StatCard label="Max HR" value={`${a.max_heart_rate} bpm`} color="#ef4444" />}
+          {!!a.elevation_gain_meters && <StatCard label="Elevation" value={`${a.elevation_gain_meters.toFixed(0)} m`} color="#10b981" />}
+          {!!a.calories && <StatCard label="Calories" value={`${a.calories} kcal`} color="#f59e0b" />}
+          {!!a.avg_cadence && (
+            <StatCard
+              label="Cadence"
+              value={`${stepsPerMinute(a.avg_cadence, sport)} ${cadenceUnit(sport)}`}
+              color="#8b5cf6"
+            />
+          )}
+          {!!a.avg_power && <StatCard label="Power" value={`${a.avg_power} W`} color="#3b82f6" />}
+        </div>
       </div>
 
       {/* Multisport navigation */}
@@ -335,7 +373,7 @@ export function ActivityDetailPage() {
       )}
       {detail.children.length > 0 && (
         <div className="card w-full q-pa-md q-mb-md gap-0">
-          <div className="text-caption text-grey-6 q-mb-sm">Sub-activities</div>
+          <div className="card-label q-mb-sm">Sub-activities</div>
           <div className="row gap-2 flex-wrap">
             {detail.children.map((child) => {
               const childColor = sportColor(child.sport, '#6b7280')
@@ -360,25 +398,6 @@ export function ActivityDetailPage() {
       )}
       {detail.children.length >= 2 && <ActivityBreakdown activity={a} raceResult={detail.race_result} />}
 
-      {/* Stats */}
-      <div className="row flex-wrap gap-3 q-mb-md">
-        {!!dist && <StatCard label="Distance" value={formatDistance(dist, sport)} color={color} />}
-        <StatCard label="Duration" value={formatDuration(dur)} color={color} />
-        {!!dist && !!dur && <StatCard label="Pace" value={formatPace(dist, dur, sport)} color={color} />}
-        {!!a.avg_heart_rate && <StatCard label="Avg HR" value={`${a.avg_heart_rate} bpm`} color="#ef4444" />}
-        {!!a.max_heart_rate && <StatCard label="Max HR" value={`${a.max_heart_rate} bpm`} color="#ef4444" />}
-        {!!a.elevation_gain_meters && <StatCard label="Elevation" value={`${a.elevation_gain_meters.toFixed(0)} m`} color="#10b981" />}
-        {!!a.calories && <StatCard label="Calories" value={`${a.calories} kcal`} color="#f59e0b" />}
-        {!!a.avg_cadence && (
-          <StatCard
-            label="Cadence"
-            value={`${stepsPerMinute(a.avg_cadence, sport)} ${cadenceUnit(sport)}`}
-            color="#8b5cf6"
-          />
-        )}
-        {!!a.avg_power && <StatCard label="Power" value={`${a.avg_power} W`} color="#3b82f6" />}
-      </div>
-
       <RaceResultsCard
         activity={a}
         result={detail.race_result}
@@ -391,7 +410,7 @@ export function ActivityDetailPage() {
 
       {a.has_route && (
         <div className="card w-full q-mb-md" style={{ padding: 0, overflow: 'hidden' }}>
-          <RouteMap activityId={activityId} sport={sport} streams={streams} hoverBus={hoverBus} />
+          <RouteMap activityId={activityId} sport={sport} streams={streams} hoverBus={hoverBus} legs={legs} />
         </div>
       )}
 
@@ -406,17 +425,16 @@ export function ActivityDetailPage() {
 
       {a.notes && (
         <div className="card w-full q-pa-md q-mb-md gap-0">
-          <div className="text-caption text-grey-6 q-mb-xs">Notes</div>
+          <div className="card-label q-mb-xs">Notes</div>
           <div className="text-body1" style={{ whiteSpace: 'pre-wrap' }}>{a.notes}</div>
         </div>
       )}
 
       {detail.laps.length > 0 && (
         <>
-          <div className="text-h6 text-weight-bold q-mb-sm">Laps</div>
-          <div className="card w-full q-mb-md" style={{ padding: 0, boxShadow: 'none' }}>
+          <div className="card w-full q-mb-md gap-2" style={{ padding: '14px 14px 6px' }}>
+            <div className="card-title" style={{ paddingLeft: 2 }}>Laps</div>
             <DataTable
-              bordered
               rows={detail.laps}
               rowKey={(lap) => lap.lap_number}
               columns={[

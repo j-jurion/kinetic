@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { InputAdornment, MenuItem, TextField } from '@mui/material'
 import { sportFilterOptions, yearOptions } from '../lib/format'
 import { Icon } from './icons'
@@ -21,9 +21,9 @@ export function SelectField({
   options,
   onChange,
   width = 144,
-  variant = 'standard',
+  variant = 'outlined',
   prependIcon,
-  className,
+  className = 'filter-field',
 }: SelectFieldProps) {
   return (
     <TextField
@@ -113,7 +113,7 @@ export function SportSelect(props: {
   )
 }
 
-/** Big number with a caption underneath, used in summary cards. */
+/** Big number with a caption underneath, used in the best-effort summary cards. */
 export function StatTile({ label, value, valueClass = 'text-primary' }: { label: string; value: ReactNode; valueClass?: string }) {
   return (
     <div className="column items-center gap-0">
@@ -123,12 +123,24 @@ export function StatTile({ label, value, valueClass = 'text-primary' }: { label:
   )
 }
 
-/** A centred message card for empty states. */
-export function EmptyCard({ icon, iconClass = 'text-grey-4', children }: { icon: string; iconClass?: string; children: ReactNode }) {
+/** A labelled number in a soft tile, used in summary rows (wrap several in a `.stat-grid`). */
+export function Stat({ label, value, valueClass = '', style }: { label: string; value: ReactNode; valueClass?: string; style?: CSSProperties }) {
   return (
-    <div className="card w-full q-pa-lg items-center gap-0">
-      <Icon name={icon} size={48} className={iconClass} />
-      <div className="text-grey-6 q-mt-sm">{children}</div>
+    <div className="stat" style={style}>
+      <div className="stat-label">{label}</div>
+      <div className={`stat-value ${valueClass}`}>{value}</div>
+    </div>
+  )
+}
+
+/** A centred message card for empty states. */
+export function EmptyCard({ icon, iconClass = '', children }: { icon: string; iconClass?: string; children: ReactNode }) {
+  return (
+    <div className="card w-full empty-state">
+      <span className={`empty-state-icon ${iconClass}`}>
+        <Icon name={icon} size={30} />
+      </span>
+      <div className="text-grey-6">{children}</div>
     </div>
   )
 }

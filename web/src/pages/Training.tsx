@@ -36,7 +36,8 @@ import type { FormBand, Range, RunValue } from '../lib/training'
 import type { TrainingActivity, TrainingOverview } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ChartCard, Toggle } from '../components/ChartCard'
-import { StatTile } from '../components/fields'
+import { Stat } from '../components/fields'
+import { PageHeader, SectionHeading } from '../components/PageHeader'
 import { Icon } from '../components/icons'
 import { useNotify } from '../components/Notify'
 import { Plot } from '../components/Plot'
@@ -80,10 +81,6 @@ interface Progress {
 }
 
 const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(Math.round(n))}`
-
-function SectionTitle({ children }: { children: string }) {
-  return <div className="text-h6 text-weight-bold q-mt-sm">{children}</div>
-}
 
 /** "Zones and load use max HR 192 bpm (watch) and threshold 175 bpm (watch)". */
 function thresholdText(t: TrainingOverview['thresholds']): string | null {
@@ -322,8 +319,7 @@ export function TrainingPage() {
 
   return (
     <>
-      <div className="row items-center justify-between w-full flex-wrap gap-3">
-        <div className="text-h5 text-weight-bold">Training</div>
+      <PageHeader icon="monitor_heart" kicker="Insights" title="Training" subtitle="Fitness, fatigue and form, and how you spread your effort.">
         <Toggle<Range>
           label="Range"
           value={range}
@@ -334,11 +330,12 @@ export function TrainingPage() {
             ['all', 'All'],
           ]}
         />
-      </div>
+      </PageHeader>
 
       <AnalyseBanner pending={overview.pending} onDone={load} />
 
       {/* ── Fitness & form ── */}
+      <SectionHeading icon="trending_up">Fitness &amp; form</SectionHeading>
       <ChartCard
         caption={
           <>
@@ -350,10 +347,10 @@ export function TrainingPage() {
         }
       >
         {view.now && band && (
-          <div className="row justify-around w-full q-pa-sm">
-            <StatTile label="Fitness" value={Math.round(view.now.ctl)} valueClass="text-primary" />
-            <StatTile label="Fatigue" value={Math.round(view.now.atl)} valueClass="text-grey-7" />
-            <StatTile
+          <div className="stat-grid q-mb-sm">
+            <Stat label="Fitness" value={Math.round(view.now.ctl)} valueClass="text-primary" />
+            <Stat label="Fatigue" value={Math.round(view.now.atl)} valueClass="text-grey-7" />
+            <Stat
               label={`Form · ${band}`}
               value={signed(view.now.tsb)}
               valueClass={FORM_CLASS[band]}
@@ -395,6 +392,7 @@ export function TrainingPage() {
         </ChartCard>
       </div>
 
+      <SectionHeading icon="donut_large">Discipline balance</SectionHeading>
       <div className="w-full graphs-grid">
         <ChartCard caption="Moving time per week. Multisport events count per leg; running includes trail running.">
           <ChartPlot chart={view.balance} />
@@ -405,12 +403,13 @@ export function TrainingPage() {
       </div>
 
       {/* ── Consistency ── */}
+      <SectionHeading icon="calendar_month">Consistency</SectionHeading>
       <ChartCard caption="Each square is a day, darker for a higher training load.">
-        <div className="row justify-around w-full q-pa-sm">
-          <StatTile label="Current streak (days)" value={view.streaks.current} />
-          <StatTile label="Longest streak (days)" value={view.streaks.longest} />
-          <StatTile label="Weekly streak (weeks)" value={view.streaks.weekly} />
-          <StatTile label="Active days in range" value={view.streaks.active} />
+        <div className="stat-grid q-mb-sm">
+          <Stat label="Current streak (days)" value={view.streaks.current} />
+          <Stat label="Longest streak (days)" value={view.streaks.longest} />
+          <Stat label="Weekly streak (weeks)" value={view.streaks.weekly} />
+          <Stat label="Active days in range" value={view.streaks.active} />
         </div>
         <ChartPlot chart={view.calendar} height={240} />
       </ChartCard>
@@ -418,7 +417,7 @@ export function TrainingPage() {
       {/* ── Running ── */}
       {view.hasRuns && (
         <>
-          <SectionTitle>Running</SectionTitle>
+          <SectionHeading icon="directions_run">Running</SectionHeading>
           <div className="w-full graphs-grid">
             <ChartCard caption="Speed (metres per minute) per heartbeat on steady runs; races, intervals and tempo runs are left out. Higher = more speed per heartbeat.">
               <ChartPlot chart={view.efficiency} />
@@ -463,7 +462,7 @@ export function TrainingPage() {
       {/* ── Swimming ── */}
       {swimChart && (
         <>
-          <SectionTitle>Swimming</SectionTitle>
+          <SectionHeading icon="pool">Swimming</SectionHeading>
           <ChartCard
             controls={
               <Toggle<SwimMetric>
@@ -488,7 +487,7 @@ export function TrainingPage() {
       )}
 
       {/* ── Decoupling ── */}
-      <SectionTitle>Endurance</SectionTitle>
+      <SectionHeading icon="favorite">Endurance</SectionHeading>
       <ChartCard caption="How much output per heartbeat (pace or power) drops from the first to the second half of sessions of an hour or more. Below 5% (dashed line) means your aerobic base held up well.">
         <ChartPlot chart={view.decoupling} />
       </ChartCard>

@@ -39,12 +39,12 @@ export function ClimbsTable({ climbs, distances, hoverBus }: Props) {
   )
   if (!rows.length) return null
   return (
-    <div className="card w-full q-pa-md gap-0">
-      <div className="row items-center gap-2 q-mb-sm">
-        <span className="text-subtitle1 text-weight-bold">Climbs</span>
-        <span className="text-caption text-grey-6">{rows.length}</span>
+    <div className="card w-full gap-2" style={{ padding: '14px 14px 6px' }}>
+      <div className="row items-center gap-2" style={{ paddingLeft: 2 }}>
+        <span className="card-title">Climbs</span>
+        <span className="kind-chip">{rows.length}</span>
       </div>
-      <DataTable bordered rows={rows} rowKey={(c) => c.number} columns={COLUMNS} onRowHover={onRowHover} />
+      <DataTable rows={rows} rowKey={(c) => c.number} columns={COLUMNS} onRowHover={onRowHover} />
     </div>
   )
 }

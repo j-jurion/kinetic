@@ -6,6 +6,7 @@ import type { MapData } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivitiesMap } from '../components/ActivitiesMap'
 import { Icon, SportIcon } from '../components/icons'
+import { PageHeader } from '../components/PageHeader'
 
 export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
@@ -44,19 +45,11 @@ export function MapPage() {
 
   return (
     <>
-      <div className="row items-center justify-between w-full q-mb-md flex-wrap gap-3">
-        <div className="text-h5 text-weight-bold">Map</div>
-        <div className="row items-center gap-2 flex-wrap">
-          <Button size="small" color="inherit" onClick={() => select(available)}>
-            All
-          </Button>
-          <Button size="small" color="inherit" onClick={() => select([])}>
-            None
-          </Button>
-        </div>
-      </div>
+      <PageHeader icon="map" kicker="Where you've been" title="Map" subtitle="Every route you've recorded, coloured by sport." />
 
-      <div className="row items-center gap-2 w-full q-mb-md flex-wrap">
+      <div className="card w-full map-toolbar">
+        <span className="card-label">Sports</span>
+        <div className="row items-center gap-2 flex-wrap flex-1">
         {available.map((sport) => {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
@@ -65,13 +58,29 @@ export function MapPage() {
               key={sport}
               label={sportLabel(sport)}
               size="small"
-              variant="outlined"
+              variant={on ? 'filled' : 'outlined'}
               icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={color} />}
               onClick={() => toggle(sport)}
-              sx={{ color, borderColor: color, '& .MuiChip-icon': { color, ml: '6px' } }}
+              sx={{
+                color,
+                borderColor: color,
+                fontWeight: 600,
+                bgcolor: on ? `${color}1f` : 'transparent',
+                '&:hover': { bgcolor: `${color}33` },
+                '& .MuiChip-icon': { color, ml: '6px' },
+              }}
             />
           )
         })}
+        </div>
+        <div className="row items-center no-wrap gap-1">
+          <Button size="small" onClick={() => select(available)}>
+            All
+          </Button>
+          <Button size="small" color="inherit" onClick={() => select([])}>
+            None
+          </Button>
+        </div>
       </div>
 
       <div className="card w-full" style={{ padding: 0, height: '70vh', minHeight: 420, overflow: 'hidden' }}>
@@ -83,7 +92,10 @@ export function MapPage() {
           data && <ActivitiesMap routes={data.routes} />
         )}
       </div>
-      <div className="text-caption text-grey-6 q-mt-sm">{summary}</div>
+      <div className="row items-center no-wrap gap-1 text-caption text-grey-6" style={{ marginTop: -8 }}>
+        <Icon name="info_outline" size={15} />
+        <span>{summary}</span>
+      </div>
     </>
   )
 }

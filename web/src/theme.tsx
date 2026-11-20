@@ -38,22 +38,34 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
           mode: dark ? 'dark' : 'light',
           primary: { main: '#f97316', contrastText: '#ffffff' },
           secondary: { main: '#3b82f6' },
-          error: { main: '#c10015' },
-          success: { main: '#21ba45' },
+          error: { main: dark ? '#f87171' : '#c10015' },
+          success: { main: '#16a34a' },
           background: dark
-            ? { default: '#121212', paper: '#1d1d1d' }
-            : { default: '#ffffff', paper: '#ffffff' },
+            ? { default: '#0f1115', paper: '#171a21' }
+            : { default: '#f5f6f8', paper: '#ffffff' },
         },
         typography: {
           fontFamily: "'Inter', 'Roboto', sans-serif",
           fontSize: 14,
-          button: { fontWeight: 500 },
+          button: { fontWeight: 600, textTransform: 'none' },
         },
-        shape: { borderRadius: 8 },
+        shape: { borderRadius: 10 },
         components: {
-          MuiButton: { defaultProps: { disableElevation: false } },
+          MuiButton: {
+            defaultProps: { disableElevation: true },
+            styleOverrides: {
+              root: { borderRadius: 10 },
+              containedPrimary: {
+                backgroundImage: 'linear-gradient(135deg, #fb923c, #ea580c)',
+                boxShadow: '0 4px 12px rgba(234, 88, 12, .25)',
+                '&:hover': { boxShadow: '0 6px 16px rgba(234, 88, 12, .32)' },
+              },
+            },
+          },
+          MuiToggleButton: { styleOverrides: { root: { textTransform: 'none', fontWeight: 600 } } },
           MuiPaper: { styleOverrides: { root: { backgroundImage: 'none' } } },
-          MuiDialog: { styleOverrides: { paper: { borderRadius: 12 } } },
+          MuiDialog: { styleOverrides: { paper: { borderRadius: 16 } } },
+          MuiMenu: { styleOverrides: { paper: { borderRadius: 12 } } },
           MuiTextField: { defaultProps: { variant: 'standard' } },
         },
       }),

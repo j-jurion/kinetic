@@ -168,7 +168,6 @@ export function weeklyLoadChart(weeks: WeeklyLoad[]): Chart {
       ],
       legend: LEGEND_BELOW,
       margin: { l: 50, r: 50, t: 50, b: 40 },
-      bargap: 0.15,
     },
   ]
 }
@@ -203,7 +202,6 @@ export function zonesChart(weeks: Week<number[]>[], mode: 'hours' | 'pct'): Char
       yaxis: mode === 'hours' ? { title: { text: 'Hours' } } : { title: { text: 'Share (%)' }, range: [0, 100] },
       legend: LEGEND_BELOW,
       margin: { l: 50, r: 20, t: 50, b: 40 },
-      bargap: 0.15,
     },
   ]
 }
@@ -232,7 +230,6 @@ export function balanceChart(weeks: Week<Record<Discipline, number>>[]): Chart {
       yaxis: { title: { text: 'Hours' } },
       legend: LEGEND_BELOW,
       margin: { l: 50, r: 20, t: 50, b: 40 },
-      bargap: 0.15,
     },
   ]
 }

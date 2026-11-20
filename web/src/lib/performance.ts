@@ -276,6 +276,82 @@ export function splitKind(label: string): SplitKind {
   return 'other'
 }
 
+/** Colours of the disciplines and transitions, shared by the breakdown bars and route maps. */
+export const KIND_COLORS: Partial<Record<SplitKind, string>> = {
+  swim: '#00a3ff',
+  t1: '#9ca3af',
+  bike: '#00c853',
+  t2: '#6b7280',
+  run: '#f97316',
+}
+/** Labels that are not swim, bike, run or a first/second transition. */
+export const OTHER_COLORS = ['#7c4dff', '#ff4dd8', '#14b8a6', '#ffb300', '#ff2d55', '#64748b']
+// Repeated disciplines (a duathlon's Run 1 and Run 2) get a lighter shade for the second one
+const SECOND_SHADE: Partial<Record<SplitKind, string>> = { swim: '#66c7ff', bike: '#5ee08f', run: '#fdba74' }
+
+export const isTransition = (label: string) => /^t\d+$/.test(splitKind(label)) || /^T\s*\d+$/i.test(label.trim())
+
+/** Colour per segment label of one event: by discipline, lighter for its second run/ride/swim. */
+export function segmentColors(labels: string[]): string[] {
+  const used = new Map<SplitKind, number>()
+  return labels.map((label) => {
+    if (isTransition(label)) return splitKind(label) === 't2' ? KIND_COLORS.t2! : KIND_COLORS.t1!
+    const kind = splitKind(label)
+    const base = KIND_COLORS[kind]
+    if (!base) return OTHER_COLORS[0]
+    const count = used.get(kind) ?? 0
+    used.set(kind, count + 1)
+    return count > 0 ? (SECOND_SHADE[kind] ?? base) : base
+  })
+}
+
+/** One leg of a multisport activity on its timeline: seconds from the event's start. */
+export interface RouteLeg {
+  label: string
+  color: string
+  start: number
+  end: number
+}
+
+/** The leg label a sport gets in a breakdown: Swim, Bike, Run or the sport's own name. */
+function legLabel(sport: string, fallback: string): string {
+  if (/swim/.test(sport)) return 'Swim'
+  if (/cycl|bik|rid/.test(sport)) return 'Bike'
+  if (/run/.test(sport)) return 'Run'
+  return fallback
+}
+
+/**
+ * The legs of a multisport event placed on its timeline, coloured like the breakdown bar.
+ * `legs` are the event's sub-activities; `nameOf` gives the label for sports other than swim,
+ * bike and run.
+ */
+export function routeLegs(
+  eventDate: string,
+  legs: { sport: string; date: string; duration_seconds: number | null }[],
+  nameOf: (sport: string) => string,
+): RouteLeg[] {
+  const start = parseDate(eventDate)?.getTime()
+  if (start === undefined) return []
+  const ordered = legs
+    .map((leg) => ({ leg, at: parseDate(leg.date)?.getTime() }))
+    .filter((x): x is { leg: (typeof legs)[number]; at: number } => x.at !== undefined)
+    .sort((a, b) => a.at - b.at)
+  const names = ordered.map(({ leg }) => legLabel(leg.sport, nameOf(leg.sport)))
+  // Repeated disciplines are numbered, like the breakdown bar: Run 1, Bike, Run 2
+  const seen = new Map<string, number>()
+  const labels = names.map((name) => {
+    if (names.filter((n) => n === name).length < 2) return name
+    seen.set(name, (seen.get(name) ?? 0) + 1)
+    return `${name} ${seen.get(name)}`
+  })
+  const colors = segmentColors(labels)
+  return ordered.map(({ leg, at }, i) => {
+    const from = (at - start) / 1000
+    return { label: labels[i], color: colors[i], start: from, end: from + (leg.duration_seconds ?? 0) }
+  })
+}
+
 const KIND_ORDER: Record<SplitKind, number> = { swim: 0, t1: 1, bike: 2, t2: 3, run: 4, other: 5 }
 
 /** A multisport event as stacked segments: legs and transitions in the order they happened. */

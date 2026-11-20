@@ -445,14 +445,14 @@ export default function ActivityCharts({ activity, laps, streams, hoverBus }: Pr
   ).flatMap(([key, chart]) =>
     chart
       ? [
-          <div key={key} className="card w-full q-pa-sm">
+          <div key={key} className="card w-full chart-card">
             <Plot data={chart[0]} layout={chart[1]} style={{ height: 340 }} />
           </div>,
         ]
       : [],
   )
   const lapCard = lapChart && (
-    <div key="laps" className="card w-full q-pa-sm">
+    <div key="laps" className="card w-full chart-card">
       <Plot data={lapChart[0]} layout={lapChart[1]} style={{ height: 340 }} onHover={onLapsHover} onUnhover={onUnhover} />
     </div>
   )
@@ -465,9 +465,9 @@ export default function ActivityCharts({ activity, laps, streams, hoverBus }: Pr
     <div className="column w-full gap-4 q-mb-md">
       {ready && <AnalysisSummary activity={activity} streams={ready} />}
       {profile && (
-        <div className="card w-full q-pa-sm gap-0">
+        <div className="card w-full chart-card">
           <div className="row items-center justify-between no-wrap w-full q-pa-xs">
-            <span className="text-subtitle1 text-weight-bold" style={{ paddingLeft: 8 }}>Activity profile</span>
+            <span className="card-title" style={{ paddingLeft: 4 }}>Activity profile</span>
             {hasDistance && (
               <ToggleButtonGroup
                 exclusive
