@@ -62,14 +62,14 @@ export function AnalysisSummary({ activity, streams }: { activity: Activity; str
   const tiles = streams.summary ? summaryTiles(activity, streams.summary) : []
   if (!tiles.length) return null
   return (
-    <div className="column w-full gap-0">
-      <div className="text-subtitle1 text-weight-bold q-mb-sm">Analysis</div>
-      <div className="row flex-wrap gap-3">
+    <div className="card w-full gap-3">
+      <div className="card-title">Analysis</div>
+      <div className="stat-grid">
         {tiles.map((t) => (
-          <div key={t.label} className="card q-pa-md items-center gap-0" style={{ minWidth: 96 }} title={t.hint}>
-            <div className="text-h6 text-weight-bold" style={{ color: t.color }}>{t.value}</div>
-            <div className="text-caption text-grey-6">{t.label}</div>
-            {t.hint && <div className="text-caption text-grey-6" style={{ fontSize: 11, opacity: 0.8 }}>{t.hint}</div>}
+          <div key={t.label} className="stat" title={t.hint}>
+            <div className="stat-label">{t.label}</div>
+            <div className="stat-value" style={{ color: t.color }}>{t.value}</div>
+            {t.hint && <div className="text-caption text-grey-6" style={{ fontSize: 11, lineHeight: 1.3 }}>{t.hint}</div>}
           </div>
         ))}
       </div>

@@ -110,7 +110,6 @@ function volumeChart(points: GraphPoint[], period: Period, mc: MetricConfig, col
       yaxis: { title: { text: mc.label } },
       legend: { orientation: 'h', x: 1, xanchor: 'right', y: 1.12 },
       margin: { l: 50, r: 20, t: 60, b: 50 },
-      bargap: 0.15,
     },
   ]
 }

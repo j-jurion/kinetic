@@ -1,30 +1,16 @@
 import { useMemo } from 'react'
 import type { Data, Layout } from 'plotly.js-dist-min'
 import { formatDate, formatDuration } from '../../lib/format'
-import { segmentLabels, segmentSeconds, splitKind } from '../../lib/performance'
-import type { BreakdownEvent, SplitKind } from '../../lib/performance'
+import { KIND_COLORS, OTHER_COLORS, isTransition, segmentColors, segmentLabels, segmentSeconds, splitKind } from '../../lib/performance'
+import type { BreakdownEvent } from '../../lib/performance'
 import { formatClock } from '../../lib/speed'
 import { Plot } from '../Plot'
 
 type Chart = [Data[], Partial<Layout>]
 
-const KIND_COLORS: Partial<Record<SplitKind, string>> = {
-  swim: '#00a3ff',
-  t1: '#9ca3af',
-  bike: '#00c853',
-  t2: '#6b7280',
-  run: '#f97316',
-}
-// Labels that are not swim, bike, run or a first/second transition
-const OTHER_COLORS = ['#7c4dff', '#ff4dd8', '#14b8a6', '#ffb300', '#ff2d55', '#64748b']
-// Repeated disciplines (a duathlon's Run 1 and Run 2) get a lighter shade for the second one
-const SECOND_SHADE: Partial<Record<SplitKind, string>> = { swim: '#66c7ff', bike: '#5ee08f', run: '#fdba74' }
-
 const legendBelow: Partial<Layout['legend']> = { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.12, yanchor: 'top' }
 
 const eventLabel = (e: BreakdownEvent) => `${e.name} · ${formatDate(e.date)}`
-
-const isTransition = (label: string) => /^t\d+$/.test(splitKind(label)) || /^T\s*\d+$/i.test(label.trim())
 
 /** Legend groups: the disciplines and transitions, each with its colour. */
 const LEGEND: [string, string][] = [
@@ -34,20 +20,6 @@ const LEGEND: [string, string][] = [
   ['Transition', KIND_COLORS.t1!],
   ['Other', OTHER_COLORS[0]],
 ]
-
-/** Colour per segment of one event: by discipline, lighter for its second run/ride/swim. */
-function segmentColors(event: BreakdownEvent): string[] {
-  const used = new Map<SplitKind, number>()
-  return event.segments.map(({ label }) => {
-    if (isTransition(label)) return splitKind(label) === 't2' ? KIND_COLORS.t2! : KIND_COLORS.t1!
-    const kind = splitKind(label)
-    const base = KIND_COLORS[kind]
-    if (!base) return OTHER_COLORS[0]
-    const count = used.get(kind) ?? 0
-    used.set(kind, count + 1)
-    return count > 0 ? (SECOND_SHADE[kind] ?? base) : base
-  })
-}
 
 /**
  * One horizontal bar per event, stacked by leg and transition.
@@ -59,7 +31,7 @@ function segmentColors(event: BreakdownEvent): string[] {
  */
 function breakdownChart(events: BreakdownEvent[], single: boolean): Chart {
   const y = events.map(eventLabel)
-  const colors = events.map(segmentColors)
+  const colors = events.map((e) => segmentColors(e.segments.map((s) => s.label)))
   const positions = Math.max(...events.map((e) => e.segments.length))
   const traces: Data[] = []
   for (let i = 0; i < positions; i++) {
@@ -71,7 +43,7 @@ function breakdownChart(events: BreakdownEvent[], single: boolean): Chart {
       showlegend: false,
       y,
       x: segments.map((s) => (s ? s.seconds / 60 : null)),
-      marker: { color: colors.map((c) => c[i] ?? 'transparent'), line: { color: 'rgba(0,0,0,0.25)', width: 0.5 } },
+      marker: { color: colors.map((c) => c[i] ?? 'transparent') },
       // The time inside the segment when it fits; Plotly hides it otherwise
       text: segments.map((s) => (s ? formatClock(s.seconds) : '')),
       textposition: 'inside',

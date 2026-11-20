@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, IconButton, MenuItem, TextField } from '@mui/material'
@@ -19,6 +19,7 @@ import {
   sportLabel,
 } from '../lib/format'
 import { createHoverBus } from '../lib/hoverBus'
+import { routeLegs } from '../lib/performance'
 import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '../lib/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
@@ -288,6 +289,15 @@ export function ActivityDetailPage() {
     )
   }, [activityId, latestStreams])
 
+  // A multisport event's route is coloured per leg, like its breakdown bar
+  const legs = useMemo(
+    () =>
+      detail && detail !== 'missing' && detail.children.length >= 2
+        ? routeLegs(detail.activity.date, detail.children, sportLabel)
+        : undefined,
+    [detail],
+  )
+
   if (detail === 'missing' || Number.isNaN(activityId)) {
     return (
       <div className="column items-center q-mt-xl w-full gap-0">
@@ -400,7 +410,7 @@ export function ActivityDetailPage() {
 
       {a.has_route && (
         <div className="card w-full q-mb-md" style={{ padding: 0, overflow: 'hidden' }}>
-          <RouteMap activityId={activityId} sport={sport} streams={streams} hoverBus={hoverBus} />
+          <RouteMap activityId={activityId} sport={sport} streams={streams} hoverBus={hoverBus} legs={legs} />
         </div>
       )}
 

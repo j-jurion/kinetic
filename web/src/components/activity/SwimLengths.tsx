@@ -54,7 +54,6 @@ function lengthsChart(lengths: SwimLength[]): [Data[], Partial<Layout>] {
     legend: { orientation: 'h', x: 0.5, xanchor: 'center', y: -0.12, yanchor: 'top', font: { size: 11 } },
     margin: { l: 60, r: 60, t: 45, b: 55 },
     hovermode: 'x unified',
-    bargap: 0.15,
   }
   if (lengths.some((l) => l.swolf !== null)) {
     data.push({
@@ -93,12 +92,13 @@ export function SwimLengths({ lengths }: { lengths: SwimLength[] }) {
   if (stats.totalStrokes !== null) tiles.push(['Total strokes', String(stats.totalStrokes)])
 
   return (
-    <div className="card w-full q-pa-sm gap-0">
-      <div className="row flex-wrap gap-4 q-pa-sm">
+    <div className="card w-full chart-card">
+      <div className="card-title" style={{ padding: '2px 4px 4px' }}>Swim lengths</div>
+      <div className="stat-grid">
         {tiles.map(([label, value]) => (
-          <div key={label} className="column gap-0">
-            <span className="text-subtitle1 text-weight-bold">{value}</span>
-            <span className="text-caption text-grey-6">{label}</span>
+          <div key={label} className="stat">
+            <div className="stat-label">{label}</div>
+            <div className="stat-value">{value}</div>
           </div>
         ))}
       </div>

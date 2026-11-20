@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { api } from '../lib/api'
 import type { HoverBus } from '../lib/hoverBus'
+import { KIND_COLORS } from '../lib/performance'
+import type { RouteLeg } from '../lib/performance'
 import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from '../lib/speed'
 import type { ActivityStreams } from '../lib/types'
 
@@ -51,6 +53,31 @@ function legend(slow: string, fast: string): L.Control {
   return control
 }
 
+/** A legend of the legs of a multisport event, one colour per leg (and the transitions). */
+function legLegend(legs: RouteLeg[], transitions: boolean): L.Control {
+  const control = new L.Control({ position: 'bottomleft' })
+  control.onAdd = () => {
+    const box = L.DomUtil.create('div')
+    box.style.cssText =
+      'background:rgba(255,255,255,.92);color:#111827;padding:6px 10px;border-radius:8px;' +
+      'box-shadow:0 1px 5px rgba(0,0,0,.25);font:12px Inter,Roboto,sans-serif;' +
+      'display:flex;flex-wrap:wrap;gap:4px 12px;max-width:320px'
+    const items: [string, string][] = legs.map((leg) => [leg.label, leg.color])
+    if (transitions) items.push(['Transition', TRANSITION_COLOR])
+    box.innerHTML = items
+      .map(
+        ([label, color]) =>
+          `<span style="display:inline-flex;align-items:center;gap:5px">` +
+          `<span style="width:14px;height:4px;border-radius:2px;background:${color}"></span>${escapeHtml(label)}</span>`,
+      )
+      .join('')
+    return box
+  }
+  return control
+}
+
+const TRANSITION_COLOR = KIND_COLORS.t1!
+
 interface Props {
   activityId: number
   sport: string
@@ -58,10 +85,15 @@ interface Props {
   streams: ActivityStreams | null
   /** Points hovered in the charts are marked on the map. */
   hoverBus: HoverBus
+  /** For a multisport event: its legs, so the route is coloured per leg instead of by speed. */
+  legs?: RouteLeg[]
 }
 
-/** The GPS route of one activity: coloured by speed when known, with start and finish. */
-export function RouteMap({ activityId, sport, streams, hoverBus }: Props) {
+/**
+ * The GPS route of one activity with start and finish: coloured per leg for a multisport
+ * event, otherwise by speed when known.
+ */
+export function RouteMap({ activityId, sport, streams, hoverBus, legs }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
 
@@ -94,8 +126,31 @@ export function RouteMap({ activityId, sport, streams, hoverBus }: Props) {
       : []
     const located = positions.filter((c): c is L.LatLngTuple => c !== null)
     const scale = p ? speedScale(p.speed) : null
+    const byLeg = !!legs && legs.length >= 2
 
-    if (p && scale && located.length > 1) {
+    if (p && byLeg && located.length > 1) {
+      // Each point takes the colour of the leg it falls in; points between legs are transitions
+      const legAt = (t: number) => legs!.find((leg) => t >= leg.start && t <= leg.end)
+      let transitions = false
+      L.polyline(located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
+      for (let i = 1; i < positions.length; i++) {
+        const from = positions[i - 1]
+        const to = positions[i]
+        if (!from || !to) continue
+        const leg = legAt((p.t[i - 1] + p.t[i]) / 2)
+        if (!leg) transitions = true
+        L.polyline([from, to], {
+          color: leg ? leg.color : TRANSITION_COLOR,
+          weight: 4,
+          opacity: 0.95,
+          interactive: false,
+        }).addTo(layers)
+      }
+      const key = legLegend(legs!, transitions)
+      key.addTo(map)
+      controls.push(key)
+      finish(located)
+    } else if (p && scale && located.length > 1) {
       // A soft outline under the coloured route keeps it readable on any map background
       L.polyline(located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
       for (let i = 1; i < positions.length; i++) {
@@ -154,7 +209,7 @@ export function RouteMap({ activityId, sport, streams, hoverBus }: Props) {
       controls.forEach((c) => c.remove())
       layers.remove()
     }
-  }, [streams, activityId, sport, hoverBus])
+  }, [streams, activityId, sport, hoverBus, legs])
 
   return <div ref={ref} style={{ width: '100%', height: 380 }} />
 }
