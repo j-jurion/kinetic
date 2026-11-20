@@ -15,17 +15,19 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from app import garmin_sync
+from app import garmin_sync, metrics, streams
 from app.database import engine, require_id
 from app.formatting import SPORTS, resolve_sports
 from app.models import (
     Activity,
     ActivityFriend,
     ActivityKind,
+    ActivityMetrics,
     BestEffort,
     Friend,
     Lap,
@@ -239,7 +241,7 @@ def update_activity(activity_id: int, data: ActivityUpdate) -> dict:
 
 def _delete_activity_rows(session, activity: Activity) -> None:
     activity_id = activity.id
-    for model in (Lap, BestEffort, ActivityFriend):
+    for model in (Lap, BestEffort, ActivityFriend, ActivityMetrics):
         for row in session.exec(select(model).where(model.activity_id == activity_id)).all():
             session.delete(row)
     result = session.exec(select(RaceResult).where(RaceResult.activity_id == activity_id)).first()
@@ -300,6 +302,36 @@ def get_route(activity_id: int) -> dict:
         activity = _get_activity(session, activity_id)
         coords = json.loads(activity.route_json) if activity.route_json else []
     return {"coords": coords}
+
+
+@router.get("/activities/{activity_id}/streams")
+async def get_streams(activity_id: int) -> dict:
+    """Per-second data of the activity from its FIT file, with zones, climbs and a summary.
+
+    ``available`` is false when the FIT file is no longer on disk (for example activities
+    added by hand); the page then shows only the charts built from laps.
+    """
+    with Session(engine) as session:
+        activity = _get_activity(session, activity_id)
+        # Fallback for files without watch settings: the highest heart rate on the account
+        account_max_hr = session.exec(select(func.max(Activity.max_heart_rate))).one()
+    path = streams.fit_path_for(activity.fit_file_path)
+    if path is None:
+        return {"available": False}
+    leg = activity.parent_id is not None
+    try:
+        data = await _run_in_thread(
+            streams.read_streams,
+            path,
+            activity.sport.value,
+            activity.date if leg else None,
+            activity.duration_seconds if leg else None,
+            account_max_hr,
+        )
+    except Exception:
+        logger.exception("Could not read the FIT file of activity {}", activity_id)
+        return {"available": False}
+    return {"available": bool(data["points"]["t"]), **data}
 
 
 def _race_result(session, activity_id: int) -> Optional[dict]:
@@ -456,6 +488,80 @@ def delete_race_result(activity_id: int) -> None:
             session.commit()
 
 
+# Gaps between legs shorter than this are clock jitter, not a transition
+_MIN_TRANSITION_SECONDS = 5
+_LEG_LABELS = {"swimming": "Swim", "cycling": "Bike", "running": "Run", "trail_running": "Run"}
+_LEG_KINDS = {"Swim": "swim", "Bike": "bike", "Run": "run"}
+
+
+def _leg_segments(legs: list[Activity]) -> list[dict]:
+    """Legs of a multisport event in order, with the transitions between them.
+
+    A transition is the time from the end of one leg to the start of the next. Repeated
+    disciplines are numbered (a duathlon's Run 1 and Run 2), transitions as T1, T2, …
+    """
+    labels = [_LEG_LABELS.get(leg.sport.value, leg.sport.value.replace("_", " ").title())
+              for leg in legs]
+    repeated = {label for label in labels if labels.count(label) > 1}
+    seen: dict[str, int] = {}
+    segments: list[dict] = []
+    transitions = 0
+    for i, (leg, label) in enumerate(zip(legs, labels)):
+        if i > 0:
+            previous = legs[i - 1]
+            gap = (leg.date - previous.date).total_seconds() - (previous.duration_seconds or 0)
+            if gap >= _MIN_TRANSITION_SECONDS:
+                transitions += 1
+                segments.append({"label": f"T{transitions}", "kind": f"t{transitions}",
+                                 "seconds": round(gap, 1), "distance_meters": None,
+                                 "activity_id": None})
+        seen[label] = seen.get(label, 0) + 1
+        segments.append(
+            {
+                "label": f"{label} {seen[label]}" if label in repeated else label,
+                "kind": _LEG_KINDS.get(label, "other"),
+                "seconds": leg.duration_seconds,
+                "distance_meters": leg.distance_meters,
+                "activity_id": leg.id,
+            }
+        )
+    return segments
+
+
+@router.get("/multisport")
+def list_multisport() -> list[dict]:
+    """Triathlons, duathlons and other multisport events with their legs and transitions,
+    newest first, from the legs recorded in the FIT file (no splits need to be typed in)."""
+    parent_sports = [SportType.triathlon, SportType.duathlon, SportType.multisport]
+    with Session(engine) as session:
+        parents = session.exec(
+            select(Activity)
+            .where(col(Activity.sport).in_(parent_sports), col(Activity.parent_id).is_(None))
+            .order_by(col(Activity.date).desc())
+        ).all()
+        ids = [p.id for p in parents]
+        legs_by_parent: dict[int, list[Activity]] = {}
+        if ids:
+            for leg in session.exec(
+                select(Activity).where(col(Activity.parent_id).in_(ids)).order_by(col(Activity.date))
+            ).all():
+                legs_by_parent.setdefault(leg.parent_id, []).append(leg)
+        raced = set(session.exec(select(RaceResult.activity_id)).all())
+    return [
+        {
+            "id": parent.id,
+            "name": parent.name,
+            "date": parent.date.isoformat(),
+            "sport": parent.sport.value,
+            "is_race": parent.kind == ActivityKind.race or parent.id in raced,
+            "duration_seconds": parent.duration_seconds,
+            "segments": _leg_segments(legs_by_parent.get(parent.id, [])),
+        }
+        for parent in parents
+        if len(legs_by_parent.get(parent.id, [])) >= 2
+    ]
+
+
 @router.get("/races")
 def list_races() -> list[dict]:
     with Session(engine) as session:
@@ -512,11 +618,14 @@ def _best_effort_rows(
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
         results = session.exec(stmt).all()
         parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
+        raced = set(session.exec(select(RaceResult.activity_id)).all())
         return [
             {
                 **_dump(effort),
                 "activity_name": activity.name,
                 "kind": activity.kind.value,
+                # A race is an activity marked as one or with an official result entered
+                "is_race": activity.kind == ActivityKind.race or activity.id in raced,
                 # Climb of the whole activity, not just the best-effort segment
                 "elevation_gain_meters": activity.elevation_gain_meters,
                 "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
@@ -648,40 +757,34 @@ def delete_friend(friend_id: int) -> None:
 
 
 @router.get("/stats/graphs")
-def graph_stats(sport: Optional[str] = None, year: Optional[int] = None) -> dict:
-    """Monthly totals (for the year filter), yearly totals and totals per sport."""
+def graph_stats(sport: Optional[str] = None) -> dict:
+    """One compact row per activity of the sport, oldest first, for the Graphs page.
+
+    The page aggregates these in the browser (weekly/monthly/yearly volume, breakdowns,
+    year-over-year progress, pace trend), so changing the year filter needs no new request.
+    """
     with Session(engine) as session:
         stmt = select(Activity)
         sport_types = _sport_types(sport)
         if sport_types:
             stmt = stmt.where(col(Activity.sport).in_(sport_types))
-        activities = session.exec(stmt).all()
-
-    def bucket(store: dict, key, **extra) -> dict:
-        if key not in store:
-            store[key] = {**extra, "count": 0, "distance_meters": 0.0, "duration_seconds": 0.0}
-        return store[key]
-
-    monthly: dict[Any, dict] = {}
-    yearly: dict[Any, dict] = {}
-    by_sport: dict[Any, dict] = {}
-    for a in activities:
-        in_year = not year or a.date.year == year
-        targets = [bucket(yearly, a.date.year, year=a.date.year)]
-        if in_year:
-            targets.append(
-                bucket(monthly, (a.date.year, a.date.month), year=a.date.year, month=a.date.month)
-            )
-            targets.append(bucket(by_sport, a.sport.value, sport=a.sport.value))
-        for target in targets:
-            target["count"] += 1
-            target["distance_meters"] += a.distance_meters or 0
-            target["duration_seconds"] += a.duration_seconds or 0
+        activities = session.exec(stmt.order_by(col(Activity.date))).all()
 
     return {
-        "monthly": [monthly[k] for k in sorted(monthly)],
-        "yearly": [yearly[k] for k in sorted(yearly)],
-        "by_sport": list(by_sport.values()),
+        "activities": [
+            {
+                "id": a.id,
+                "name": a.name,
+                "date": a.date.isoformat(),
+                "sport": a.sport.value,
+                "kind": a.kind.value,
+                "distance_meters": a.distance_meters,
+                "duration_seconds": a.duration_seconds,
+                "elevation_meters": a.elevation_gain_meters,
+                "avg_heart_rate": a.avg_heart_rate,
+            }
+            for a in activities
+        ],
     }
 
 
@@ -758,6 +861,45 @@ def map_routes(sports: Optional[str] = None) -> dict:
             "without_gps": sum(1 for a in candidates if not a.route_json),
         },
     }
+
+
+# ── Training ──────────────────────────────────────────────────────────────────
+
+
+@router.get("/training")
+def training_overview() -> dict:
+    """Every activity with its training load, zones and stored metrics, plus the heart rate,
+    power and weight values the charts use. ``pending`` counts activities still to analyse."""
+    return metrics.overview()
+
+
+@router.post("/training/analyse")
+def analyse_activities() -> StreamingResponse:
+    """Compute the missing metrics of the account, streaming progress as JSON lines."""
+    messages: "queue.Queue[Optional[dict]]" = queue.Queue()
+
+    def work() -> None:
+        try:
+            result = metrics.backfill(
+                lambda done, total, name: messages.put(
+                    {"type": "progress", "done": done, "total": total, "name": name}
+                )
+            )
+            messages.put({"type": "result", **result})
+        except Exception as exc:
+            logger.exception("Analysing activities failed")
+            messages.put({"type": "error", "message": str(exc)})
+        finally:
+            messages.put(None)
+
+    context = copy_context()
+    threading.Thread(target=context.run, args=(work,), daemon=True).start()
+
+    def stream():
+        while (message := messages.get()) is not None:
+            yield json.dumps(message) + "\n"
+
+    return StreamingResponse(stream(), media_type="application/x-ndjson")
 
 
 # ── Garmin sync ───────────────────────────────────────────────────────────────

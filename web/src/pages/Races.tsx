@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatDate, formatDuration, kindLabel } from '../lib/format'
-import type { RaceRow } from '../lib/types'
+import { breakdownEvents } from '../lib/performance'
+import type { MultisportEvent, RaceRow } from '../lib/types'
 import { EmptyCard } from '../components/fields'
 import { MultisportMarker, SportIcon } from '../components/icons'
 import '../styles/races.css'
+
+// Plotly is large: the multisport charts load only when there are such races
+const RaceBreakdownCharts = lazy(() => import('../components/performance/RaceBreakdownCharts'))
 
 function formatRank(rank: number | null, total: number | null): string | null {
   if (!rank) return null
@@ -13,12 +17,16 @@ function formatRank(rank: number | null, total: number | null): string | null {
 }
 
 export function RacesPage() {
-  const navigate = useNavigate()
   const [results, setResults] = useState<RaceRow[] | null>(null)
+  const [multisportEvents, setMultisportEvents] = useState<MultisportEvent[]>([])
 
   useEffect(() => {
     api.get<RaceRow[]>('/races').then(setResults)
+    // Triathlons and duathlons from their recorded legs, so no splits need typing in
+    api.get<MultisportEvent[]>('/multisport').then(setMultisportEvents)
   }, [])
+
+  const multisport = useMemo(() => breakdownEvents(results ?? [], multisportEvents), [results, multisportEvents])
 
   if (!results) return null
 
@@ -28,6 +36,14 @@ export function RacesPage() {
         <div className="text-h5 text-weight-bold">Races</div>
         <div className="text-caption text-grey-6">{results.length} results</div>
       </div>
+
+      {multisport.length > 0 && (
+        <div className="w-full q-mb-md">
+          <Suspense fallback={<div style={{ height: 160 + 44 * multisport.length }} />}>
+            <RaceBreakdownCharts events={multisport} />
+          </Suspense>
+        </div>
+      )}
 
       {results.length === 0 ? (
         <EmptyCard icon="emoji_events">No race results recorded yet.</EmptyCard>
@@ -51,7 +67,7 @@ export function RacesPage() {
             ]
             return (
               <div key={r.id} className="card w-full q-pa-sm q-mb-sm races-result-card">
-                <div className="row items-center no-wrap gap-3 w-full clickable" onClick={() => navigate(`/activity/${a.id}`)}>
+                <Link to={`/activity/${a.id}`} className="row items-center no-wrap gap-3 w-full card-link">
                   <SportIcon sport={a.sport} size={28} />
                   <div className="column gap-0 min-w-0">
                     <div className="row items-center no-wrap gap-1">
@@ -74,7 +90,7 @@ export function RacesPage() {
                         ),
                     )}
                   </div>
-                </div>
+                </Link>
               </div>
             )
           })}

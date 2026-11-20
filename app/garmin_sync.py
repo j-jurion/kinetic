@@ -5,6 +5,7 @@ goes through the account-scoped session, so accounts never share Garmin data.
 """
 
 import io
+import os
 import threading
 import time
 import uuid
@@ -19,12 +20,13 @@ from sqlmodel import select
 
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
+from app.formatting import format_date
 from app.models import Activity
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
-from app.formatting import format_date
 
-UPLOAD_DIR = Path("uploads")
+# Where imported FIT files are kept; the activity charts read them back from here
+UPLOAD_DIR = Path(os.environ.get("KINETIC_UPLOAD_DIR", "uploads"))
 TOKEN_ROOT = Path("garmin_tokens")
 _TOKEN_FILE = "garmin_tokens.json"
 _EMAIL_FILE = "garmin_email"
@@ -113,12 +115,14 @@ def import_fit_bytes(
             be.activity_id = parent_id
             session.add(be)
 
+        imported = [parent_id]
         for child, child_laps, child_bes, *_ in children:
             child.parent_id = parent_id
             session.add(child)
             session.commit()
             session.refresh(child)
             child_id = require_id(child.id)
+            imported.append(child_id)
             for lap in child_laps:
                 lap.activity_id = child_id
                 session.add(lap)
@@ -127,7 +131,12 @@ def import_fit_bytes(
                 session.add(be)
 
         session.commit()
-        return parent_id
+
+    # Training metrics for the charts; imported here to avoid a circular import
+    from app import metrics
+
+    metrics.store_quietly(imported)
+    return parent_id
 
 
 # ── Auth helpers ──────────────────────────────────────────────────────────────

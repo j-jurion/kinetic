@@ -14,6 +14,7 @@ import {
 } from '../lib/format'
 import type { BestEffortRow } from '../lib/types'
 import { useFilters } from '../lib/useFilters'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { DataTable } from '../components/DataTable'
 import { EmptyCard, StatTile, YearSelect } from '../components/fields'
 import { Medal, MultisportMarker } from '../components/icons'
@@ -28,11 +29,12 @@ export function BestEffortDistancePage() {
   // Every best effort belongs to a sport, so "all sports" would mix unrelated records
   const { sport, year, setYear } = useFilters(ALL_RUNNING)
   const [attempts, setAttempts] = useState<BestEffortRow[] | null>(null)
+  const latest = useLatestRequest()
   const label = distanceLabel(distance, sport)
 
   useEffect(() => {
-    api.get<BestEffortRow[]>(`/best-efforts/attempts${qs({ distance, sport, year })}`).then(setAttempts)
-  }, [distance, sport, year])
+    latest(api.get<BestEffortRow[]>(`/best-efforts/attempts${qs({ distance, sport, year })}`), setAttempts)
+  }, [distance, sport, year, latest])
 
   const rows: Row[] = useMemo(() => {
     if (!attempts) return []

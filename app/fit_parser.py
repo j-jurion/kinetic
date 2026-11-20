@@ -3,8 +3,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from app.models import Activity, ActivityKind, BestEffort, Lap, SportType
 from app.formatting import DATE_FORMAT
+from app.models import Activity, ActivityKind, BestEffort, Lap, SportType
 
 _SEMICIRCLES_TO_DEG = 180.0 / (2**31)
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Button, IconButton, MenuItem, TextField } from '@mui/material'
 import { api } from '../lib/api'
@@ -6,7 +6,9 @@ import {
   MEDAL_COLORS,
   MEDAL_LABELS,
   distanceLabel,
+  cadenceUnit,
   formatDate,
+  stepsPerMinute,
   formatDistance,
   formatDuration,
   formatPace,
@@ -15,13 +17,20 @@ import {
   sportColor,
   sportLabel,
 } from '../lib/format'
-import type { Activity, ActivityDetail, Friend, RaceResult, RaceSplit } from '../lib/types'
+import { createHoverBus } from '../lib/hoverBus'
+import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '../lib/types'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
 import { DataTable } from '../components/DataTable'
+import { ErrorBoundary } from '../components/ErrorBoundary'
+import { ActivityBreakdown } from '../components/performance/ActivityBreakdown'
 import { Icon, Medal, SportIcon } from '../components/icons'
 import { RaceResultDialog } from '../components/RaceResultDialog'
 import { RouteMap } from '../components/RouteMap'
 import '../styles/detail.css'
+
+// The charts pull in Plotly (several MB), so they load only once an activity is opened
+const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
 
 function StatCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -254,14 +263,29 @@ export function ActivityDetailPage() {
   const [deleting, setDeleting] = useState(false)
   const [raceDialog, setRaceDialog] = useState(false)
 
+  const latest = useLatestRequest()
+
   const load = useCallback(() => {
-    api
-      .get<ActivityDetail>(`/activities/${activityId}/detail`)
-      .then(setDetail)
-      .catch(() => setDetail('missing'))
-  }, [activityId])
+    // Moving between a multisport event and its legs must not show a slower, older response
+    latest(
+      api.get<ActivityDetail>(`/activities/${activityId}/detail`).catch((): 'missing' => 'missing'),
+      setDetail,
+    )
+  }, [activityId, latest])
 
   useEffect(load, [load])
+
+  // Per-second data for the map and the charts, fetched once per activity (null = loading)
+  const [streams, setStreams] = useState<ActivityStreams | null>(null)
+  const latestStreams = useLatestRequest()
+  const [hoverBus] = useState(createHoverBus)
+  useEffect(() => {
+    setStreams(null)
+    latestStreams(
+      api.get<ActivityStreams>(`/activities/${activityId}/streams`).catch((): ActivityStreams => ({ available: false })),
+      setStreams,
+    )
+  }, [activityId, latestStreams])
 
   if (detail === 'missing' || Number.isNaN(activityId)) {
     return (
@@ -334,6 +358,7 @@ export function ActivityDetailPage() {
           </div>
         </div>
       )}
+      {detail.children.length >= 2 && <ActivityBreakdown activity={a} raceResult={detail.race_result} />}
 
       {/* Stats */}
       <div className="row flex-wrap gap-3 q-mb-md">
@@ -344,7 +369,13 @@ export function ActivityDetailPage() {
         {!!a.max_heart_rate && <StatCard label="Max HR" value={`${a.max_heart_rate} bpm`} color="#ef4444" />}
         {!!a.elevation_gain_meters && <StatCard label="Elevation" value={`${a.elevation_gain_meters.toFixed(0)} m`} color="#10b981" />}
         {!!a.calories && <StatCard label="Calories" value={`${a.calories} kcal`} color="#f59e0b" />}
-        {!!a.avg_cadence && <StatCard label="Cadence" value={`${a.avg_cadence} spm`} color="#8b5cf6" />}
+        {!!a.avg_cadence && (
+          <StatCard
+            label="Cadence"
+            value={`${stepsPerMinute(a.avg_cadence, sport)} ${cadenceUnit(sport)}`}
+            color="#8b5cf6"
+          />
+        )}
         {!!a.avg_power && <StatCard label="Power" value={`${a.avg_power} W`} color="#3b82f6" />}
       </div>
 
@@ -360,9 +391,18 @@ export function ActivityDetailPage() {
 
       {a.has_route && (
         <div className="card w-full q-mb-md" style={{ padding: 0, overflow: 'hidden' }}>
-          <RouteMap activityId={activityId} />
+          <RouteMap activityId={activityId} sport={sport} streams={streams} hoverBus={hoverBus} />
         </div>
       )}
+
+      <ErrorBoundary
+        key={activityId}
+        fallback={<div className="text-caption text-grey-6 q-mb-md">The charts for this activity could not be shown.</div>}
+      >
+        <Suspense>
+          <ActivityCharts activity={a} laps={detail.laps} streams={streams} hoverBus={hoverBus} />
+        </Suspense>
+      </ErrorBoundary>
 
       {a.notes && (
         <div className="card w-full q-pa-md q-mb-md gap-0">

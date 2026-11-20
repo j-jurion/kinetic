@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { api } from '../lib/api'
+import type { HoverBus } from '../lib/hoverBus'
+import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from '../lib/speed'
+import type { ActivityStreams } from '../lib/types'
 
 // OpenStreetMap's standard tiles — free and keyless
 export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -28,26 +31,130 @@ function marker(color: string, icon: string, title: string, at: L.LatLngExpressi
   }).bindTooltip(title)
 }
 
-/** The GPS route of one activity with start and finish markers. */
-export function RouteMap({ activityId }: { activityId: number }) {
+const escapeHtml = (text: string) =>
+  text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
+
+/** A small "slow ▬▬▬ fast" legend in the corner of the map. */
+function legend(slow: string, fast: string): L.Control {
+  const control = new L.Control({ position: 'bottomleft' })
+  control.onAdd = () => {
+    const box = L.DomUtil.create('div')
+    box.style.cssText =
+      'background:rgba(255,255,255,.92);color:#111827;padding:6px 10px;border-radius:8px;' +
+      'box-shadow:0 1px 5px rgba(0,0,0,.25);font:12px Inter,Roboto,sans-serif;min-width:170px'
+    box.innerHTML =
+      `<div style="height:8px;border-radius:4px;background:${SPEED_GRADIENT}"></div>` +
+      `<div style="display:flex;justify-content:space-between;gap:12px;margin-top:3px">` +
+      `<span>${escapeHtml(slow)}</span><span>${escapeHtml(fast)}</span></div>`
+    return box
+  }
+  return control
+}
+
+interface Props {
+  activityId: number
+  sport: string
+  /** Null while loading; positions and speeds colour the route when available. */
+  streams: ActivityStreams | null
+  /** Points hovered in the charts are marked on the map. */
+  hoverBus: HoverBus
+}
+
+/** The GPS route of one activity: coloured by speed when known, with start and finish. */
+export function RouteMap({ activityId, sport, streams, hoverBus }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<L.Map | null>(null)
 
   useEffect(() => {
     if (!ref.current) return
     const map = baseMap(ref.current)
-    let cancelled = false
-    api.get<{ coords: [number, number][] }>(`/activities/${activityId}/route`).then(({ coords }) => {
-      if (cancelled || coords.length < 2) return
-      const line = L.polyline(coords, { color: '#3b82f6', weight: 3, opacity: 0.85 }).addTo(map)
-      map.fitBounds(line.getBounds(), { padding: [20, 20], animate: false })
-      marker('#22c55e', 'play_arrow', 'Start', coords[0]).addTo(map)
-      marker('#ef4444', 'stop', 'Finish', coords[coords.length - 1]).addTo(map)
-    })
+    mapRef.current = map
     return () => {
-      cancelled = true
+      mapRef.current = null
       map.remove()
     }
   }, [activityId])
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || streams === null) return
+    const layers = L.layerGroup().addTo(map)
+    const controls: L.Control[] = []
+    let cancelled = false
+
+    const finish = (coords: L.LatLngTuple[]) => {
+      map.fitBounds(L.latLngBounds(coords), { padding: [20, 20], animate: false })
+      marker('#22c55e', 'play_arrow', 'Start', coords[0]).addTo(layers)
+      marker('#ef4444', 'stop', 'Finish', coords[coords.length - 1]).addTo(layers)
+    }
+
+    const p = streams.available ? streams.points : undefined
+    const positions: (L.LatLngTuple | null)[] = p
+      ? p.lat.map((lat, i) => (lat !== null && p.lon[i] !== null ? [lat, p.lon[i]!] : null))
+      : []
+    const located = positions.filter((c): c is L.LatLngTuple => c !== null)
+    const scale = p ? speedScale(p.speed) : null
+
+    if (p && scale && located.length > 1) {
+      // A soft outline under the coloured route keeps it readable on any map background
+      L.polyline(located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
+      for (let i = 1; i < positions.length; i++) {
+        const from = positions[i - 1]
+        const to = positions[i]
+        if (!from || !to) continue
+        const speeds = [p.speed[i - 1], p.speed[i]].filter((s): s is number => s !== null)
+        const speed = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : null
+        L.polyline([from, to], {
+          color: speed === null ? '#9ca3af' : speedColor(scale.position(speed)),
+          weight: 4,
+          opacity: 0.95,
+          interactive: false,
+        }).addTo(layers)
+      }
+      const key = legend(`Slow · ${formatSpeed(scale.low, sport)}`, `${formatSpeed(scale.high, sport)} · Fast`)
+      key.addTo(map)
+      controls.push(key)
+      finish(located)
+    } else {
+      // No per-second data: the stored route, in one colour
+      api.get<{ coords: [number, number][] }>(`/activities/${activityId}/route`).then(({ coords }) => {
+        if (cancelled || coords.length < 2) return
+        L.polyline(coords, { color: '#3b82f6', weight: 3, opacity: 0.85 }).addTo(layers)
+        finish(coords)
+      })
+    }
+
+    // Where the point hovered in the charts was; nearby points fill in short GPS gaps
+    const here = L.circleMarker([0, 0], {
+      radius: 7,
+      color: '#111827',
+      weight: 2,
+      fillColor: '#ffffff',
+      fillOpacity: 1,
+      interactive: false,
+    })
+    const unsubscribe = hoverBus.subscribe((index) => {
+      let at: L.LatLngTuple | null = null
+      for (let offset = 0; index !== null && offset < 5 && !at; offset++) {
+        at = positions[index - offset] ?? positions[index + offset] ?? null
+      }
+      if (at) {
+        here.setLatLng(at)
+        if (!map.hasLayer(here)) here.addTo(map)
+        here.bringToFront()
+      } else if (map.hasLayer(here)) {
+        here.remove()
+      }
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+      here.remove()
+      controls.forEach((c) => c.remove())
+      layers.remove()
+    }
+  }, [streams, activityId, sport, hoverBus])
 
   return <div ref={ref} style={{ width: '100%', height: 380 }} />
 }

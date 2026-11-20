@@ -113,6 +113,50 @@ class BestEffort(SQLModel, table=True):
     year: int
 
 
+# ── Training metrics ──────────────────────────────────────────────────────────
+
+
+class ActivityMetrics(SQLModel, table=True):
+    """Numbers computed once from an activity's FIT file, for the training-wide charts.
+
+    ``has_fit`` is false when no FIT file was available; the row then only records that,
+    so the activity is not re-read on every visit.
+    """
+
+    activity_id: int = Field(foreign_key="activity.id", primary_key=True)
+    version: int = 1
+    has_fit: bool = False
+    computed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    # Settings from the watch at the time of the activity
+    max_hr_setting: Optional[float] = None
+    threshold_hr_setting: Optional[float] = None
+    ftp_setting: Optional[float] = None
+    weight_kg: Optional[float] = None
+
+    # Time spent moving, from the records (the file's own total can be broken)
+    moving_seconds: Optional[float] = None
+    # Seconds spent at each heart rate, as JSON {"bpm": seconds}
+    hr_histogram: Optional[str] = None
+    # Best average power per duration, as JSON {"seconds": watts}
+    power_curve: Optional[str] = None
+    normalized_power: Optional[float] = None
+
+    avg_temperature: Optional[float] = None
+    grade_adjusted_speed: Optional[float] = None
+    decoupling_pct: Optional[float] = None
+
+    # Running dynamics averages
+    avg_step_length: Optional[float] = None
+    avg_ground_contact: Optional[float] = None
+    avg_vertical_oscillation: Optional[float] = None
+    avg_vertical_ratio: Optional[float] = None
+
+    # Pool swims
+    avg_swolf: Optional[float] = None
+    avg_stroke_rate: Optional[float] = None
+
+
 # ── Race Results ──────────────────────────────────────────────────────────────
 
 

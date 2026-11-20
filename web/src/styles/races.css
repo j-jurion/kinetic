@@ -23,3 +23,11 @@
     .races-result-card { transition: none; }
     .races-result-card:hover { transform: none; }
 }
+.races-chart-card {
+    border: 1px solid rgba(13, 148, 136, .2);
+    background: linear-gradient(135deg, #fff 0%, #f0fdfa 100%);
+}
+.body--dark .races-chart-card {
+    border-color: rgba(45, 212, 191, .2);
+    background: linear-gradient(135deg, #18262b, #1d3836);
+}

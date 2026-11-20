@@ -7,6 +7,7 @@ import { TOP_METRICS } from '../lib/topMetrics'
 import type { TopMetric } from '../lib/topMetrics'
 import type { ActivityRow } from '../lib/types'
 import { useFilters } from '../lib/useFilters'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { DataTable } from '../components/DataTable'
 import { EmptyCard, SportSelect, StatTile, YearSelect } from '../components/fields'
 import { Icon, Medal, MultisportMarker } from '../components/icons'
@@ -20,10 +21,11 @@ export function TopActivitiesPage() {
   const config = TOP_METRICS[metric]
   const { sport, year, setSport, setYear } = useFilters(ALL_RUNNING)
   const [activities, setActivities] = useState<ActivityRow[] | null>(null)
+  const latest = useLatestRequest()
 
   useEffect(() => {
-    if (config) api.get<ActivityRow[]>(`/top-activities/${metric}${qs({ sport, year })}`).then(setActivities)
-  }, [metric, config, sport, year])
+    if (config) latest(api.get<ActivityRow[]>(`/top-activities/${metric}${qs({ sport, year })}`), setActivities)
+  }, [metric, config, sport, year, latest])
 
   const rows: Row[] = useMemo(() => {
     if (!activities) return []

@@ -3,6 +3,7 @@ import { Button, Chip } from '@mui/material'
 import { api, qs } from '../lib/api'
 import { sportColor, sportLabel } from '../lib/format'
 import type { MapData } from '../lib/types'
+import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivitiesMap } from '../components/ActivitiesMap'
 import { Icon, SportIcon } from '../components/icons'
 
@@ -10,21 +11,22 @@ export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
+  const latest = useLatestRequest()
 
   // First load: every sport that has GPS data is selected.
   useEffect(() => {
-    api.get<MapData>('/map').then((result) => {
+    latest(api.get<MapData>('/map'), (result) => {
       setAvailable(result.available)
       setSelected(result.available)
       setData(result)
     })
-  }, [])
+  }, [latest])
 
   const select = (next: string[]) => {
     setSelected(next)
-    if (next.length) {
-      api.get<MapData>(`/map${qs({ sports: next.join(',') })}`).then(setData)
-    }
+    // Each selection supersedes the previous one, even when nothing needs loading, so a
+    // slow response for an earlier selection can never replace the routes shown now.
+    latest(next.length ? api.get<MapData>(`/map${qs({ sports: next.join(',') })}`) : Promise.resolve(null), setData)
   }
 
   const toggle = (sport: string) =>

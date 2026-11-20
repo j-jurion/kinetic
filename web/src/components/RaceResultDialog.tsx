@@ -1,30 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
 import { api } from '../lib/api'
+import { TIME_RULE, formatTimeInput, isValidTime, parseTimeInput } from '../lib/time'
 import type { RaceResult } from '../lib/types'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 
-function formatTimeInput(seconds: number | null | undefined): string {
-  if (!seconds) return ''
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  const s = Math.floor(seconds % 60)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return h ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
-}
-
-function parseTimeInput(text: string): number | null {
-  const value = text.trim()
-  if (!value) return null
-  const parts = value.split(':').map(Number)
-  if (parts.some((p) => Number.isNaN(p))) return null
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  if (parts.length === 2) return parts[0] * 60 + parts[1]
-  return parts[0]
-}
-
-const isValidSplitTime = (value: string) => /^\d+:[0-5]\d$/.test(value.trim())
 
 interface SplitRow {
   key: number
@@ -86,12 +67,17 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
     setFields((f) => ({ ...f, [key]: e.target.value }))
   const setSplit = (key: number, field: keyof SplitRow, value: string) =>
     setSplits((rows) => rows.map((r) => (r.key === key ? { ...r, [field]: value } : r)))
+  const officialInvalid = !!fields.official?.trim() && !isValidTime(fields.official)
   const intOrNull = (v: string | undefined) => (v && v.trim() !== '' ? Math.round(Number(v)) : null)
 
   const save = async () => {
-    const invalid = splits.find((r) => r.time.trim() && !isValidSplitTime(r.time))
+    if (officialInvalid) {
+      notify(`Invalid official time; ${TIME_RULE.charAt(0).toLowerCase()}${TIME_RULE.slice(1)}.`, 'error')
+      return
+    }
+    const invalid = splits.find((r) => r.time.trim() && !isValidTime(r.time))
     if (invalid) {
-      notify(`Invalid time for ${invalid.label || 'split'}; use M:SS with seconds from 00 to 59.`, 'error')
+      notify(`Invalid time for ${invalid.label || 'split'}; ${TIME_RULE.charAt(0).toLowerCase()}${TIME_RULE.slice(1)}.`, 'error')
       return
     }
     const payload = {
@@ -138,7 +124,15 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
       <DialogContent sx={{ p: 2, width: 'min(680px, calc(100vw - 32px))', minWidth: { sm: 520 }, maxHeight: '90vh' }}>
         <div className="text-h6 q-mb-md">Race Results</div>
         <div className="row gap-3 w-full items-start">
-          <TextField label="Official time" placeholder="H:MM:SS" value={fields.official ?? ''} onChange={set('official')} sx={{ flex: '1 1 150px' }} />
+          <TextField
+            label="Official time"
+            placeholder="H:MM:SS"
+            value={fields.official ?? ''}
+            onChange={set('official')}
+            error={officialInvalid}
+            helperText={officialInvalid ? TIME_RULE : undefined}
+            sx={{ flex: '1 1 150px' }}
+          />
           <TextField label="Bib #" value={fields.bib ?? ''} onChange={set('bib')} sx={{ width: 80 }} />
           <TextField label="Age group" placeholder="M40-44" value={fields.ageGroup ?? ''} onChange={set('ageGroup')} sx={{ width: 110 }} />
         </div>
@@ -162,11 +156,11 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
         <div className="text-caption text-grey-6 q-mt-md q-mb-xs">Splits</div>
         <div className="row gap-2 q-mb-xs">
           <span className="text-caption text-grey-5" style={{ width: 80 }}>Label</span>
-          <span className="text-caption text-grey-5" style={{ width: 110 }}>Time (M:SS)</span>
+          <span className="text-caption text-grey-5" style={{ width: 120 }}>Time</span>
           <span className="text-caption text-grey-5" style={{ width: 65 }}>Rank</span>
         </div>
         {splits.map((row) => {
-          const invalid = !!row.time.trim() && !isValidSplitTime(row.time)
+          const invalid = !!row.time.trim() && !isValidTime(row.time)
           return (
             <div key={row.key} className="row items-center no-wrap gap-2 q-mb-xs">
               <TextField size="small" value={row.label} onChange={(e) => setSplit(row.key, 'label', e.target.value)} sx={{ width: 80 }} />
@@ -176,8 +170,8 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
                 value={row.time}
                 onChange={(e) => setSplit(row.key, 'time', e.target.value)}
                 error={invalid}
-                helperText={invalid ? 'Use M:SS with seconds from 00 to 59' : undefined}
-                sx={{ width: 110 }}
+                helperText={invalid ? 'M:SS or H:MM:SS' : undefined}
+                sx={{ width: 120 }}
               />
               <TextField size="small" value={row.rank} onChange={(e) => setSplit(row.key, 'rank', e.target.value)} sx={{ width: 65 }} />
               <IconButton size="small" onClick={() => setSplits((rows) => rows.filter((r) => r.key !== row.key))} aria-label="Remove split">

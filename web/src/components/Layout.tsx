@@ -11,6 +11,7 @@ const NAV_ITEMS: [string, string, string][] = [
   ['Races', 'flag', '/races'],
   ['Map', 'map', '/map'],
   ['Graphs', 'bar_chart', '/graphs'],
+  ['Training', 'monitor_heart', '/training'],
   ['Best Efforts', 'emoji_events', '/best-efforts'],
   ['Friends', 'people', '/friends'],
   ['Sync', 'sync', '/sync'],

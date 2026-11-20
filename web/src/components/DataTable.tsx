@@ -17,6 +17,8 @@ interface DataTableProps<T> {
   rows: T[]
   rowKey: (row: T) => string | number
   onRowClick?: (row: T) => void
+  /** Called with the row under the pointer, and with null when the pointer leaves it. */
+  onRowHover?: (row: T | null) => void
   pageSize?: number
   bordered?: boolean
   className?: string
@@ -28,6 +30,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   onRowClick,
+  onRowHover,
   pageSize,
   bordered,
   className,
@@ -84,7 +87,24 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {visible.map((row) => (
-            <tr key={rowKey(row)} onClick={onRowClick ? () => onRowClick(row) : undefined}>
+            <tr
+              key={rowKey(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              onMouseEnter={onRowHover ? () => onRowHover(row) : undefined}
+              onMouseLeave={onRowHover ? () => onRowHover(null) : undefined}
+              // Clickable rows are reachable with Tab and open with Enter or Space
+              tabIndex={onRowClick ? 0 : undefined}
+              onKeyDown={
+                onRowClick
+                  ? (e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onRowClick(row)
+                      }
+                    }
+                  : undefined
+              }
+            >
               {columns.map((c) => (
                 <td key={c.name} className={`align-${c.align ?? 'left'}`}>
                   {c.render(row)}
