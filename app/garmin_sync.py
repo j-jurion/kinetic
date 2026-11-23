@@ -27,7 +27,7 @@ from app.ownership import current_owner
 
 # Where imported FIT files are kept; the activity charts read them back from here
 UPLOAD_DIR = Path(os.environ.get("KINETIC_UPLOAD_DIR", "uploads"))
-TOKEN_ROOT = Path("garmin_tokens")
+TOKEN_ROOT = Path(os.environ.get("KINETIC_GARMIN_TOKEN_DIR", "garmin_tokens"))
 _TOKEN_FILE = "garmin_tokens.json"
 _EMAIL_FILE = "garmin_email"
 
@@ -88,7 +88,7 @@ def import_fit_bytes(
     fit_bytes: bytes, garmin_activity_id: int | None = None, name: str | None = None
 ) -> int:
     """Write FIT bytes to uploads/, import them with any multisport legs and return the id."""
-    UPLOAD_DIR.mkdir(exist_ok=True)
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     fit_path = UPLOAD_DIR / f"{uuid.uuid4().hex}.fit"
     fit_path.write_bytes(fit_bytes)
 

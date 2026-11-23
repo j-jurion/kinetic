@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
+from sqlalchemy import BigInteger, Column
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -78,7 +79,8 @@ class Activity(SQLModel, table=True):
     # Parent activity id for multi-sport children (e.g. triathlon sub-sports)
     parent_id: Optional[int] = Field(default=None, foreign_key="activity.id", nullable=True)
     # Garmin Connect activity ID for deduplication during sync
-    garmin_activity_id: Optional[int] = None
+    # Garmin ids exceed 32 bits, so Postgres needs BIGINT (SQLite integers are 64-bit anyway)
+    garmin_activity_id: Optional[int] = Field(default=None, sa_column=Column(BigInteger))
 
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
