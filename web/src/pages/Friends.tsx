@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
 import { api } from '../lib/api'
-import type { Friend } from '../lib/types'
+import type { Friend } from '@kinetic/shared/types'
 import { EmptyCard } from '../components/fields'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'

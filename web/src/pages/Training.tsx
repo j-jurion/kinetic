@@ -2,38 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, LinearProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatDate, sportColor } from '../lib/format'
-import { formatClock } from '../lib/speed'
+import { formatDate } from '@kinetic/shared/format'
+import { formatClock } from '@kinetic/shared/speed'
+import { formBand } from '@kinetic/shared/training'
+import type { FormBand, Range, brickRuns } from '@kinetic/shared/training'
 import {
-  RAMP_WARNING_PCT,
-  activeDays,
-  addDays,
-  aerobicEfficiency,
-  brickRuns,
-  calendarGrid,
-  currentStreak,
-  dailyLoads,
-  dayKey,
-  disciplineActivities,
-  fitnessSeries,
-  formBand,
-  gradeAdjustedRuns,
-  heatVsPace,
-  inRange,
-  intensitySplit,
-  isRun,
-  longDecoupling,
-  longestStreak,
-  rangeStart,
-  runField,
-  startOfDay,
-  weeklyDisciplines,
-  weeklyLoad,
-  weeklyStreak,
-  weeklyZones,
-} from '../lib/training'
-import type { FormBand, Range, RunValue } from '../lib/training'
-import type { TrainingActivity, TrainingOverview } from '../lib/types'
+  DYNAMICS,
+  TRAINING_CAPTIONS,
+  dynamicsChart,
+  signed,
+  swimChart,
+  thresholdText,
+  trainingView,
+} from '@kinetic/shared/trainingPage'
+import type { AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
+import type { TrainingOverview } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ChartCard, Toggle } from '../components/ChartCard'
 import { Stat } from '../components/fields'
@@ -41,31 +24,8 @@ import { PageHeader, SectionHeading } from '../components/PageHeader'
 import { Icon } from '../components/icons'
 import { useNotify } from '../components/Notify'
 import { Plot } from '../components/Plot'
-import {
-  balanceChart,
-  balanceDonut,
-  brickChart,
-  calendarChart,
-  decouplingChart,
-  fitnessChart,
-  gradeAdjustedChart,
-  heatChart,
-  trendChart,
-  weeklyLoadChart,
-  zonesChart,
-} from '../components/training/charts'
-import type { Chart } from '../components/training/charts'
-
-type ZoneMode = 'hours' | 'pct'
-type Dynamics = 'avg_step_length' | 'avg_ground_contact' | 'avg_vertical_oscillation' | 'avg_cadence'
-type SwimMetric = 'swolf' | 'stroke_rate'
-
-const DYNAMICS: Record<Dynamics, { label: string; title: string; format: string; unit: string }> = {
-  avg_cadence: { label: 'Cadence', title: 'Cadence (spm)', format: '.0f', unit: 'spm' },
-  avg_step_length: { label: 'Step length', title: 'Step length (m)', format: '.2f', unit: 'm' },
-  avg_ground_contact: { label: 'Ground contact', title: 'Ground contact time (ms)', format: '.0f', unit: 'ms' },
-  avg_vertical_oscillation: { label: 'Vertical osc.', title: 'Vertical oscillation (cm)', format: '.1f', unit: 'cm' },
-}
+import { zonesChart } from '@kinetic/shared/charts/training'
+import type { Chart } from '@kinetic/shared/charts/training'
 
 const FORM_CLASS: Record<FormBand, string> = {
   Fresh: 'text-positive',
@@ -74,32 +34,10 @@ const FORM_CLASS: Record<FormBand, string> = {
   Overreaching: 'text-negative',
 }
 
-interface Progress {
-  done: number
-  total: number
-  name: string
-}
-
-const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(Math.round(n))}`
-
-/** "Zones and load use max HR 192 bpm (watch) and threshold 175 bpm (watch)". */
-function thresholdText(t: TrainingOverview['thresholds']): string | null {
-  const hr = (label: string, value: number | null, source: string | null) =>
-    value ? `${label} ${Math.round(value)} bpm${source ? ` (${source})` : ''}` : null
-  const parts = [hr('max HR', t.max_hr, t.max_hr_source), hr('threshold', t.threshold_hr, t.threshold_hr_source)].filter(
-    (p): p is string => p !== null,
-  )
-  if (!parts.length && !t.ftp_cycling) return null
-  let text = parts.length ? `Zones and load use ${parts.join(' and ')}` : 'Load uses heart rate'
-  // Only rides use power for their load (runs use heart rate, even with running power)
-  if (t.ftp_cycling) text += `; rides with power use your cycling FTP of ${Math.round(t.ftp_cycling)} W`
-  return `${text}.`
-}
-
 /** Banner offering to compute the metrics that are missing, with live progress. */
 function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => void }) {
   const notify = useNotify()
-  const [progress, setProgress] = useState<Progress | null>(null)
+  const [progress, setProgress] = useState<AnalyseProgress | null>(null)
   const [running, setRunning] = useState(false)
 
   const analyse = async () => {
@@ -218,99 +156,12 @@ export function TrainingPage() {
   const load = useCallback(() => latest(api.get<TrainingOverview>('/training'), setOverview), [latest])
   useEffect(load, [load])
 
-  const view = useMemo(() => {
-    if (!overview) return null
-    const all: TrainingActivity[] = overview.activities
-    const today = new Date()
-    const from = rangeStart(range, today)
-
-    // ── Fitness and form ──
-    const fitness = fitnessSeries(all, today)
-    const now = fitness[fitness.length - 1] ?? null
-    const fitnessShown = from ? fitness.filter((d) => d.date >= from) : fitness
-
-    // ── Weekly load, intensity and balance ──
-    const zoneWeeks = weeklyZones(all, from, today)
-    const balanceWeeks = weeklyDisciplines(all, from, today)
-
-    // ── Consistency: the calendar spans at least the last 52 weeks ──
-    const days = activeDays(all)
-    const yearAgo = addDays(startOfDay(today), -7 * 52 + 1)
-    const calendarFrom = from && from > yearAgo ? from : yearAgo
-    // Day keys sort like dates
-    const fromKey = from ? dayKey(from) : ''
-    const activeInRange = [...days].filter((key) => key >= fromKey).length
-
-    // ── Per-discipline trends use the legs of multisport events ──
-    const legs = disciplineActivities(all)
-    const hasRuns = legs.some(isRun)
-    const bricks = brickRuns(legs).filter((b) => inRange(b.activity.date, from))
-    const swims: RunValue[] = legs
-      .filter((a) => a.avg_swolf !== null)
-      .map((a) => ({ activity: a, value: a.avg_swolf! }))
-    const strokes: RunValue[] = legs
-      .filter((a) => a.avg_stroke_rate !== null)
-      .map((a) => ({ activity: a, value: a.avg_stroke_rate! }))
-
-    return {
-      now,
-      fitness: fitnessChart(fitnessShown),
-      weeklyLoad: weeklyLoadChart(weeklyLoad(all, from, today)),
-      zoneWeeks,
-      split: intensitySplit(zoneWeeks),
-      balance: balanceChart(balanceWeeks),
-      donut: balanceDonut(balanceWeeks),
-      calendar: calendarChart(calendarGrid(dailyLoads(all), days, calendarFrom, today)),
-      streaks: {
-        current: currentStreak(days, today),
-        longest: longestStreak(days),
-        weekly: weeklyStreak(days, today),
-        active: activeInRange,
-      },
-      hasRuns,
-      efficiency: trendChart(aerobicEfficiency(legs), from, {
-        title: 'Aerobic efficiency',
-        yTitle: 'm/min per bpm',
-        color: sportColor('running'),
-        format: '.2f',
-        unit: 'm/min/bpm',
-      }),
-      heat: heatChart(heatVsPace(legs).filter((p) => inRange(p.activity.date, from))),
-      gap: gradeAdjustedChart(gradeAdjustedRuns(legs).filter((r) => inRange(r.activity.date, from))),
-      bricks,
-      brickChart: brickChart(bricks),
-      legs,
-      from,
-      swims,
-      strokes,
-      decoupling: decouplingChart(longDecoupling(all).filter((a) => inRange(a.date, from))),
-    }
-  }, [overview, range])
+  const view = useMemo(() => (overview ? trainingView(overview, range) : null), [overview, range])
 
   // Charts behind a toggle are rebuilt on their own, without redoing the whole page
   const zones = useMemo(() => view && zonesChart(view.zoneWeeks, zoneMode), [view, zoneMode])
-  const dynamicsChart = useMemo(() => {
-    if (!view) return null
-    const config = DYNAMICS[dynamics]
-    return trendChart(runField(view.legs, dynamics), view.from, {
-      title: `Running dynamics – ${config.label.toLowerCase()}`,
-      yTitle: config.title,
-      color: sportColor('trail_running'),
-      format: config.format,
-      unit: config.unit,
-    })
-  }, [view, dynamics])
-  const swimChart = useMemo(() => {
-    if (!view || !view.swims.length) return null
-    const swolf = swimMetric === 'swolf'
-    return trendChart(swolf ? view.swims : view.strokes, view.from, {
-      title: swolf ? 'SWOLF' : 'Stroke rate',
-      yTitle: swolf ? 'SWOLF' : 'Strokes / min',
-      color: sportColor('swimming'),
-      format: '.0f',
-      unit: swolf ? '' : 'spm',
-    })
-  }, [view, swimMetric])
+  const dynamicsTrend = useMemo(() => view && dynamicsChart(view, dynamics), [view, dynamics])
+  const swimTrend = useMemo(() => view && swimChart(view, swimMetric), [view, swimMetric])
 
   if (!overview || !view) return null
   const thresholds = thresholdText(overview.thresholds)
@@ -339,9 +190,7 @@ export function TrainingPage() {
       <ChartCard
         caption={
           <>
-            Fitness is the 42-day and fatigue the 7-day weighted average of your daily load (one hour at threshold
-            = 100). Form is yesterday&apos;s fitness minus fatigue: green above +5 is fresh, blue −10 to −30 is
-            productive training, red below −30 is overreaching.
+            {TRAINING_CAPTIONS.fitness}
             {thresholds && ` ${thresholds}`}
           </>
         }
@@ -362,7 +211,7 @@ export function TrainingPage() {
 
       <div className="w-full graphs-grid">
         <ChartCard
-          caption={`Bars turn amber when the 4-week average load rises more than ${RAMP_WARNING_PCT}% in a week (dashed line): building that fast raises the risk of injury and illness.`}
+          caption={TRAINING_CAPTIONS.weeklyLoad}
         >
           <ChartPlot chart={view.weeklyLoad} />
         </ChartCard>
@@ -394,7 +243,7 @@ export function TrainingPage() {
 
       <SectionHeading icon="donut_large">Discipline balance</SectionHeading>
       <div className="w-full graphs-grid">
-        <ChartCard caption="Moving time per week. Multisport events count per leg; running includes trail running.">
+        <ChartCard caption={TRAINING_CAPTIONS.balance}>
           <ChartPlot chart={view.balance} />
         </ChartCard>
         <ChartCard>
@@ -404,7 +253,7 @@ export function TrainingPage() {
 
       {/* ── Consistency ── */}
       <SectionHeading icon="calendar_month">Consistency</SectionHeading>
-      <ChartCard caption="Each square is a day, darker for a higher training load.">
+      <ChartCard caption={TRAINING_CAPTIONS.calendar}>
         <div className="stat-grid q-mb-sm">
           <Stat label="Current streak (days)" value={view.streaks.current} />
           <Stat label="Longest streak (days)" value={view.streaks.longest} />
@@ -419,7 +268,7 @@ export function TrainingPage() {
         <>
           <SectionHeading icon="directions_run">Running</SectionHeading>
           <div className="w-full graphs-grid">
-            <ChartCard caption="Speed (metres per minute) per heartbeat on steady runs; races, intervals and tempo runs are left out. Higher = more speed per heartbeat.">
+            <ChartCard caption={TRAINING_CAPTIONS.efficiency}>
               <ChartPlot chart={view.efficiency} />
             </ChartCard>
             <ChartCard
@@ -432,16 +281,16 @@ export function TrainingPage() {
                 />
               }
             >
-              {dynamicsChart && <ChartPlot chart={dynamicsChart} />}
+              {dynamicsTrend && <ChartPlot chart={dynamicsTrend} />}
             </ChartCard>
-            <ChartCard caption="The watch's temperature sensor reads warm (body heat, sun), so values are higher than the air temperature.">
+            <ChartCard caption={TRAINING_CAPTIONS.heat}>
               <ChartPlot chart={view.heat} />
             </ChartCard>
-            <ChartCard caption="Grade-adjusted pace (GAP) is the flat-ground equivalent effort. Shown for trail runs and runs with at least 15 m of climbing per km.">
+            <ChartCard caption={TRAINING_CAPTIONS.gap}>
               <ChartPlot chart={view.gap} />
             </ChartCard>
           </div>
-          <ChartCard caption="Runs straight off the bike: multisport run legs after a ride, or runs starting within 30 minutes of a ride ending. Compared with the average pace of your other runs within ±30% of the distance.">
+          <ChartCard caption={TRAINING_CAPTIONS.bricks}>
             {view.bricks.length ? (
               <div className="column w-full gap-2">
                 <ChartPlot chart={view.brickChart} height={300} />
@@ -460,7 +309,7 @@ export function TrainingPage() {
       )}
 
       {/* ── Swimming ── */}
-      {swimChart && (
+      {swimTrend && (
         <>
           <SectionHeading icon="pool">Swimming</SectionHeading>
           <ChartCard
@@ -477,18 +326,18 @@ export function TrainingPage() {
             }
             caption={
               swimMetric === 'swolf'
-                ? 'SWOLF is the seconds plus strokes per length: lower is more efficient.'
-                : 'Average strokes per minute.'
+                ? TRAINING_CAPTIONS.swolf
+                : TRAINING_CAPTIONS.strokeRate
             }
           >
-            <ChartPlot chart={swimChart} />
+            <ChartPlot chart={swimTrend} />
           </ChartCard>
         </>
       )}
 
       {/* ── Decoupling ── */}
       <SectionHeading icon="favorite">Endurance</SectionHeading>
-      <ChartCard caption="How much output per heartbeat (pace or power) drops from the first to the second half of sessions of an hour or more. Below 5% (dashed line) means your aerobic base held up well.">
+      <ChartCard caption={TRAINING_CAPTIONS.decoupling}>
         <ChartPlot chart={view.decoupling} />
       </ChartCard>
     </>

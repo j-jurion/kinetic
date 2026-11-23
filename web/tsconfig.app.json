@@ -21,7 +21,13 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* Code shared with the mobile app. Its type-only imports of Plotly resolve to web's copy. */
+    "paths": {
+      "@kinetic/shared/*": ["../packages/shared/src/*"],
+      "plotly.js-dist-min": ["./node_modules/plotly.js-dist-min"]
+    }
   },
-  "include": ["src"]
+  "include": ["src", "../packages/shared/src"]
 }

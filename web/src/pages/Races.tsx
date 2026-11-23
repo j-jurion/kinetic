@@ -1,9 +1,10 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatDate, formatDuration, kindLabel } from '../lib/format'
-import { breakdownEvents } from '../lib/performance'
-import type { MultisportEvent, RaceRow } from '../lib/types'
+import { formatDate, formatDuration, kindLabel } from '@kinetic/shared/format'
+import { breakdownEvents } from '@kinetic/shared/performance'
+import { formatRank } from '@kinetic/shared/forms'
+import type { MultisportEvent, RaceRow } from '@kinetic/shared/types'
 import { EmptyCard } from '../components/fields'
 import { MultisportMarker, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
@@ -11,11 +12,6 @@ import '../styles/races.css'
 
 // Plotly is large: the multisport charts load only when there are such races
 const RaceBreakdownCharts = lazy(() => import('../components/performance/RaceBreakdownCharts'))
-
-function formatRank(rank: number | null, total: number | null): string | null {
-  if (!rank) return null
-  return total ? `${rank}/${total}` : String(rank)
-}
 
 export function RacesPage() {
   const [results, setResults] = useState<RaceRow[] | null>(null)

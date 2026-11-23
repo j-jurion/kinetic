@@ -9,7 +9,7 @@ import {
   TextField,
 } from '@mui/material'
 import { api } from '../lib/api'
-import { formatDate, parseDateInput } from '../lib/format'
+import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { Stat } from '../components/fields'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'

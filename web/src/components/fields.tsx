@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { InputAdornment, MenuItem, TextField } from '@mui/material'
-import { sportFilterOptions, yearOptions } from '../lib/format'
+import { sportFilterOptions, yearOptions } from '@kinetic/shared/format'
 import { Icon } from './icons'
 
 interface SelectFieldProps {

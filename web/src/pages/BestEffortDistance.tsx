@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { Data, Layout } from 'plotly.js-dist-min'
 import { api, qs } from '../lib/api'
 import {
   ALL_RUNNING,
@@ -9,10 +8,10 @@ import {
   formatDuration,
   formatPace,
   markYearBests,
-  sportColor,
   sportLabel,
-} from '../lib/format'
-import type { BestEffortRow } from '../lib/types'
+} from '@kinetic/shared/format'
+import { attemptsChart } from '@kinetic/shared/charts/records'
+import type { BestEffortRow } from '@kinetic/shared/types'
 import { useFilters } from '../lib/useFilters'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { DataTable } from '../components/DataTable'
@@ -42,32 +41,7 @@ export function BestEffortDistancePage() {
     return attempts.map((a, i) => ({ ...a, rank: i + 1, yearBest: bests[i] }))
   }, [attempts])
 
-  const chart = useMemo((): [Data[], Partial<Layout>] => {
-    const byDate = [...rows].sort((a, b) => a.date.localeCompare(b.date))
-    const color = sportColor(sport)
-    return [
-      [
-        {
-          type: 'scatter',
-          mode: 'lines+markers',
-          x: byDate.map((a) => a.date.slice(0, 10)),
-          y: byDate.map((a) => a.duration_seconds / 60),
-          name: 'Time',
-          line: { color, width: 2 },
-          marker: { color, size: 8 },
-          customdata: byDate.map((a) => [formatDuration(a.duration_seconds), a.activity_name, formatDate(a.date)]) as never,
-          hovertemplate: '<b>%{customdata[1]}</b><br>%{customdata[2]}<br>Time: %{customdata[0]}<extra></extra>',
-        },
-      ],
-      {
-        title: { text: `${label} progression` },
-        xaxis: { title: { text: 'Date' }, tickformat: '%d-%m-%Y' },
-        yaxis: { title: { text: 'Time (minutes)' } },
-        margin: { l: 50, r: 20, t: 50, b: 50 },
-        showlegend: false,
-      },
-    ]
-  }, [rows, sport, label])
+  const chart = useMemo(() => attemptsChart(rows, sport, label), [rows, sport, label])
 
   const times = rows.map((r) => r.duration_seconds)
 
