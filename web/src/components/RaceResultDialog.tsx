@@ -1,23 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
 import { api } from '../lib/api'
-import { TIME_RULE, formatTimeInput, isValidTime, parseTimeInput } from '@kinetic/shared/time'
+import { TIME_RULE, isValidTime } from '@kinetic/shared/time'
+import { invalidTime, raceForm, racePayload } from '@kinetic/shared/forms'
+import type { SplitRow } from '@kinetic/shared/forms'
 import type { RaceResult } from '@kinetic/shared/types'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 
-
-interface SplitRow {
-  key: number
-  label: string
-  time: string
-  rank: string
-}
-
-const DEFAULT_SPLITS: Record<string, string[]> = {
-  triathlon: ['Swim', 'T1', 'Bike', 'T2', 'Run'],
-  duathlon: ['Run 1', 'T1', 'Bike', 'T2', 'Run 2'],
-}
 
 interface Props {
   open: boolean
@@ -36,72 +26,25 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
 
   useEffect(() => {
     if (!open) return
-    const rr = existing
-    const num = (v: number | null | undefined) => (v == null ? '' : String(v))
-    setFields({
-      official: formatTimeInput(rr?.official_time_seconds),
-      bib: rr?.bib_number ?? '',
-      ageGroup: rr?.age_group ?? '',
-      overallRank: num(rr?.overall_rank),
-      overallTotal: num(rr?.overall_total),
-      genderRank: num(rr?.gender_rank),
-      genderTotal: num(rr?.gender_total),
-      agRank: num(rr?.age_group_rank),
-      agTotal: num(rr?.age_group_total),
-      url: rr?.results_url ?? '',
-      notes: rr?.notes ?? '',
-    })
-    setSplits(
-      rr?.splits.length
-        ? rr.splits.map((s, i) => ({
-            key: i,
-            label: s.label,
-            time: formatTimeInput(s.duration_seconds),
-            rank: s.rank ? String(s.rank) : '',
-          }))
-        : (DEFAULT_SPLITS[sport] ?? []).map((label, i) => ({ key: i, label, time: '', rank: '' })),
-    )
+    const form = raceForm(existing, sport)
+    setFields(form.fields)
+    setSplits(form.splits)
   }, [open, existing, sport])
 
   const set = (key: string) => (e: { target: { value: string } }) =>
     setFields((f) => ({ ...f, [key]: e.target.value }))
   const setSplit = (key: number, field: keyof SplitRow, value: string) =>
     setSplits((rows) => rows.map((r) => (r.key === key ? { ...r, [field]: value } : r)))
-  const officialInvalid = !!fields.official?.trim() && !isValidTime(fields.official)
-  const intOrNull = (v: string | undefined) => (v && v.trim() !== '' ? Math.round(Number(v)) : null)
+  const officialInvalid = invalidTime(fields.official)
 
   const save = async () => {
-    if (officialInvalid) {
-      notify(`Invalid official time; ${TIME_RULE.charAt(0).toLowerCase()}${TIME_RULE.slice(1)}.`, 'error')
+    const result = racePayload(fields as Parameters<typeof racePayload>[0], splits)
+    if ('error' in result) {
+      notify(result.error, 'error')
       return
-    }
-    const invalid = splits.find((r) => r.time.trim() && !isValidTime(r.time))
-    if (invalid) {
-      notify(`Invalid time for ${invalid.label || 'split'}; ${TIME_RULE.charAt(0).toLowerCase()}${TIME_RULE.slice(1)}.`, 'error')
-      return
-    }
-    const payload = {
-      official_time_seconds: parseTimeInput(fields.official ?? ''),
-      bib_number: fields.bib || null,
-      age_group: fields.ageGroup || null,
-      overall_rank: intOrNull(fields.overallRank),
-      overall_total: intOrNull(fields.overallTotal),
-      gender_rank: intOrNull(fields.genderRank),
-      gender_total: intOrNull(fields.genderTotal),
-      age_group_rank: intOrNull(fields.agRank),
-      age_group_total: intOrNull(fields.agTotal),
-      results_url: fields.url || null,
-      notes: fields.notes || null,
-      splits: splits
-        .filter((r) => r.label.trim())
-        .map((r) => ({
-          label: r.label,
-          duration_seconds: parseTimeInput(r.time),
-          rank: /^\d+$/.test(r.rank.trim()) ? Number(r.rank) : null,
-        })),
     }
     try {
-      await api.put(`/activities/${activityId}/race-result`, payload)
+      await api.put(`/activities/${activityId}/race-result`, result.payload)
       onClose()
       onSaved()
     } catch (error) {

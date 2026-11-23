@@ -1,12 +1,19 @@
 {
   "name": "mobile",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~58.0.26",
+    "expo-constants": "~58.0.16",
+    "expo-document-picker": "~58.0.5",
+    "expo-linking": "~58.0.17",
+    "expo-router": "~58.0.32",
     "expo-status-bar": "~58.0.5",
     "react": "19.3.0",
     "react-native": "0.88.1",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-screens": "~4.30.1",
     "react-native-webview": "14.0.1"
   },
   "devDependencies": {

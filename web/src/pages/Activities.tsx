@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Button, IconButton } from '@mui/material'
 import { api, qs } from '../lib/api'
 import { formatDate, formatDistance, formatDuration, formatPace, kindLabel, sportColor } from '@kinetic/shared/format'
+import { byMonth, hours, km, monthSummary, monthTitle, totals } from '@kinetic/shared/activityList'
 import type { Activity, ActivityRow } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog, UploadDialog } from '../components/ActivityDialogs'
@@ -18,47 +19,6 @@ function Metric({ value, label }: { value: string; label: string }) {
       <div className="metric-label">{label}</div>
     </div>
   )
-}
-
-interface Totals {
-  count: number
-  meters: number
-  seconds: number
-  climb: number
-}
-
-/** Totals over the activities, counting a multisport leg only when its event is not listed too. */
-function totals(activities: ActivityRow[]): Totals {
-  const ids = new Set(activities.map((a) => a.id))
-  const t: Totals = { count: 0, meters: 0, seconds: 0, climb: 0 }
-  for (const a of activities) {
-    if (a.parent_id !== null && ids.has(a.parent_id)) continue
-    t.count += 1
-    t.meters += a.distance_meters ?? 0
-    t.seconds += a.duration_seconds ?? 0
-    t.climb += a.elevation_gain_meters ?? 0
-  }
-  return t
-}
-
-const km = (meters: number) => `${Math.round(meters / 1000).toLocaleString('en')} km`
-const hours = (seconds: number) => `${Math.round(seconds / 3600).toLocaleString('en')} h`
-
-function monthTitle(key: string): string {
-  const [y, m] = key.split('-').map(Number)
-  return new Date(y, m - 1, 1).toLocaleString('en', { month: 'long', year: 'numeric' })
-}
-
-/** Activities grouped per calendar month, in the order they arrive (newest first). */
-function byMonth(activities: ActivityRow[]): [string, ActivityRow[]][] {
-  const groups = new Map<string, ActivityRow[]>()
-  for (const a of activities) {
-    const key = a.date.slice(0, 7)
-    const group = groups.get(key)
-    if (group) group.push(a)
-    else groups.set(key, [a])
-  }
-  return [...groups.entries()]
 }
 
 export function ActivitiesPage() {
@@ -106,14 +66,11 @@ export function ActivitiesPage() {
       )}
 
       {months.map(([key, group]) => {
-        const t = totals(group)
         return (
           <section key={key} className="month-group">
             <div className="month-heading">
               <span className="month-heading-title">{monthTitle(key)}</span>
-              <span className="month-heading-meta">
-                {t.count} {t.count === 1 ? 'activity' : 'activities'} · {km(t.meters)} · {hours(t.seconds)}
-              </span>
+              <span className="month-heading-meta">{monthSummary(group)}</span>
             </div>
             {group.map((a) => {
               const dist = a.distance_meters

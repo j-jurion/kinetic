@@ -4,7 +4,7 @@ import type { HoverBus } from '@kinetic/shared/hoverBus'
 import type { Climb } from '@kinetic/shared/types'
 import { DataTable } from '../DataTable'
 import type { Column } from '../DataTable'
-import { indexAtDistance } from './streamIndex'
+import { indexAtDistance } from '@kinetic/shared/streamIndex'
 
 type Row = Climb & { number: number }
 

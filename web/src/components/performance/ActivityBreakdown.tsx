@@ -1,5 +1,6 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
+import { eventFromSplits } from '@kinetic/shared/charts/races'
 import { eventFromLegs } from '@kinetic/shared/performance'
 import type { BreakdownEvent } from '@kinetic/shared/performance'
 import type { Activity, MultisportEvent, RaceResult } from '@kinetic/shared/types'
@@ -20,17 +21,9 @@ export function ActivityBreakdown({ activity, raceResult }: Props) {
   const latest = useLatestRequest()
 
   useEffect(() => {
-    const splits = (raceResult?.splits ?? []).filter((s) => s.label.trim() && s.duration_seconds)
-    if (splits.length >= 2) {
-      latest(Promise.resolve(null), () =>
-        setEvent({
-          id: activity.id,
-          name: activity.name,
-          date: activity.date,
-          source: 'splits',
-          segments: splits.map((s) => ({ label: s.label.trim(), seconds: s.duration_seconds! })),
-        }),
-      )
+    const fromSplits = eventFromSplits(activity, raceResult)
+    if (fromSplits) {
+      latest(Promise.resolve(null), () => setEvent(fromSplits))
       return
     }
     latest(api.get<MultisportEvent[]>('/multisport'), (events) => {

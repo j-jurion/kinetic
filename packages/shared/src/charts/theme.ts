@@ -1,6 +1,9 @@
 // Plotly styling shared by the web and mobile apps, so a chart looks the same on both.
 import type { Data, Layout } from 'plotly.js-dist-min'
 
+/** A Plotly chart as a [traces, layout] pair, as the chart builders return it. */
+export type Chart = [Data[], Partial<Layout>]
+
 /** A Plotly chart: its traces and layout. */
 export interface ChartSpec {
   data: Data[]
