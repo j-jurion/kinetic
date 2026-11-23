@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { api } from '../lib/api'
-import type { HoverBus } from '../lib/hoverBus'
-import { KIND_COLORS } from '../lib/performance'
-import type { RouteLeg } from '../lib/performance'
-import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from '../lib/speed'
-import type { ActivityStreams } from '../lib/types'
+import type { HoverBus } from '@kinetic/shared/hoverBus'
+import { KIND_COLORS } from '@kinetic/shared/performance'
+import type { RouteLeg } from '@kinetic/shared/performance'
+import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from '@kinetic/shared/speed'
+import type { ActivityStreams } from '@kinetic/shared/types'
 
 // OpenStreetMap's standard tiles — free and keyless
 export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'

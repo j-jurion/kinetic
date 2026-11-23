@@ -1,9 +1,9 @@
 // Plotly figures for the Training page. Each builder takes prepared data from lib/training.ts.
 
 import type { Data, Layout, Shape } from 'plotly.js-dist-min'
-import { formatDate, sportColor, sportLabel } from '../../lib/format'
-import { rollingAverage } from '../../lib/graphs'
-import { formatClock, paceAxis } from '../../lib/speed'
+import { formatDate, sportColor, sportLabel } from '@kinetic/shared/format'
+import { rollingAverage } from '@kinetic/shared/graphs'
+import { formatClock, paceAxis } from '@kinetic/shared/speed'
 import {
   DISCIPLINES,
   DISCIPLINE_COLORS,
@@ -12,7 +12,7 @@ import {
   dayKey,
   inRange,
   linearFit,
-} from '../../lib/training'
+} from '@kinetic/shared/training'
 import type {
   BrickRun,
   CalendarGrid,
@@ -23,8 +23,8 @@ import type {
   RunValue,
   Week,
   WeeklyLoad,
-} from '../../lib/training'
-import type { TrainingActivity } from '../../lib/types'
+} from '@kinetic/shared/training'
+import type { TrainingActivity } from '@kinetic/shared/types'
 import { noDataLayout } from '../Plot'
 
 export type Chart = [Data[], Partial<Layout>]

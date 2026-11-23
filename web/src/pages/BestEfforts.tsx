@@ -12,10 +12,10 @@ import {
   formatPace,
   resolveSports,
   sportLabel,
-} from '../lib/format'
-import { TOP_METRICS, topActivitiesUrl } from '../lib/topMetrics'
-import type { TopMetric } from '../lib/topMetrics'
-import type { BestEffortRow, BestEffortsOverview } from '../lib/types'
+} from '@kinetic/shared/format'
+import { TOP_METRICS, topActivitiesUrl } from '@kinetic/shared/topMetrics'
+import type { TopMetric } from '@kinetic/shared/topMetrics'
+import type { BestEffortRow, BestEffortsOverview } from '@kinetic/shared/types'
 import { useFilters } from '../lib/useFilters'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { SportSelect, StatTile, YearSelect } from '../components/fields'

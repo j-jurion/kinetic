@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
-import { formatDate, formatDistance, formatDuration, formatPace, sportColor } from '../lib/format'
-import type { MapRoute } from '../lib/types'
+import { formatDate, formatDistance, formatDuration, formatPace, sportColor } from '@kinetic/shared/format'
+import type { MapRoute } from '@kinetic/shared/types'
 import { baseMap } from './RouteMap'
 import '../styles/map.css'
 

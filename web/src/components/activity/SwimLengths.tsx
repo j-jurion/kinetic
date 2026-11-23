@@ -1,8 +1,8 @@
 import { useMemo } from 'react'
 import type { Data, Layout } from 'plotly.js-dist-min'
-import { sportColor } from '../../lib/format'
-import { formatClock, heartRateAxis } from '../../lib/speed'
-import type { SwimLength } from '../../lib/types'
+import { sportColor } from '@kinetic/shared/format'
+import { formatClock, heartRateAxis } from '@kinetic/shared/speed'
+import type { SwimLength } from '@kinetic/shared/types'
 import { Plot } from '../Plot'
 
 const SWOLF_COLOR = '#f97316'

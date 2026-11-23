@@ -17,10 +17,10 @@ import {
   ordinal,
   sportColor,
   sportLabel,
-} from '../lib/format'
-import { createHoverBus } from '../lib/hoverBus'
-import { routeLegs } from '../lib/performance'
-import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '../lib/types'
+} from '@kinetic/shared/format'
+import { createHoverBus } from '@kinetic/shared/hoverBus'
+import { routeLegs } from '@kinetic/shared/performance'
+import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
 import { DataTable } from '../components/DataTable'

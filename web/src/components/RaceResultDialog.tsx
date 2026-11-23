@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Button, Dialog, DialogContent, IconButton, TextField } from '@mui/material'
 import { api } from '../lib/api'
-import { TIME_RULE, formatTimeInput, isValidTime, parseTimeInput } from '../lib/time'
-import type { RaceResult } from '../lib/types'
+import { TIME_RULE, formatTimeInput, isValidTime, parseTimeInput } from '@kinetic/shared/time'
+import type { RaceResult } from '@kinetic/shared/types'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 

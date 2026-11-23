@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import type { Data, Layout } from 'plotly.js-dist-min'
-import { GOLD, formatDate, toIsoLocal } from '../../lib/format'
-import { POWER_DURATIONS, bestCurve, durationLabel, monthsBefore } from '../../lib/performance'
-import type { CurvePoint, FtpPoint } from '../../lib/performance'
-import type { TrainingActivity } from '../../lib/types'
+import { GOLD, formatDate, toIsoLocal } from '@kinetic/shared/format'
+import { POWER_DURATIONS, bestCurve, durationLabel, monthsBefore } from '@kinetic/shared/performance'
+import type { CurvePoint, FtpPoint } from '@kinetic/shared/performance'
+import type { TrainingActivity } from '@kinetic/shared/types'
 import { Plot, noDataLayout } from '../Plot'
 
 type Chart = [Data[], Partial<Layout>]

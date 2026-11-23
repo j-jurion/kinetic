@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Button, LinearProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
-import { formatDate, sportColor } from '../lib/format'
-import { formatClock } from '../lib/speed'
+import { formatDate, sportColor } from '@kinetic/shared/format'
+import { formatClock } from '@kinetic/shared/speed'
 import {
   RAMP_WARNING_PCT,
   activeDays,
@@ -31,9 +31,9 @@ import {
   weeklyLoad,
   weeklyStreak,
   weeklyZones,
-} from '../lib/training'
-import type { FormBand, Range, RunValue } from '../lib/training'
-import type { TrainingActivity, TrainingOverview } from '../lib/types'
+} from '@kinetic/shared/training'
+import type { FormBand, Range, RunValue } from '@kinetic/shared/training'
+import type { TrainingActivity, TrainingOverview } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ChartCard, Toggle } from '../components/ChartCard'
 import { Stat } from '../components/fields'

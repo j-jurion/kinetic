@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { distanceLabel, formatDate, formatDuration, formatPace } from '../../lib/format'
-import { formatImprovement, predictRaces } from '../../lib/performance'
-import type { Prediction } from '../../lib/performance'
-import type { BestEffortRow } from '../../lib/types'
+import { distanceLabel, formatDate, formatDuration, formatPace } from '@kinetic/shared/format'
+import { formatImprovement, predictRaces } from '@kinetic/shared/performance'
+import type { Prediction } from '@kinetic/shared/performance'
+import type { BestEffortRow } from '@kinetic/shared/types'
 import { Icon } from '../icons'
 import { SectionHeading } from './SectionHeading'
 

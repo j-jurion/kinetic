@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import type { Data, Layout } from 'plotly.js-dist-min'
-import { distanceLabel, formatDate, formatDuration, formatPace } from '../../lib/format'
-import { formatImprovement } from '../../lib/performance'
-import type { RecordHistory } from '../../lib/performance'
-import { paceAxis } from '../../lib/speed'
+import { distanceLabel, formatDate, formatDuration, formatPace } from '@kinetic/shared/format'
+import { formatImprovement } from '@kinetic/shared/performance'
+import type { RecordHistory } from '@kinetic/shared/performance'
+import { paceAxis } from '@kinetic/shared/speed'
 import { Plot } from '../Plot'
 
 // One colour per distance, short to long

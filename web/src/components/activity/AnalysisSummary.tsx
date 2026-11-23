@@ -1,6 +1,6 @@
-import { sportColor } from '../../lib/format'
-import { formatSpeed } from '../../lib/speed'
-import type { Activity, ActivityStreams } from '../../lib/types'
+import { sportColor } from '@kinetic/shared/format'
+import { formatSpeed } from '@kinetic/shared/speed'
+import type { Activity, ActivityStreams } from '@kinetic/shared/types'
 
 const POWER = '#3b82f6'
 const DYNAMICS = '#8b5cf6'

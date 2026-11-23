@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import type { Data, Layout } from 'plotly.js-dist-min'
-import { formatDate, formatDuration } from '../../lib/format'
-import { KIND_COLORS, OTHER_COLORS, isTransition, segmentColors, segmentLabels, segmentSeconds, splitKind } from '../../lib/performance'
-import type { BreakdownEvent } from '../../lib/performance'
-import { formatClock } from '../../lib/speed'
+import { formatDate, formatDuration } from '@kinetic/shared/format'
+import { KIND_COLORS, OTHER_COLORS, isTransition, segmentColors, segmentLabels, segmentSeconds, splitKind } from '@kinetic/shared/performance'
+import type { BreakdownEvent } from '@kinetic/shared/performance'
+import { formatClock } from '@kinetic/shared/speed'
 import { Plot } from '../Plot'
 
 type Chart = [Data[], Partial<Layout>]

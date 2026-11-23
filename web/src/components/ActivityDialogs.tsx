@@ -10,8 +10,8 @@ import {
   TextField,
 } from '@mui/material'
 import { api } from '../lib/api'
-import { KINDS, SPORTS, formatDateTime, parseDateInput, sportLabel } from '../lib/format'
-import type { Activity, Friend } from '../lib/types'
+import { KINDS, SPORTS, formatDateTime, parseDateInput, sportLabel } from '@kinetic/shared/format'
+import type { Activity, Friend } from '@kinetic/shared/types'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { Tooltip } from '@mui/material'
-import { MEDAL_COLORS, MEDAL_LABELS, SPORT_GROUPS, sportColor, sportLabel } from '../lib/format'
+import { MEDAL_COLORS, MEDAL_LABELS, SPORT_GROUPS, sportColor, sportLabel } from '@kinetic/shared/format'
 
 interface IconProps {
   name: string

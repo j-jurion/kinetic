@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button, Tooltip } from '@mui/material'
-import { GOLD, filteredUrl } from '../lib/format'
+import { GOLD, filteredUrl } from '@kinetic/shared/format'
 import { Icon, SportIcon } from './icons'
 
 /** "Best Efforts" back button, sport icon and title shown above ranking pages. */

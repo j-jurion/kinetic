@@ -11,8 +11,8 @@ import {
   markYearBests,
   sportColor,
   sportLabel,
-} from '../lib/format'
-import type { BestEffortRow } from '../lib/types'
+} from '@kinetic/shared/format'
+import type { BestEffortRow } from '@kinetic/shared/types'
 import { useFilters } from '../lib/useFilters'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { DataTable } from '../components/DataTable'

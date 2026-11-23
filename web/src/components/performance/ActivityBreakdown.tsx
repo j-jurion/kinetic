@@ -1,8 +1,8 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
 import { api } from '../../lib/api'
-import { eventFromLegs } from '../../lib/performance'
-import type { BreakdownEvent } from '../../lib/performance'
-import type { Activity, MultisportEvent, RaceResult } from '../../lib/types'
+import { eventFromLegs } from '@kinetic/shared/performance'
+import type { BreakdownEvent } from '@kinetic/shared/performance'
+import type { Activity, MultisportEvent, RaceResult } from '@kinetic/shared/types'
 import { useLatestRequest } from '../../lib/useLatestRequest'
 
 // Plotly is large: the chart loads only on multisport activities
