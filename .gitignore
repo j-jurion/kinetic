@@ -27,3 +27,6 @@ web/dist/
 
 # Build metadata
 *.egg-info/
+
+# Deployment scratch
+uploads.tgz
