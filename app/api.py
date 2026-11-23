@@ -23,6 +23,7 @@ from sqlmodel import col, select
 from app import apple_health, auth, garmin_sync, metrics, streams
 from app.database import engine, require_id
 from app.formatting import SPORTS, resolve_sports
+from app.friends import friend_rows
 from app.models import (
     Activity,
     ActivityFriend,
@@ -123,11 +124,6 @@ class ActivityUpdate(BaseModel):
     friend_ids: Optional[list[int]] = None
 
 
-class FriendCreate(BaseModel):
-    name: str
-    email: Optional[str] = None
-
-
 class RaceSplitIn(BaseModel):
     label: str
     duration_seconds: Optional[float] = None
@@ -153,14 +149,23 @@ class RaceResultIn(BaseModel):
 
 
 @router.get("/activities")
-def list_activities(sport: Optional[str] = None, year: Optional[int] = None) -> list[dict]:
+def list_activities(
+    sport: Optional[str] = None, year: Optional[int] = None, friend: Optional[int] = None
+) -> list[dict]:
     """Activities, newest first.
 
     Without a sport filter only top-level activities are listed (a multisport event stands
-    for its legs); with a filter, legs of that sport are listed on their own.
+    for its legs); with a filter, legs of that sport are listed on their own. ``friend``
+    keeps the activities that friend is tagged on.
     """
     with Session(engine) as session:
         stmt = select(Activity)
+        if friend is not None:
+            stmt = stmt.where(
+                col(Activity.id).in_(
+                    select(ActivityFriend.activity_id).where(ActivityFriend.friend_id == friend)
+                )
+            )
         sport_types = _sport_types(sport)
         if sport_types:
             stmt = stmt.where(col(Activity.sport).in_(sport_types))
@@ -352,7 +357,7 @@ def _activity_friends(session, activity_id: int) -> list[dict]:
         .join(ActivityFriend, col(ActivityFriend.friend_id) == col(Friend.id))
         .where(ActivityFriend.activity_id == activity_id)
     ).all()
-    return [_dump(f) for f in friends]
+    return friend_rows(list(friends))
 
 
 @router.get("/activities/{activity_id}/detail")
@@ -714,43 +719,6 @@ def top_activities(
     limit: Optional[int] = None,
 ) -> list[dict]:
     return _top_activities(metric, sport, year, limit)
-
-
-# ── Friends ───────────────────────────────────────────────────────────────────
-
-
-@router.get("/friends")
-def list_friends() -> list[dict]:
-    with Session(engine) as session:
-        return [_dump(f) for f in session.exec(select(Friend).order_by(col(Friend.name))).all()]
-
-
-@router.post("/friends", status_code=201)
-def create_friend(data: FriendCreate) -> dict:
-    name = data.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name is required")
-    with Session(engine) as session:
-        friend = Friend(name=name, email=data.email)
-        session.add(friend)
-        session.commit()
-        session.refresh(friend)
-        return _dump(friend)
-
-
-@router.delete("/friends/{friend_id}", status_code=204)
-def delete_friend(friend_id: int) -> None:
-    with Session(engine) as session:
-        friend = session.get(Friend, friend_id)
-        if not friend:
-            raise HTTPException(status_code=404, detail="Friend not found")
-        for link in session.exec(
-            select(ActivityFriend).where(ActivityFriend.friend_id == friend_id)
-        ).all():
-            session.delete(link)
-        session.flush()
-        session.delete(friend)
-        session.commit()
 
 
 # ── Stats for charts ──────────────────────────────────────────────────────────

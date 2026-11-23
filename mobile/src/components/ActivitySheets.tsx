@@ -1,13 +1,14 @@
 // Adding, editing, deleting and uploading activities: the mobile versions of the web dialogs,
 // sending the same payloads (packages/shared/src/forms.ts).
 import { useEffect, useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, View } from 'react-native'
+import { ActivityIndicator, Alert, View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
 import { KINDS, SPORTS, sportLabel } from '@kinetic/shared/format'
 import { activityForm, activityPayload } from '@kinetic/shared/forms'
 import type { ActivityForm } from '@kinetic/shared/forms'
 import type { Activity, Friend } from '@kinetic/shared/types'
 import { api } from '../lib/api'
+import { FriendPicker } from './FriendPicker'
 import { Icon } from './Icon'
 import { useNotify } from './Notify'
 import { Button, Caption, Field, FormSheet, Select, T, useColors } from './ui'
@@ -20,7 +21,6 @@ export function ActivityEditSheet({ visible, activity, onClose, onSaved }: {
   onSaved: () => void
 }) {
   const notify = useNotify()
-  const c = useColors()
   const [form, setForm] = useState<ActivityForm>(() => activityForm(null))
   const [friends, setFriends] = useState<Friend[]>([])
   const [selected, setSelected] = useState<number[]>([])
@@ -82,25 +82,18 @@ export function ActivityEditSheet({ visible, activity, onClose, onSaved }: {
         {number('Avg speed (m/s)', 'avgSpeed')}
       </View>
       <Field label="Notes" value={form.notes} onChangeText={set('notes')} multiline />
-      {friends.length > 0 && (
-        <View style={{ gap: 6 }}>
-          <T muted style={{ fontSize: 11, fontWeight: '600' }}>Friends</T>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {friends.map((f) => {
-              const on = selected.includes(f.id)
-              return (
-                <Pressable
-                  key={f.id}
-                  onPress={() => setSelected((list) => (on ? list.filter((id) => id !== f.id) : [...list, f.id]))}
-                  style={{ borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderColor: on ? c.primary : c.border, backgroundColor: on ? c.primarySoft : c.card }}
-                >
-                  <T style={{ color: on ? c.primary : c.text }}>{f.name}</T>
-                </Pressable>
-              )
-            })}
-          </View>
-        </View>
-      )}
+      <View style={{ gap: 6 }}>
+        <T muted style={{ fontSize: 11, fontWeight: '600' }}>Friends</T>
+        <FriendPicker
+          friends={friends}
+          selected={selected}
+          onToggle={(f) => setSelected((list) => (list.includes(f.id) ? list.filter((id) => id !== f.id) : [...list, f.id]))}
+          onCreated={(f) => {
+            setFriends((all) => [...all, f])
+            setSelected((list) => [...list, f.id])
+          }}
+        />
+      </View>
     </FormSheet>
   )
 }

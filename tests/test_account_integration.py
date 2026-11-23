@@ -8,6 +8,12 @@ from pathlib import Path
 
 class AccountIntegrationTests(unittest.TestCase):
     def test_accounts_and_private_activities(self):
+        self._run_scenario("account_scenario.py")
+
+    def test_friend_requests(self):
+        self._run_scenario("friends_scenario.py")
+
+    def _run_scenario(self, script: str):
         root = Path(__file__).resolve().parent.parent
         env = os.environ.copy()
         env.update(
@@ -19,7 +25,7 @@ class AccountIntegrationTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory() as workdir:
             result = subprocess.run(
-                [sys.executable, str(root / "tests" / "account_scenario.py")],
+                [sys.executable, str(root / "tests" / script)],
                 cwd=workdir,
                 env=env,
                 text=True,

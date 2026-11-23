@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import type { DragEvent } from 'react'
 import {
-  Autocomplete,
   Button,
   CircularProgress,
   Dialog,
@@ -14,6 +13,7 @@ import { KINDS, SPORTS, sportLabel } from '@kinetic/shared/format'
 import { activityForm, activityPayload } from '@kinetic/shared/forms'
 import type { ActivityForm } from '@kinetic/shared/forms'
 import type { Activity, Friend } from '@kinetic/shared/types'
+import { FriendPicker } from './FriendPicker'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 
@@ -115,18 +115,14 @@ export function ActivityEditDialog({ open, activity, onClose, onSaved }: EditPro
           {numberField('Avg speed (m/s)', 'avgSpeed', 0.1)}
         </div>
         <TextField label="Notes" value={form.notes ?? ''} onChange={set('notes')} multiline minRows={2} className="w-full" />
-        {friends.length > 0 && (
-          <Autocomplete
-            multiple
-            className="w-full"
-            options={friends}
-            value={selected}
-            getOptionLabel={(f) => f.name}
-            isOptionEqualToValue={(a, b) => a.id === b.id}
-            onChange={(_, value) => setSelected(value)}
-            renderInput={(params) => <TextField {...params} label="Friends" />}
-          />
-        )}
+        <FriendPicker
+          className="w-full"
+          friends={friends}
+          value={selected}
+          onChange={setSelected}
+          onCreated={(friend) => setFriends((all) => [...all, friend])}
+          placeholder={selected.length ? '' : 'Type a name to add someone new'}
+        />
         <div className="row justify-end gap-2 q-mt-md w-full">
           <Button onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={save} disabled={saving}>

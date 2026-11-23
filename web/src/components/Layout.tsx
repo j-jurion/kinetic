@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Button, IconButton } from '@mui/material'
+import { Badge, Button, IconButton, Tooltip } from '@mui/material'
 import { NAV_SECTIONS, pageTitle } from '@kinetic/shared/navigation'
 import { api } from '../lib/api'
+import { useIncomingFriendRequests } from '../lib/friendRequests'
 import { useDarkMode } from '../theme'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
@@ -15,6 +16,8 @@ export function Layout() {
   const notify = useNotify()
   const [drawerOpen, setDrawerOpen] = useState(false)
   const title = pageTitle(location.pathname)
+  const friendRequests = useIncomingFriendRequests()
+  const requestsLabel = `${friendRequests} friend ${friendRequests === 1 ? 'request' : 'requests'} waiting`
 
   useEffect(() => setDrawerOpen(false), [location.pathname])
   useEffect(() => {
@@ -35,7 +38,9 @@ export function Layout() {
       <header className="app-header">
         <div className="row items-center no-wrap gap-3">
           <IconButton className="menu-button" size="small" onClick={() => setDrawerOpen((o) => !o)} aria-label="Menu">
-            <Icon name="menu" />
+            <Badge color="primary" variant="dot" invisible={friendRequests === 0}>
+              <Icon name="menu" />
+            </Badge>
           </IconButton>
           <NavLink to="/" className="brand" aria-label="Kinetic home">
             <span className="brand-mark">
@@ -51,6 +56,15 @@ export function Layout() {
           )}
         </div>
         <div className="row items-center no-wrap gap-2">
+          {friendRequests > 0 && (
+            <Tooltip title={requestsLabel}>
+              <IconButton size="small" color="inherit" aria-label={requestsLabel} onClick={() => navigate('/friends')}>
+                <Badge color="primary" badgeContent={friendRequests} max={9}>
+                  <Icon name="person_add" size={20} />
+                </Badge>
+              </IconButton>
+            </Tooltip>
+          )}
           <IconButton size="small" onClick={toggle} aria-label={dark ? 'Light mode' : 'Dark mode'} color="inherit">
             <Icon name={dark ? 'light_mode' : 'dark_mode'} size={20} />
           </IconButton>
@@ -77,6 +91,11 @@ export function Layout() {
               >
                 <Icon name={icon} />
                 <span>{label}</span>
+                {to === '/friends' && friendRequests > 0 && (
+                  <span className="nav-badge" aria-label={requestsLabel}>
+                    {friendRequests}
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>

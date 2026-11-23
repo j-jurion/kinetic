@@ -15,6 +15,7 @@ from app.auth import create_auth_tables, public_origin
 from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
+from app.friends import router as friends_router
 
 
 @asynccontextmanager
@@ -30,6 +31,7 @@ fastapi_app = FastAPI(title="Kinetic API", lifespan=lifespan, docs_url="/api/doc
 fastapi_app.add_middleware(AuthGuard)
 fastapi_app.include_router(auth_router)
 fastapi_app.include_router(router, prefix="/api")
+fastapi_app.include_router(friends_router, prefix="/api")
 
 
 @fastapi_app.get("/api/health")

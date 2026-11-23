@@ -62,6 +62,33 @@ export interface Friend {
   id: number
   name: string
   email: string | null
+  /** The friend's Kinetic username, once linked through an accepted friend request. */
+  username?: string | null
+  /** Top-level activities together (only in the /friends list). */
+  activity_count?: number
+  last_activity_date?: string | null
+}
+
+export interface FriendRequest {
+  id: number
+  /** The other account: the sender of an incoming request, the recipient of an outgoing one. */
+  username: string
+  created_at: string
+  /** For outgoing requests: the friend without an account to link once accepted. */
+  friend_id: number | null
+}
+
+export interface FriendRequests {
+  incoming: FriendRequest[]
+  outgoing: FriendRequest[]
+}
+
+export type UserRelation = 'friend' | 'incoming' | 'outgoing' | 'none'
+
+export interface UserSearchResult {
+  username: string
+  status: UserRelation
+  request_id: number | null
 }
 
 export interface RaceSplit {

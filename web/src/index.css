@@ -425,12 +425,50 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
   display: grid; width: 100%; gap: 12px;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
 }
+.friend-grid--wide { grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); }
 .friend-card { flex-direction: row; align-items: center; gap: 12px; padding: 14px; }
 .friend-avatar {
   flex: none; display: grid; place-items: center;
   width: 44px; height: 44px; border-radius: 50%;
   font-weight: 700; font-size: 1.05rem; color: #fff;
 }
+.friend-card--request { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary-soft); }
+.friend-account {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: .78rem; color: var(--grey-6);
+}
+.friend-account--linked { color: var(--primary-strong); font-weight: 600; }
+.body--dark .friend-account--linked { color: #fdba74; }
+.friend-count-badge, .nav-badge {
+  display: inline-grid; place-items: center;
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  font-size: .72rem; font-weight: 700; line-height: 1;
+  color: #fff; background: var(--primary);
+}
+.friend-count-badge { margin-left: 6px; vertical-align: 1px; }
+.nav-badge { margin-left: auto; }
+.friend-hero .page-header-main { align-items: center; }
+.friend-sport-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 999px;
+  font-size: .8rem; color: var(--text); background: var(--hover);
+}
+/* Friends tagged on an activity: small cards linking to each friend */
+.activity-friends {
+  display: grid; gap: 8px; width: 100%;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+}
+.activity-friend {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 8px 6px 8px 8px; border-radius: 12px;
+  border: 1px solid var(--header-border); background: var(--surface);
+}
+.activity-friend:hover { background: var(--hover); }
+.activity-friend .friend-account { font-size: .72rem; }
+.find-results { max-height: 320px; overflow-y: auto; }
+.find-result { padding: 6px 4px; border-radius: 10px; }
+.find-result:hover { background: var(--hover); }
+.find-empty { padding: 8px 0; }
 
 /* ── Empty states ──────────────────────────────────────────────────────── */
 .empty-state { align-items: center; text-align: center; gap: 6px; padding: 40px 24px; border-style: dashed; box-shadow: none; }

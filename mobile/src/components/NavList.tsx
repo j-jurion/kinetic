@@ -6,7 +6,7 @@ import { Icon } from './Icon'
 import { Card, T, useColors } from './ui'
 
 /** Links to pages from the shared navigation, as a card of rows. */
-export function NavList({ items }: { items: NavItem[] }) {
+export function NavList({ items, badges = {} }: { items: NavItem[]; /** Counts shown next to a page, by path. */ badges?: Record<string, number> }) {
   const c = useColors()
   return (
     <Card style={{ paddingVertical: 4, gap: 0 }}>
@@ -20,6 +20,11 @@ export function NavList({ items }: { items: NavItem[] }) {
             <Icon name={icon} size={20} color={c.primary} />
           </View>
           <T style={{ fontSize: 16, flex: 1 }}>{label}</T>
+          {!!badges[path] && (
+            <View style={{ minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' }}>
+              <T style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{badges[path]}</T>
+            </View>
+          )}
           <Icon name="chevron_right" size={22} color={c.muted} />
         </Card>
       ))}

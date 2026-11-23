@@ -15,6 +15,7 @@ import { MapPage } from './pages/Map'
 import { BestEffortsPage } from './pages/BestEfforts'
 import { TopActivitiesPage } from './pages/TopActivities'
 import { FriendsPage } from './pages/Friends'
+import { FriendDetailPage } from './pages/FriendDetail'
 import { SyncPage } from './pages/Sync'
 
 // The chart pages pull in Plotly (several MB), so they load on first visit only
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/best-efforts/top/:metric" element={<TopActivitiesPage />} />
               <Route path="/best-efforts/:distance" element={<Suspense><BestEffortDistancePage /></Suspense>} />
               <Route path="/friends" element={<FriendsPage />} />
+              <Route path="/friends/:id" element={<FriendDetailPage />} />
               <Route path="/sync" element={<SyncPage />} />
               <Route path="*" element={<div className="text-grey-6 q-mt-xl">Page not found.</div>} />
             </Route>
