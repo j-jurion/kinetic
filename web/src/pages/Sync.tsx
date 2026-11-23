@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   Button,
   CircularProgress,
@@ -11,6 +11,8 @@ import {
 import { api } from '../lib/api'
 import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { Stat } from '../components/fields'
+import { DateField } from '../components/DateField'
+import { AppleHealthCards } from '../components/AppleHealthCards'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
@@ -25,42 +27,6 @@ interface SyncResult {
   imported: number
   skipped: number
   errors: string[]
-}
-
-/** A dd-mm-yyyy text field with a calendar picker. */
-function DateField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const picker = useRef<HTMLInputElement>(null)
-  const iso = parseDateInput(value)?.slice(0, 10) ?? ''
-  return (
-    <TextField
-      label={label}
-      value={value}
-      variant="outlined"
-      size="small"
-      onChange={(e) => onChange(e.target.value)}
-      sx={{ flex: '1 1 220px', minWidth: 0 }}
-      slotProps={{
-        input: {
-          endAdornment: (
-            <InputAdornment position="end">
-              <IconButton size="small" onClick={() => picker.current?.showPicker?.()} aria-label="Pick a date">
-                <Icon name="edit_calendar" size={20} />
-              </IconButton>
-              <input
-                ref={picker}
-                type="date"
-                value={iso}
-                tabIndex={-1}
-                aria-hidden
-                onChange={(e) => e.target.value && onChange(formatDate(e.target.value))}
-                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none', right: 0, bottom: 0 }}
-              />
-            </InputAdornment>
-          ),
-        },
-      }}
-    />
-  )
 }
 
 export function SyncPage() {
@@ -206,7 +172,7 @@ export function SyncPage() {
 
   return (
     <>
-      <PageHeader icon="sync" kicker="Import" title="Garmin Sync" subtitle="Connect your Garmin account and pull in new activities." />
+      <PageHeader icon="sync" kicker="Import" title="Sync" subtitle="Pull in activities from Garmin Connect and Apple Health." />
 
       <div className="sync-grid">
         <div className="card">
@@ -343,6 +309,8 @@ export function SyncPage() {
             </div>
           )}
         </div>
+
+        <AppleHealthCards />
       </div>
 
       <Dialog open={mfaOpen} onClose={() => setMfaOpen(false)}>
