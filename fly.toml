@@ -1,0 +1,41 @@
+# fly.toml app configuration file generated for kinetic-api-coral-mountain-1380 on 2026-11-23T20:32:40+01:00
+#
+# See https://docs.fly.io/reference/configuration for information about how to use this file.
+#
+
+app = 'kinetic-api-coral-mountain-1380'
+primary_region = 'fra'
+
+[build]
+[env]
+  KINETIC_API_HOST = '0.0.0.0'
+  KINETIC_API_PORT = '8080'
+  KINETIC_GARMIN_TOKEN_DIR = '/data/garmin_tokens'
+  KINETIC_UPLOAD_DIR = '/data/uploads'
+
+[[mounts]]
+  source = 'kinetic_data'
+  destination = '/data'
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'suspend'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = 'requests'
+    hard_limit = 80
+    soft_limit = 50
+
+  [[http_service.checks]]
+    interval = '30s'
+    timeout = '5s'
+    grace_period = '20s'
+    method = 'GET'
+    path = '/api/health'
+
+[[vm]]
+  size = 'shared-cpu-1x'
+  memory = '1gb'
