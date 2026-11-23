@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from loguru import logger
-from sqlmodel import select
+from sqlalchemy.exc import IntegrityError
+from sqlmodel import col, select
 
 from app.database import engine, require_id
 from app.fit_parser import parse_fit_file
@@ -30,6 +31,11 @@ UPLOAD_DIR = Path(os.environ.get("KINETIC_UPLOAD_DIR", "uploads"))
 TOKEN_ROOT = Path(os.environ.get("KINETIC_GARMIN_TOKEN_DIR", "garmin_tokens"))
 _TOKEN_FILE = "garmin_tokens.json"
 _EMAIL_FILE = "garmin_email"
+
+# Pause between downloads so a large sync does not trip Garmin's rate limit
+DOWNLOAD_PAUSE_SECONDS = 1.0
+# How long to back off once Garmin does rate limit us, before one retry
+RATE_LIMIT_WAIT_SECONDS = 60.0
 
 _running_syncs: set[str] = set()
 _running_lock = threading.Lock()
@@ -67,21 +73,15 @@ def logout() -> None:
     (_token_dir() / _TOKEN_FILE).unlink(missing_ok=True)
 
 
-def _garmin_id_exists(garmin_activity_id: int) -> bool:
+def _existing_garmin_ids() -> set[int]:
+    """Garmin activity ids already imported into the current account."""
     with Session(engine) as session:
-        return (
-            session.exec(
-                select(Activity.id).where(Activity.garmin_activity_id == garmin_activity_id)
-            ).first()
-            is not None
-        )
-
-
-def _save_fit_and_import(
-    garmin_activity_id: int, fit_bytes: bytes, garmin_name: str | None = None
-) -> None:
-    """Import an activity downloaded from Garmin Connect."""
-    import_fit_bytes(fit_bytes, garmin_activity_id=garmin_activity_id, name=garmin_name)
+        ids = session.exec(
+            select(Activity.garmin_activity_id).where(
+                col(Activity.garmin_activity_id).is_not(None)
+            )
+        ).all()
+    return {int(garmin_id) for garmin_id in ids if garmin_id is not None}
 
 
 def import_fit_bytes(
@@ -101,36 +101,40 @@ def import_fit_bytes(
     if name:
         activity.name = name
 
-    with Session(engine) as session:
-        activity.garmin_activity_id = garmin_activity_id
-        session.add(activity)
-        session.commit()
-        session.refresh(activity)
+    # One transaction for the activity, its multisport legs, laps and best efforts: a
+    # failure part way leaves nothing behind, so the next sync simply tries again.
+    try:
+        with Session(engine) as session:
+            activity.garmin_activity_id = garmin_activity_id
+            session.add(activity)
+            session.flush()
 
-        parent_id = require_id(activity.id)
-        for lap in laps:
-            lap.activity_id = parent_id
-            session.add(lap)
-        for be in best_efforts:
-            be.activity_id = parent_id
-            session.add(be)
-
-        imported = [parent_id]
-        for child, child_laps, child_bes, *_ in children:
-            child.parent_id = parent_id
-            session.add(child)
-            session.commit()
-            session.refresh(child)
-            child_id = require_id(child.id)
-            imported.append(child_id)
-            for lap in child_laps:
-                lap.activity_id = child_id
+            parent_id = require_id(activity.id)
+            for lap in laps:
+                lap.activity_id = parent_id
                 session.add(lap)
-            for be in child_bes:
-                be.activity_id = child_id
+            for be in best_efforts:
+                be.activity_id = parent_id
                 session.add(be)
 
-        session.commit()
+            imported = [parent_id]
+            for child, child_laps, child_bes, *_ in children:
+                child.parent_id = parent_id
+                session.add(child)
+                session.flush()
+                child_id = require_id(child.id)
+                imported.append(child_id)
+                for lap in child_laps:
+                    lap.activity_id = child_id
+                    session.add(lap)
+                for be in child_bes:
+                    be.activity_id = child_id
+                    session.add(be)
+
+            session.commit()
+    except Exception:
+        fit_path.unlink(missing_ok=True)
+        raise
 
     # Training metrics for the charts; imported here to avoid a circular import
     from app import metrics
@@ -230,9 +234,15 @@ def _sync(
         if progress_cb:
             progress_cb(msg)
 
+    def _expired(exc: Exception) -> RuntimeError:
+        # Drop tokens Garmin no longer accepts, so the page asks the user to sign in again
+        logout()
+        return RuntimeError(f"Garmin login expired, please sign in again ({exc})")
+
     # Authenticate
+    using_tokens = tokens_exist()
     try:
-        if tokens_exist():
+        if using_tokens:
             _cb("Using cached Garmin tokens…")
             garmin = login_with_tokens()
         else:
@@ -241,6 +251,8 @@ def _sync(
             _cb("Logging in to Garmin Connect…")
             garmin = login_with_credentials(email, password)
     except GarminConnectAuthenticationError as exc:
+        if using_tokens:
+            raise _expired(exc) from exc
         raise RuntimeError(f"Garmin authentication failed: {exc}") from exc
     except GarminConnectConnectionError as exc:
         raise RuntimeError(f"Garmin connection error: {exc}") from exc
@@ -250,15 +262,29 @@ def _sync(
 
     try:
         activities = garmin.get_activities_by_date(since.isoformat(), until_date.isoformat())
+    except GarminConnectAuthenticationError as exc:
+        raise _expired(exc) from exc
     except Exception as exc:
         raise RuntimeError(f"Failed to fetch activity list: {exc}") from exc
 
     total = len(activities)
     _cb(f"Found {total} activities on Garmin Connect.")
 
+    def _download(garmin_id: int) -> bytes:
+        """Download the original archive, backing off and retrying once if rate limited."""
+        fmt = garmin.ActivityDownloadFormat.ORIGINAL
+        try:
+            return garmin.download_activity(garmin_id, dl_fmt=fmt)
+        except GarminConnectTooManyRequestsError:
+            _cb(f"Rate limited by Garmin – waiting {RATE_LIMIT_WAIT_SECONDS:.0f} s…")
+            time.sleep(RATE_LIMIT_WAIT_SECONDS)
+            return garmin.download_activity(garmin_id, dl_fmt=fmt)
+
+    existing = _existing_garmin_ids()
     imported = 0
     skipped = 0
     errors: list[str] = []
+    downloaded_any = False
 
     for i, act in enumerate(activities):
         garmin_id = int(act.get("activityId", 0))
@@ -268,15 +294,32 @@ def _sync(
         act_name = act.get("activityName") or str(garmin_id)
         _cb(f"({i + 1}/{total}) {act_name}")
 
-        if _garmin_id_exists(garmin_id):
+        if garmin_id in existing:
             skipped += 1
             continue
 
+        if downloaded_any:
+            time.sleep(DOWNLOAD_PAUSE_SECONDS)
+        downloaded_any = True
+
         try:
-            zip_bytes = garmin.download_activity(
-                garmin_id,
-                dl_fmt=garmin.ActivityDownloadFormat.ORIGINAL,
+            zip_bytes = _download(garmin_id)
+        except GarminConnectTooManyRequestsError:
+            # Still rate limited after backing off: more requests would only make it worse
+            left = total - i
+            errors.append(
+                f"Garmin is rate limiting requests; stopped with {left} "
+                f"{'activity' if left == 1 else 'activities'} left. Sync again later."
             )
+            break
+        except GarminConnectAuthenticationError as exc:
+            raise _expired(exc) from exc
+        except Exception as exc:
+            logger.warning("Failed to download garmin activity {}: {}", garmin_id, exc)
+            errors.append(f"{act_name}: {exc}")
+            continue
+
+        try:
             with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
                 fit_names = [n for n in zf.namelist() if n.lower().endswith(".fit")]
                 if not fit_names:
@@ -284,15 +327,19 @@ def _sync(
                     continue
                 fit_bytes = zf.read(fit_names[0])
 
-            _save_fit_and_import(garmin_id, fit_bytes, act_name)
+            import_fit_bytes(fit_bytes, garmin_activity_id=garmin_id, name=act_name)
+            existing.add(garmin_id)
             imported += 1
-
-        except GarminConnectTooManyRequestsError:
-            _cb("Rate limited – waiting 60 s…")
-            time.sleep(60)
-            errors.append(f"{act_name}: rate limited, skipped")
+        except IntegrityError as exc:
+            if garmin_id in _existing_garmin_ids():
+                # Imported meanwhile by another sync; the unique index kept it to one copy
+                existing.add(garmin_id)
+                skipped += 1
+            else:
+                logger.warning("Failed to import garmin activity {}: {}", garmin_id, exc)
+                errors.append(f"{act_name}: {exc}")
         except Exception as exc:
-            logger.warning("Failed to sync garmin activity {}: {}", garmin_id, exc)
+            logger.warning("Failed to import garmin activity {}: {}", garmin_id, exc)
             errors.append(f"{act_name}: {exc}")
 
     _cb(f"Done. Imported {imported}, skipped {skipped}, errors {len(errors)}.")
