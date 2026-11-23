@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Optional
 
-from sqlalchemy import BigInteger, Column
+from sqlalchemy import BigInteger, Column, Index
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -52,7 +52,15 @@ class ActivityFriend(SQLModel, table=True):
 # ── Activity ─────────────────────────────────────────────────────────────────
 
 
+GARMIN_ID_INDEX = "ux_activity_owner_garmin_id"
+
+
 class Activity(SQLModel, table=True):
+    # Each Garmin activity is imported once per account (NULL ids are not compared)
+    __table_args__ = (
+        Index(GARMIN_ID_INDEX, "owner_id", "garmin_activity_id", unique=True),
+    )
+
     id: Optional[int] = Field(default=None, primary_key=True)
     owner_id: Optional[str] = Field(default=None, index=True)
     name: str

@@ -1,6 +1,7 @@
 import os
 
 import sqlalchemy
+from loguru import logger
 from sqlmodel import Session, SQLModel, create_engine
 
 
@@ -70,7 +71,36 @@ def create_db_and_tables() -> None:
             conn.execute(
                 sqlalchemy.text("ALTER TABLE activitymetrics ADD COLUMN moving_seconds FLOAT")
             )
+        _add_garmin_id_index(conn)
         conn.commit()
+
+
+def _add_garmin_id_index(conn) -> None:
+    """Make Garmin ids unique per account on databases created before the index existed."""
+    from app.models import GARMIN_ID_INDEX
+
+    duplicate = conn.execute(
+        sqlalchemy.text(
+            "SELECT owner_id, garmin_activity_id FROM activity "
+            "WHERE garmin_activity_id IS NOT NULL "
+            "GROUP BY owner_id, garmin_activity_id HAVING COUNT(*) > 1"
+        )
+    ).first()
+    if duplicate is not None:
+        # Creating the index would fail; keep starting up and say what to clean up
+        logger.warning(
+            "Not adding {}: Garmin activity {} is imported more than once; remove the "
+            "duplicates and restart",
+            GARMIN_ID_INDEX,
+            duplicate.garmin_activity_id,
+        )
+        return
+    conn.execute(
+        sqlalchemy.text(
+            f"CREATE UNIQUE INDEX IF NOT EXISTS {GARMIN_ID_INDEX} "
+            "ON activity(owner_id, garmin_activity_id)"
+        )
+    )
 
 
 def lock_down_postgres_tables() -> None:
