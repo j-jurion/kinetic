@@ -16,16 +16,19 @@ import {
 } from '@kinetic/shared/format'
 import { rankItems } from '@kinetic/shared/forms'
 import { routeLegs } from '@kinetic/shared/performance'
+import { accountLabel } from '@kinetic/shared/friends'
 import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult } from '@kinetic/shared/types'
 import { ActivityCharts } from '../../components/ActivityCharts'
 import { ActivityEditSheet, confirmDelete } from '../../components/ActivitySheets'
-import { Icon, Medal, SportIcon } from '../../components/Icon'
+import { FriendAvatar } from '../../components/FriendAvatar'
+import { FriendPicker } from '../../components/FriendPicker'
+import { Medal, SportIcon } from '../../components/Icon'
 import { useNotify } from '../../components/Notify'
 import { ActivityBreakdown } from '../../components/RaceBreakdown'
 import { RaceResultSheet } from '../../components/RaceResultSheet'
 import { RouteMap } from '../../components/RouteMap'
 import { Table } from '../../components/Table'
-import { Button, Caption, Card, CardTitle, Empty, IconButton, KindChip, Loading, Screen, Select, Stat, StatGrid, T, useColors } from '../../components/ui'
+import { Button, Caption, Card, CardTitle, Empty, IconButton, KindChip, Loading, Screen, Stat, StatGrid, T, useColors } from '../../components/ui'
 import { api } from '../../lib/api'
 import { useApi } from '../../lib/useApi'
 
@@ -98,32 +101,52 @@ function RaceResultCard({ result, onEdit, onDelete }: { result: RaceResult | nul
 
 function FriendsCard({ activityId, current, onChange }: { activityId: number; current: Friend[]; onChange: () => void }) {
   const c = useColors()
-  const { data: all } = useApi<Friend[]>('/friends')
-  const currentIds = new Set(current.map((f) => f.id))
-  const available = (all ?? []).filter((f) => !currentIds.has(f.id))
-  const add = async (id: string) => {
-    await api.put(`/activities/${activityId}/friends/${id}`)
+  const notify = useNotify()
+  const { data: all, reload } = useApi<Friend[]>('/friends')
+  const [adding, setAdding] = useState(false)
+
+  const run = async (request: Promise<unknown>) => {
+    try {
+      await request
+    } catch (error) {
+      notify(`Failed to update friends: ${(error as Error).message}`, 'error')
+    }
     onChange()
   }
-  const remove = async (id: number) => {
-    await api.delete(`/activities/${activityId}/friends/${id}`)
-    onChange()
-  }
+  const add = (friend: Friend) => run(api.put(`/activities/${activityId}/friends/${friend.id}`))
+  const remove = (friend: Friend) => run(api.delete(`/activities/${activityId}/friends/${friend.id}`))
+
   return (
     <Card>
-      <CardTitle>Friends</CardTitle>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-        {current.map((f) => (
-          <Pressable key={f.id} onPress={() => remove(f.id)} style={[styles.pill, { backgroundColor: c.soft }]}>
-            <T style={{ fontWeight: '500' }}>{f.name}</T>
-            <Icon name="close" size={14} color={c.muted} />
-          </Pressable>
-        ))}
-      </View>
-      {available.length > 0 ? (
-        <Select label="Add friend" value={undefined} options={available.map((f): [string, string] => [String(f.id), f.name])} onChange={add} />
-      ) : (
-        current.length === 0 && <Caption>No friends yet — add some on the Friends page.</Caption>
+      <CardTitle right={<IconButton icon={adding ? 'expand_less' : 'person_add'} color={c.primary} onPress={() => setAdding((a) => !a)} />}>
+        Friends
+      </CardTitle>
+      {current.map((f) => (
+        <Pressable
+          key={f.id}
+          onPress={() => router.push(`/friends/${f.id}`)}
+          style={({ pressed }) => [styles.friend, { borderColor: c.cardBorder, backgroundColor: pressed ? c.soft : c.card }]}
+        >
+          <FriendAvatar name={f.name} size={32} />
+          <View style={{ flex: 1 }}>
+            <T style={{ fontWeight: '600' }} numberOfLines={1}>{f.name}</T>
+            <T style={{ fontSize: 12, color: f.username ? c.primary : c.muted }} numberOfLines={1}>{accountLabel(f)}</T>
+          </View>
+          <IconButton icon="close" size={18} onPress={() => remove(f)} />
+        </Pressable>
+      ))}
+      {current.length === 0 && !adding && <Caption>Who did you do this with? Tap + to tag a friend.</Caption>}
+      {adding && (
+        <FriendPicker
+          friends={all ?? []}
+          selected={current.map((f) => f.id)}
+          hideSelected
+          onToggle={add}
+          onCreated={(friend) => {
+            reload()
+            add(friend)
+          }}
+        />
       )}
     </Card>
   )
@@ -311,6 +334,6 @@ export default function ActivityScreen() {
 
 const styles = StyleSheet.create({
   hero: { borderRadius: 12, padding: 14, gap: 2 },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  friend: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, paddingVertical: 8, paddingLeft: 8, paddingRight: 4 },
   child: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderRadius: 10, padding: 10 },
 })

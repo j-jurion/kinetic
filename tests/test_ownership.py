@@ -10,6 +10,7 @@ from app.models import (
     ActivityFriend,
     BestEffort,
     Friend,
+    FriendRequest,
     Lap,
     RaceResult,
     RaceResultSplit,
@@ -128,6 +129,27 @@ class OwnershipTests(unittest.TestCase):
         current_owner.set(None)
         with self.assertRaises(PermissionError):
             UserSession(self.engine)
+
+    def test_friend_links_and_requests_cannot_be_written(self):
+        with UserSession(self.engine) as session:
+            session.add(Friend(name="Linked", user_id="alice"))
+            with self.assertRaises(PermissionError):
+                session.commit()
+        current_owner.set("alice")
+        with UserSession(self.engine) as session:
+            friend = session.get(Friend, self.alice_friend)
+            friend.user_id = "bob"
+            with self.assertRaises(PermissionError):
+                session.commit()
+        with UserSession(self.engine) as session:
+            session.add(FriendRequest(from_user_id="alice", to_user_id="bob"))
+            with self.assertRaises(PermissionError):
+                session.commit()
+        with Session(self.engine) as session:
+            session.add(FriendRequest(from_user_id="carol", to_user_id="dave"))
+            session.commit()
+        with UserSession(self.engine) as session:
+            self.assertEqual(session.exec(select(FriendRequest)).all(), [])
 
 
 if __name__ == "__main__":

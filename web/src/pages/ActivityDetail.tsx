@@ -1,7 +1,7 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
-import { Button, IconButton, MenuItem, TextField } from '@mui/material'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Button, IconButton } from '@mui/material'
 import { api } from '../lib/api'
 import {
   MEDAL_COLORS,
@@ -28,6 +28,10 @@ import { DataTable } from '../components/DataTable'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import { ActivityBreakdown } from '../components/performance/ActivityBreakdown'
 import { Icon, Medal, SportIcon } from '../components/icons'
+import { FriendAvatar } from '../components/FriendAvatar'
+import { FriendPicker } from '../components/FriendPicker'
+import { accountLabel } from '@kinetic/shared/friends'
+import { useNotify } from '../components/Notify'
 import { RaceResultDialog } from '../components/RaceResultDialog'
 import { RouteMap } from '../components/RouteMap'
 import '../styles/detail.css'
@@ -192,64 +196,65 @@ function RaceResultsCard({
 }
 
 function FriendsCard({ activityId, current, onChange }: { activityId: number; current: Friend[]; onChange: () => void }) {
+  const notify = useNotify()
   const [all, setAll] = useState<Friend[]>([])
-  const [selected, setSelected] = useState('')
 
   useEffect(() => {
     api.get<Friend[]>('/friends').then(setAll)
   }, [])
 
-  const currentIds = new Set(current.map((f) => f.id))
-  const available = all.filter((f) => !currentIds.has(f.id))
-
-  const add = async () => {
-    if (!selected) return
-    await api.put(`/activities/${activityId}/friends/${selected}`)
-    setSelected('')
-    onChange()
-  }
-  const remove = async (friendId: number) => {
-    await api.delete(`/activities/${activityId}/friends/${friendId}`)
+  const update = async (next: Friend[]) => {
+    const before = new Set(current.map((f) => f.id))
+    const after = new Set(next.map((f) => f.id))
+    try {
+      await Promise.all([
+        ...next.filter((f) => !before.has(f.id)).map((f) => api.put(`/activities/${activityId}/friends/${f.id}`)),
+        ...current.filter((f) => !after.has(f.id)).map((f) => api.delete(`/activities/${activityId}/friends/${f.id}`)),
+      ])
+    } catch (error) {
+      notify(`Failed to update friends: ${(error as Error).message}`, 'error')
+    }
     onChange()
   }
 
   return (
-    <div className="card w-full q-pa-md q-mb-md gap-0">
-      <div className="card-label q-mb-sm">Friends</div>
-      <div className="row items-center flex-wrap gap-2">
-        {current.map((f) => (
-          <span key={f.id} className="friend-pill">
-            <span className="text-body2 text-weight-medium">{f.name}</span>
-            <IconButton size="small" onClick={() => remove(f.id)} sx={{ p: '2px' }} aria-label={`Remove ${f.name}`}>
-              <Icon name="close" size={14} className="text-grey-6" />
-            </IconButton>
-          </span>
-        ))}
-      </div>
-      {available.length > 0 ? (
-        <div className="row items-end no-wrap gap-1">
-          <TextField
-            select
-            label="Add friend"
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            sx={{ minWidth: 180, mt: 1 }}
-          >
-            {available.map((f) => (
-              <MenuItem key={f.id} value={String(f.id)}>
-                {f.name}
-              </MenuItem>
-            ))}
-          </TextField>
-          <IconButton onClick={add} aria-label="Add friend">
-            <Icon name="person_add" />
-          </IconButton>
+    <div className="card w-full q-pa-md q-mb-md gap-2">
+      <div className="card-label">Friends</div>
+      {current.length > 0 && (
+        <div className="activity-friends">
+          {current.map((f) => (
+            <div key={f.id} className="activity-friend">
+              <Link to={`/friends/${f.id}`} className="row items-center no-wrap gap-2 flex-1 min-w-0 card-link">
+                <FriendAvatar name={f.name} size={32} />
+                <div className="column gap-0 min-w-0">
+                  <span className="text-weight-bold text-body2 ellipsis">{f.name}</span>
+                  <span className={`friend-account ellipsis ${f.username ? 'friend-account--linked' : ''}`}>
+                    {accountLabel(f)}
+                  </span>
+                </div>
+              </Link>
+              <IconButton
+                size="small"
+                onClick={() => update(current.filter((c) => c.id !== f.id))}
+                aria-label={`Remove ${f.name} from this activity`}
+              >
+                <Icon name="close" size={16} className="text-grey-6" />
+              </IconButton>
+            </div>
+          ))}
         </div>
-      ) : (
-        current.length === 0 && (
-          <div className="text-caption text-grey-5">No friends yet — add some on the Friends page.</div>
-        )
       )}
+      <FriendPicker
+        className="w-full"
+        friends={all}
+        value={current}
+        onChange={update}
+        onCreated={(friend) => setAll((friends) => [...friends, friend])}
+        label=""
+        placeholder={current.length ? 'Add another friend' : 'Who did you do this with? Type a name to add someone new'}
+        size="small"
+        hideSelected
+      />
     </div>
   )
 }

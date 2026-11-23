@@ -13,6 +13,7 @@ from app.models import (
     ActivityMetrics,
     BestEffort,
     Friend,
+    FriendRequest,
     Lap,
     RaceResult,
     RaceResultSplit,
@@ -46,6 +47,12 @@ def scope_queries(execute_state):
     execute_state.statement = execute_state.statement.options(
         with_loader_criteria(Activity, col(Activity.owner_id) == owner_id, include_aliases=True),
         with_loader_criteria(Friend, col(Friend.owner_id) == owner_id, include_aliases=True),
+        with_loader_criteria(
+            FriendRequest,
+            (col(FriendRequest.from_user_id) == owner_id)
+            | (col(FriendRequest.to_user_id) == owner_id),
+            include_aliases=True,
+        ),
         with_loader_criteria(Lap, col(Lap.activity_id).in_(activity_ids), include_aliases=True),
         with_loader_criteria(
             BestEffort, col(BestEffort.activity_id).in_(activity_ids), include_aliases=True
@@ -96,6 +103,15 @@ def validate_writes(session, _flush_context, _instances):
             raise PermissionError("The referenced race is not owned by this account")
 
     for item in session.new.union(session.dirty).union(session.deleted):
+        if isinstance(item, FriendRequest):
+            # Requests touch two accounts; app/friends.py handles them outside this session.
+            raise PermissionError("Friend requests cannot be written in an account-scoped session")
+        if isinstance(item, Friend) and (
+            item.user_id is not None
+            if item in session.new
+            else inspect(item).attrs.user_id.history.has_changes()
+        ):
+            raise PermissionError("Friends are linked to accounts only through friend requests")
         if isinstance(item, (Activity, Friend)):
             table = activity if isinstance(item, Activity) else friend
             if item in session.new:

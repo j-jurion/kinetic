@@ -59,8 +59,14 @@ def create_db_and_tables() -> None:
             conn.commit()
         if "owner_id" not in existing:
             conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN owner_id VARCHAR"))
-        if "owner_id" not in _columns(conn, "friend"):
+        friend_columns = _columns(conn, "friend")
+        if "owner_id" not in friend_columns:
             conn.execute(sqlalchemy.text("ALTER TABLE friend ADD COLUMN owner_id VARCHAR"))
+        if "user_id" not in friend_columns:
+            conn.execute(sqlalchemy.text("ALTER TABLE friend ADD COLUMN user_id VARCHAR"))
+        conn.execute(
+            sqlalchemy.text("CREATE INDEX IF NOT EXISTS ix_friend_user_id ON friend(user_id)")
+        )
         conn.execute(
             sqlalchemy.text("CREATE INDEX IF NOT EXISTS ix_activity_owner_id ON activity(owner_id)")
         )

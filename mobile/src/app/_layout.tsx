@@ -46,7 +46,8 @@ export default function RootLayout() {
               <Stack.Screen name="graphs" options={title('/graphs')} />
               <Stack.Screen name="training" options={title('/training')} />
               <Stack.Screen name="races" options={title('/races')} />
-              <Stack.Screen name="friends" options={title('/friends')} />
+              <Stack.Screen name="friends/index" options={title('/friends')} />
+              <Stack.Screen name="friends/[id]" options={title('/friends')} />
               <Stack.Screen name="sync" options={title('/sync')} />
               <Stack.Screen name="best-efforts/index" options={title('/best-efforts')} />
               <Stack.Screen name="best-efforts/[distance]" options={title('/best-efforts')} />

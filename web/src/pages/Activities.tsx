@@ -1,25 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
-import { Button, IconButton } from '@mui/material'
+import { Button } from '@mui/material'
 import { api, qs } from '../lib/api'
-import { formatDate, formatDistance, formatDuration, formatPace, kindLabel, sportColor } from '@kinetic/shared/format'
-import { byMonth, hours, km, monthSummary, monthTitle, totals } from '@kinetic/shared/activityList'
+import { hours, km, totals } from '@kinetic/shared/activityList'
 import type { Activity, ActivityRow } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog, UploadDialog } from '../components/ActivityDialogs'
 import { EmptyCard, SportSelect, Stat, YearSelect } from '../components/fields'
-import { Icon, MultisportMarker, SportIcon } from '../components/icons'
+import { Icon } from '../components/icons'
+import { ActivityMonths } from '../components/ActivityMonths'
 import { PageHeader } from '../components/PageHeader'
-
-function Metric({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="metric">
-      <div className="metric-value">{value}</div>
-      <div className="metric-label">{label}</div>
-    </div>
-  )
-}
 
 export function ActivitiesPage() {
   const latest = useLatestRequest()
@@ -37,7 +26,6 @@ export function ActivitiesPage() {
   useEffect(refresh, [refresh])
 
   const summary = useMemo(() => (activities ? totals(activities) : null), [activities])
-  const months = useMemo(() => (activities ? byMonth(activities) : []), [activities])
 
   return (
     <>
@@ -65,57 +53,7 @@ export function ActivitiesPage() {
         <EmptyCard icon="directions_run">No activities yet. Upload a .fit file or add one manually.</EmptyCard>
       )}
 
-      {months.map(([key, group]) => {
-        return (
-          <section key={key} className="month-group">
-            <div className="month-heading">
-              <span className="month-heading-title">{monthTitle(key)}</span>
-              <span className="month-heading-meta">{monthSummary(group)}</span>
-            </div>
-            {group.map((a) => {
-              const dist = a.distance_meters
-              const dur = a.duration_seconds
-              const accent = { '--accent': sportColor(a.sport, '#6b7280') } as CSSProperties
-              return (
-                <div key={a.id} className="card activity-row" style={accent}>
-                  <Link to={`/activity/${a.id}`} className="row items-center no-wrap gap-3 flex-1 min-w-0 card-link">
-                    <span className="sport-badge">
-                      <SportIcon sport={a.sport} size={24} />
-                    </span>
-                    <div className="column gap-0 min-w-0">
-                      <div className="row items-center no-wrap gap-1 min-w-0">
-                        <span className="activity-name ellipsis">{a.name}</span>
-                        <MultisportMarker parentSport={a.parent_sport} />
-                        {a.has_race_result && <Icon name="emoji_events" size={15} className="text-amber" title="Race result" />}
-                      </div>
-                      <div className="activity-sub">
-                        <span>{formatDate(a.date)}</span>
-                        <span className="kind-chip" data-kind={a.kind}>
-                          {kindLabel(a.kind)}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="row items-center no-wrap gap-6 text-right ml-auto activity-metrics">
-                      {!!dist && <Metric value={formatDistance(dist, a.sport)} label="Distance" />}
-                      <Metric value={formatDuration(dur)} label="Duration" />
-                      {!!dist && !!dur && <Metric value={formatPace(dist, dur, a.sport)} label="Pace" />}
-                      {!!a.avg_heart_rate && <Metric value={`${a.avg_heart_rate} bpm`} label="Avg HR" />}
-                    </div>
-                  </Link>
-                  <div className="row no-wrap gap-0 shrink-0 row-actions">
-                    <IconButton size="small" onClick={() => setEditing(a)} aria-label="Edit">
-                      <Icon name="edit" size={18} />
-                    </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleting(a)} aria-label="Delete">
-                      <Icon name="delete" size={18} />
-                    </IconButton>
-                  </div>
-                </div>
-              )
-            })}
-          </section>
-        )
-      })}
+      <ActivityMonths activities={activities} onEdit={setEditing} onDelete={setDeleting} />
 
       <ActivityEditDialog
         open={editing !== undefined}

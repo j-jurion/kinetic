@@ -37,11 +37,37 @@ class ActivityKind(str, Enum):
 
 
 class Friend(SQLModel, table=True):
+    """Someone an account trains with.
+
+    ``user_id`` is set once the friend is linked to their own Kinetic account through an
+    accepted friend request; friends without the app keep it empty.
+    """
+
     id: Optional[int] = Field(default=None, primary_key=True)
     owner_id: Optional[str] = Field(default=None, index=True)
     name: str
     email: Optional[str] = None
+    user_id: Optional[str] = Field(default=None, index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class FriendRequestStatus(str, Enum):
+    pending = "pending"
+    accepted = "accepted"
+    declined = "declined"
+
+
+class FriendRequest(SQLModel, table=True):
+    """A request from one account to another to become friends."""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    from_user_id: str = Field(index=True)
+    to_user_id: str = Field(index=True)
+    # The requester's friend without an account to link once the request is accepted
+    from_friend_id: Optional[int] = None
+    status: FriendRequestStatus = FriendRequestStatus.pending
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    responded_at: Optional[datetime] = None
 
 
 class ActivityFriend(SQLModel, table=True):
