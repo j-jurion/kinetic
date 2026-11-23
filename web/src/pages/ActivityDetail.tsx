@@ -17,10 +17,11 @@ import {
   ordinal,
   sportColor,
   sportLabel,
-} from '../lib/format'
-import { createHoverBus } from '../lib/hoverBus'
-import { routeLegs } from '../lib/performance'
-import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '../lib/types'
+} from '@kinetic/shared/format'
+import { rankItems } from '@kinetic/shared/forms'
+import { createHoverBus } from '@kinetic/shared/hoverBus'
+import { routeLegs } from '@kinetic/shared/performance'
+import type { Activity, ActivityDetail, ActivityStreams, Friend, RaceResult, RaceSplit } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivityEditDialog, ConfirmDeleteDialog } from '../components/ActivityDialogs'
 import { DataTable } from '../components/DataTable'
@@ -54,10 +55,7 @@ function RaceResultsCard({
   onEdit: () => void
   onDelete: () => void
 }) {
-  const rankItems: [string, number, number | null][] = []
-  if (result?.overall_rank) rankItems.push(['Overall', result.overall_rank, result.overall_total])
-  if (result?.gender_rank) rankItems.push(['Gender', result.gender_rank, result.gender_total])
-  if (result?.age_group_rank) rankItems.push([result.age_group || 'Age group', result.age_group_rank, result.age_group_total])
+  const ranks = rankItems(result)
   void activity
 
   return (
@@ -125,9 +123,9 @@ function RaceResultsCard({
             </div>
           )}
 
-          {rankItems.length > 0 && (
+          {ranks.length > 0 && (
             <div className="q-mb-md race-rank-grid">
-              {rankItems.map(([label, rank, total]) => (
+              {ranks.map(([label, rank, total]) => (
                 <div key={label} className="race-rank-tile">
                   <div className="row items-center justify-between no-wrap race-rank-tile-heading" style={{ minHeight: 24 }}>
                     <span className="race-rank-label">{label}</span>

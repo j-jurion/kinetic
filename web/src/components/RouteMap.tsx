@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import { api } from '../lib/api'
-import type { HoverBus } from '../lib/hoverBus'
-import { KIND_COLORS } from '../lib/performance'
-import type { RouteLeg } from '../lib/performance'
-import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from '../lib/speed'
-import type { ActivityStreams } from '../lib/types'
+import type { HoverBus } from '@kinetic/shared/hoverBus'
+import type { RouteLeg } from '@kinetic/shared/performance'
+import { PLAIN_ROUTE_COLOR, legendHtml, routeDrawing, routePositions } from '@kinetic/shared/routeMap'
+import type { ActivityStreams } from '@kinetic/shared/types'
 
 // OpenStreetMap's standard tiles — free and keyless
 export const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -33,50 +32,16 @@ function marker(color: string, icon: string, title: string, at: L.LatLngExpressi
   }).bindTooltip(title)
 }
 
-const escapeHtml = (text: string) =>
-  text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
-
-/** A small "slow ▬▬▬ fast" legend in the corner of the map. */
-function legend(slow: string, fast: string): L.Control {
+/** A legend box in the bottom-left corner of the map. */
+function legend(html: string): L.Control {
   const control = new L.Control({ position: 'bottomleft' })
   control.onAdd = () => {
     const box = L.DomUtil.create('div')
-    box.style.cssText =
-      'background:rgba(255,255,255,.92);color:#111827;padding:6px 10px;border-radius:8px;' +
-      'box-shadow:0 1px 5px rgba(0,0,0,.25);font:12px Inter,Roboto,sans-serif;min-width:170px'
-    box.innerHTML =
-      `<div style="height:8px;border-radius:4px;background:${SPEED_GRADIENT}"></div>` +
-      `<div style="display:flex;justify-content:space-between;gap:12px;margin-top:3px">` +
-      `<span>${escapeHtml(slow)}</span><span>${escapeHtml(fast)}</span></div>`
+    box.innerHTML = html
     return box
   }
   return control
 }
-
-/** A legend of the legs of a multisport event, one colour per leg (and the transitions). */
-function legLegend(legs: RouteLeg[], transitions: boolean): L.Control {
-  const control = new L.Control({ position: 'bottomleft' })
-  control.onAdd = () => {
-    const box = L.DomUtil.create('div')
-    box.style.cssText =
-      'background:rgba(255,255,255,.92);color:#111827;padding:6px 10px;border-radius:8px;' +
-      'box-shadow:0 1px 5px rgba(0,0,0,.25);font:12px Inter,Roboto,sans-serif;' +
-      'display:flex;flex-wrap:wrap;gap:4px 12px;max-width:320px'
-    const items: [string, string][] = legs.map((leg) => [leg.label, leg.color])
-    if (transitions) items.push(['Transition', TRANSITION_COLOR])
-    box.innerHTML = items
-      .map(
-        ([label, color]) =>
-          `<span style="display:inline-flex;align-items:center;gap:5px">` +
-          `<span style="width:14px;height:4px;border-radius:2px;background:${color}"></span>${escapeHtml(label)}</span>`,
-      )
-      .join('')
-    return box
-  }
-  return control
-}
-
-const TRANSITION_COLOR = KIND_COLORS.t1!
 
 interface Props {
   activityId: number
@@ -120,61 +85,23 @@ export function RouteMap({ activityId, sport, streams, hoverBus, legs }: Props) 
       marker('#ef4444', 'stop', 'Finish', coords[coords.length - 1]).addTo(layers)
     }
 
-    const p = streams.available ? streams.points : undefined
-    const positions: (L.LatLngTuple | null)[] = p
-      ? p.lat.map((lat, i) => (lat !== null && p.lon[i] !== null ? [lat, p.lon[i]!] : null))
-      : []
-    const located = positions.filter((c): c is L.LatLngTuple => c !== null)
-    const scale = p ? speedScale(p.speed) : null
-    const byLeg = !!legs && legs.length >= 2
-
-    if (p && byLeg && located.length > 1) {
-      // Each point takes the colour of the leg it falls in; points between legs are transitions
-      const legAt = (t: number) => legs!.find((leg) => t >= leg.start && t <= leg.end)
-      let transitions = false
-      L.polyline(located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
-      for (let i = 1; i < positions.length; i++) {
-        const from = positions[i - 1]
-        const to = positions[i]
-        if (!from || !to) continue
-        const leg = legAt((p.t[i - 1] + p.t[i]) / 2)
-        if (!leg) transitions = true
-        L.polyline([from, to], {
-          color: leg ? leg.color : TRANSITION_COLOR,
-          weight: 4,
-          opacity: 0.95,
-          interactive: false,
-        }).addTo(layers)
-      }
-      const key = legLegend(legs!, transitions)
-      key.addTo(map)
-      controls.push(key)
-      finish(located)
-    } else if (p && scale && located.length > 1) {
+    const positions = routePositions(streams)
+    const drawing = routeDrawing(streams, sport, legs)
+    if (drawing) {
       // A soft outline under the coloured route keeps it readable on any map background
-      L.polyline(located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
-      for (let i = 1; i < positions.length; i++) {
-        const from = positions[i - 1]
-        const to = positions[i]
-        if (!from || !to) continue
-        const speeds = [p.speed[i - 1], p.speed[i]].filter((s): s is number => s !== null)
-        const speed = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : null
-        L.polyline([from, to], {
-          color: speed === null ? '#9ca3af' : speedColor(scale.position(speed)),
-          weight: 4,
-          opacity: 0.95,
-          interactive: false,
-        }).addTo(layers)
+      L.polyline(drawing.located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
+      for (const { from, to, color } of drawing.segments) {
+        L.polyline([from, to], { color, weight: 4, opacity: 0.95, interactive: false }).addTo(layers)
       }
-      const key = legend(`Slow · ${formatSpeed(scale.low, sport)}`, `${formatSpeed(scale.high, sport)} · Fast`)
+      const key = legend(legendHtml(drawing.legend))
       key.addTo(map)
       controls.push(key)
-      finish(located)
+      finish(drawing.located)
     } else {
       // No per-second data: the stored route, in one colour
       api.get<{ coords: [number, number][] }>(`/activities/${activityId}/route`).then(({ coords }) => {
         if (cancelled || coords.length < 2) return
-        L.polyline(coords, { color: '#3b82f6', weight: 3, opacity: 0.85 }).addTo(layers)
+        L.polyline(coords, { color: PLAIN_ROUTE_COLOR, weight: 3, opacity: 0.85 }).addTo(layers)
         finish(coords)
       })
     }

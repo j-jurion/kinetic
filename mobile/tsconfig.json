@@ -1,0 +1,12 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    /* Code shared with the web app. Its type-only imports of Plotly resolve to the copy here. */
+    "paths": {
+      "@kinetic/shared/*": ["../packages/shared/src/*"],
+      "plotly.js-dist-min": ["./node_modules/plotly.js-dist-min"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../packages/shared/src"]
+}

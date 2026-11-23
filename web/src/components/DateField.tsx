@@ -1,6 +1,6 @@
 import { useRef } from 'react'
 import { IconButton, InputAdornment, TextField } from '@mui/material'
-import { formatDate, parseDateInput } from '../lib/format'
+import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { Icon } from './icons'
 
 /** A dd-mm-yyyy text field with a calendar picker. */

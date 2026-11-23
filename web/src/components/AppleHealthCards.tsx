@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
 import { api } from '../lib/api'
-import { formatDate, parseDateInput } from '../lib/format'
+import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { importAppleHealthExport, type ImportProgress, type ImportSummary } from '../lib/appleHealthExport'
 import { DateField } from './DateField'
 import { Stat } from './fields'

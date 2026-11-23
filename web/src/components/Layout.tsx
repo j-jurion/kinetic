@@ -1,46 +1,11 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { Button, IconButton } from '@mui/material'
+import { NAV_SECTIONS, pageTitle } from '@kinetic/shared/navigation'
 import { api } from '../lib/api'
 import { useDarkMode } from '../theme'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
-
-const NAV_SECTIONS: [string, [string, string, string][]][] = [
-  [
-    'Log',
-    [
-      ['Activities', 'list', '/'],
-      ['Races', 'flag', '/races'],
-      ['Map', 'map', '/map'],
-    ],
-  ],
-  [
-    'Insights',
-    [
-      ['Graphs', 'bar_chart', '/graphs'],
-      ['Training', 'monitor_heart', '/training'],
-      ['Best Efforts', 'emoji_events', '/best-efforts'],
-    ],
-  ],
-  [
-    'Account',
-    [
-      ['Friends', 'people', '/friends'],
-      ['Sync', 'sync', '/sync'],
-    ],
-  ],
-]
-const NAV_ITEMS = NAV_SECTIONS.flatMap(([, items]) => items)
-
-function pageTitle(path: string): string {
-  if (path === '/') return 'Activities'
-  if (path.startsWith('/activity/')) return 'Activity'
-  if (path.startsWith('/best-efforts')) return 'Best Efforts'
-  if (path.startsWith('/sync')) return 'Sync'
-  const item = NAV_ITEMS.find(([, , to]) => to !== '/' && path.startsWith(to))
-  return item ? item[0] : ''
-}
 
 /** The shared app shell: header, navigation drawer and page content. */
 export function Layout() {

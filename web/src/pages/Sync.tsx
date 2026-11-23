@@ -9,7 +9,7 @@ import {
   TextField,
 } from '@mui/material'
 import { api } from '../lib/api'
-import { formatDate, parseDateInput } from '../lib/format'
+import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { Stat } from '../components/fields'
 import { DateField } from '../components/DateField'
 import { AppleHealthCards } from '../components/AppleHealthCards'

@@ -10,12 +10,12 @@ import {
   TextField,
 } from '@mui/material'
 import { api } from '../lib/api'
-import { KINDS, SPORTS, formatDateTime, parseDateInput, sportLabel } from '../lib/format'
-import type { Activity, Friend } from '../lib/types'
+import { KINDS, SPORTS, sportLabel } from '@kinetic/shared/format'
+import { activityForm, activityPayload } from '@kinetic/shared/forms'
+import type { ActivityForm } from '@kinetic/shared/forms'
+import type { Activity, Friend } from '@kinetic/shared/types'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
-
-const numberOrNull = (value: string) => (value.trim() === '' || Number(value) === 0 ? null : Number(value))
 
 interface EditProps {
   open: boolean
@@ -37,19 +37,7 @@ export function ActivityEditDialog({ open, activity, onClose, onSaved }: EditPro
   useEffect(() => {
     if (!open) return
     const a = activity
-    setForm({
-      name: a?.name ?? '',
-      date: formatDateTime(a?.date ?? new Date()),
-      sport: a?.sport ?? 'running',
-      kind: a?.kind ?? 'training',
-      duration: String(a?.duration_seconds ?? 0),
-      distance: String(a?.distance_meters ?? 0),
-      avgHr: String(a?.avg_heart_rate ?? 0),
-      calories: String(a?.calories ?? 0),
-      elevation: String(a?.elevation_gain_meters ?? 0),
-      avgSpeed: String(a?.avg_speed_ms ?? 0),
-      notes: a?.notes ?? '',
-    })
+    setForm(activityForm(a))
     setSelected([])
     api.get<Friend[]>('/friends').then(setFriends).catch(() => setFriends([]))
     if (a) {
@@ -61,25 +49,12 @@ export function ActivityEditDialog({ open, activity, onClose, onSaved }: EditPro
     setForm((f) => ({ ...f, [key]: e.target.value }))
 
   const save = async () => {
-    const date = parseDateInput(form.date ?? '')
-    if (!date) {
-      notify('Invalid date — use dd-mm-yyyy HH:MM', 'error')
+    const result = activityPayload(form as ActivityForm, friends.length ? selected.map((f) => f.id) : null)
+    if ('error' in result) {
+      notify(result.error, 'error')
       return
     }
-    const payload = {
-      name: form.name,
-      sport: form.sport,
-      kind: form.kind,
-      date,
-      duration_seconds: Number(form.duration || 0),
-      distance_meters: numberOrNull(form.distance),
-      avg_heart_rate: numberOrNull(form.avgHr) === null ? null : Math.round(Number(form.avgHr)),
-      calories: numberOrNull(form.calories) === null ? null : Math.round(Number(form.calories)),
-      elevation_gain_meters: numberOrNull(form.elevation),
-      avg_speed_ms: numberOrNull(form.avgSpeed),
-      notes: form.notes || null,
-      ...(friends.length ? { friend_ids: selected.map((f) => f.id) } : {}),
-    }
+    const { payload } = result
     setSaving(true)
     try {
       if (isEdit) await api.patch(`/activities/${activity.id}`, payload)
