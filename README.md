@@ -4,6 +4,8 @@ Activity tracking web app: a React (Vite) frontend in `web/` on top of a FastAPI
 
 ## Features
 - Upload Garmin `.fit` files or add activities manually
+- Apple Watch workouts, pushed automatically by the Health Auto Export iOS app or imported from
+  an Apple Health `export.zip` (see [Apple Watch](#apple-watch))
 - Activities list with distance, pace, HR, duration
 - Edit and delete activities
 - Sport types: Running, Trail Running, Cycling, Swimming, Hiking, Walking, Triathlon, Strength, Yoga
@@ -36,6 +38,31 @@ power curve, moving time, running dynamics, …) read once from its FIT file and
 existed before, use **Analyse now** on the Training page (it takes about half a second per
 activity). Zones and training load use the maximum and threshold heart rate, FTP and weight
 configured on the watch, as recorded in the FIT files, and fall back to estimates.
+
+### Apple Watch
+
+Apple has no web API for workouts; they live in HealthKit on the iPhone. Kinetic accepts them
+in two ways, both on the **Sync** page, and converts each workout into a FIT file
+(`app/fit_writer.py`), so it goes through the same import, charts and metrics as a Garmin
+activity:
+
+- **Automatic** — the Health Auto Export iOS app posts new
+  workouts to `POST /api/integrations/apple-health/webhook`. Create a token on the Sync page and
+  add a *REST API* automation in the app with that URL, the header
+  `Authorization: Bearer <token>`, data type *Workouts*, JSON, export version 2, and *Include
+  Route Data* and *Include Workout Metrics* on. The token only opens that one endpoint; only
+  its SHA-256 hash is stored. In production use the Vercel URL, so the request gets the origin
+  secret; turn on the app's batching if a sync sends many workouts at once (requests are capped
+  at 25 MB).
+- **History** — choose the `export.zip` from Health → profile → *Export All Health Data*. The
+  browser reads it (it can be gigabytes, so it is never uploaded) and sends only the workouts,
+  with heart rate, distance, power and GPS route, in batches of a few MB to
+  `POST /api/integrations/apple-health/import`.
+
+A workout is skipped when an activity of the same sport already starts within a minute of it,
+so re-importing is harmless and workouts that also reached Kinetic from Garmin are not
+duplicated. Apple Watch data has heart rate, GPS, distance and (cycling/running) power, but no
+Garmin running dynamics or training-effect fields; laps are generated per km (5 km cycling).
 
 ## Setup
 

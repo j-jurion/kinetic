@@ -1,5 +1,6 @@
 """Username/password accounts and revocable browser sessions."""
 
+import hashlib
 import os
 import re
 import secrets
@@ -52,6 +53,23 @@ class AccessToken(AuthBase):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, index=True, default=lambda: datetime.now(timezone.utc)
     )
+
+
+class IntegrationToken(AuthBase):
+    """A long-lived token that lets an outside app (Health Auto Export) post to one account.
+
+    Only a SHA-256 hash is stored; the token itself is shown once, when it is created.
+    """
+
+    __tablename__ = "integrationtoken"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Credentials(BaseModel):
@@ -266,3 +284,77 @@ def authenticated_owner(scope) -> str | None:
         if datetime.now(timezone.utc) - created >= timedelta(seconds=SESSION_SECONDS):
             return None
         return user_id
+
+
+# ── Integration tokens ────────────────────────────────────────────────────────
+
+APPLE_HEALTH = "apple_health"
+_BEARER = "bearer "
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def create_integration_token(user_id: str, kind: str) -> str:
+    """Replace the account's token of this kind with a new one and return it."""
+    token = secrets.token_urlsafe(32)
+    with Session(engine) as session:
+        session.execute(
+            delete(IntegrationToken).where(
+                IntegrationToken.user_id == user_id, IntegrationToken.kind == kind
+            )
+        )
+        session.add(IntegrationToken(token_hash=_hash_token(token), user_id=user_id, kind=kind))
+        session.commit()
+    return token
+
+
+def revoke_integration_token(user_id: str, kind: str) -> None:
+    with Session(engine) as session:
+        session.execute(
+            delete(IntegrationToken).where(
+                IntegrationToken.user_id == user_id, IntegrationToken.kind == kind
+            )
+        )
+        session.commit()
+
+
+def integration_token_info(user_id: str, kind: str) -> dict | None:
+    with Session(engine) as session:
+        row = session.scalar(
+            select(IntegrationToken).where(
+                IntegrationToken.user_id == user_id, IntegrationToken.kind == kind
+            )
+        )
+        if row is None:
+            return None
+        return {"created_at": row.created_at, "last_used_at": row.last_used_at}
+
+
+def integration_owner(scope, kind: str) -> str | None:
+    """The account a request's ``Authorization: Bearer <token>`` header belongs to."""
+    header = next(
+        (
+            value.decode("latin-1")
+            for name, value in scope.get("headers", [])
+            if name == b"authorization"
+        ),
+        "",
+    )
+    if not header.lower().startswith(_BEARER):
+        return None
+    token = header[len(_BEARER):].strip()
+    if not token or len(token) > 128:
+        return None
+    with Session(engine) as session:
+        row = session.execute(
+            select(IntegrationToken, User.is_active)
+            .join(User, User.id == IntegrationToken.user_id)
+            .where(IntegrationToken.token_hash == _hash_token(token))
+        ).first()
+        if row is None or row[0].kind != kind or not row[1]:
+            return None
+        row[0].last_used_at = datetime.now(timezone.utc)
+        session.commit()
+        return row[0].user_id

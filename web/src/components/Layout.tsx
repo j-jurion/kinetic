@@ -37,7 +37,7 @@ function pageTitle(path: string): string {
   if (path === '/') return 'Activities'
   if (path.startsWith('/activity/')) return 'Activity'
   if (path.startsWith('/best-efforts')) return 'Best Efforts'
-  if (path.startsWith('/sync')) return 'Garmin Sync'
+  if (path.startsWith('/sync')) return 'Sync'
   const item = NAV_ITEMS.find(([, , to]) => to !== '/' && path.startsWith(to))
   return item ? item[0] : ''
 }

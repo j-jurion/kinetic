@@ -38,6 +38,8 @@ _MAX_OVERSHOOT = 0.05
 # FIT sub_sport values that refine the recorded sport
 SUB_SPORT_MAP: dict[tuple[str, str], SportType] = {
     ("running", "trail"): SportType.trail_running,
+    ("training", "strength_training"): SportType.strength,
+    ("training", "yoga"): SportType.yoga,
 }
 
 

@@ -496,3 +496,14 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
   flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px;
   color: var(--primary); background: var(--primary-soft);
 }
+
+/* ── Apple Health setup ────────────────────────────────────────────────── */
+.setup-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.setup-steps code, .copy-field code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; }
+.copy-field {
+  display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0;
+  padding: 4px 4px 4px 10px; border-radius: 8px; background: rgba(127, 127, 127, .1);
+}
+.copy-field code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.text-warning { color: #b45309; }
+.body--dark .text-warning { color: #fbbf24; }
