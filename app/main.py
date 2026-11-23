@@ -1,4 +1,4 @@
-"""Kinetic API – the JSON backend behind the Next.js web app in ``web/``.
+"""Kinetic API – the JSON backend behind the React web app in ``web/``.
 
 Run with:  uv run python run.py
 """
@@ -14,13 +14,14 @@ from app.api import router
 from app.auth import create_auth_tables, public_origin
 from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
-from app.database import create_db_and_tables
+from app.database import create_db_and_tables, lock_down_postgres_tables
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     create_db_and_tables()
     create_auth_tables()
+    lock_down_postgres_tables()
     yield
 
 

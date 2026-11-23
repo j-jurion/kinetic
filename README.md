@@ -132,6 +132,13 @@ Every state-changing API request must carry an `Origin` header equal to
 Some database and FIT files are already tracked by Git. Ignore rules do not
 remove tracked files or their history; review them before making the repository public.
 
+### Deploy to Vercel + Fly.io + Supabase
+
+See [DEPLOYMENT.md](DEPLOYMENT.md): the web app on Vercel, the API on Fly.io (`Dockerfile`,
+`fly.toml`) and Postgres on Supabase. Set `DATABASE_URL` to use Postgres instead of the
+local SQLite `app.db`; `KINETIC_GARMIN_TOKEN_DIR` moves the Garmin token folder, and
+`KINETIC_ORIGIN_SECRET` makes the API reject requests that don't come through the proxy.
+
 ### Run with systemd (Ubuntu)
 
 The service file assumes the checkout and virtual environment are at `/opt/kinetic`,
@@ -152,5 +159,5 @@ Check logs with `sudo journalctl -u kinetic -f`.
 ## Stack
 - **React + Vite** – web frontend (`web/`), with MUI components, Plotly charts and Leaflet maps
 - **FastAPI** – JSON API (served at `/api`)
-- **SQLModel** – ORM with SQLite
+- **SQLModel** – ORM with SQLite locally or Postgres (Supabase) in production
 - **fitparse** – Garmin .fit file parsing
