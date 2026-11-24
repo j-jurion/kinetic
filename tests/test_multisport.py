@@ -4,9 +4,9 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from app.api import _leg_segments
 from app.fit_parser import parse_fit_file
 from app.models import Activity, SportType
+from app.routes.races import _leg_segments
 from tests.fit_samples import write_sessions_fit
 
 START = datetime(2026, 7, 25, 14, 0, 0)
