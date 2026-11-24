@@ -32,11 +32,23 @@ export function fastestPerDistance(efforts: BestEffortRow[]): BestEffortRow[] {
   return [...best.values()].sort((a, b) => a.distance_meters - b.distance_meters)
 }
 
-/** The same calendar day `months` months earlier. */
+/**
+ * The same calendar day and time `months` months earlier, or the last day of that month when
+ * it is shorter: 31 May minus 3 months is 28 February, not 3 March (which setMonth would give).
+ */
 export function monthsBefore(date: Date, months: number): Date {
-  const d = new Date(date)
-  d.setMonth(d.getMonth() - months)
-  return d
+  const year = date.getFullYear()
+  const month = date.getMonth() - months
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  return new Date(
+    year,
+    month,
+    Math.min(date.getDate(), lastDay),
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds(),
+  )
 }
 
 export interface Prediction {

@@ -9,6 +9,7 @@ import {
   estimatedFtp,
   fastestPerDistance,
   formatImprovement,
+  monthsBefore,
   ftpSettingSteps,
   isTransition,
   latestWeight,
@@ -26,6 +27,29 @@ import {
 import { availablePowerSports, pickPowerSport, wattsPerKg } from '../src/powerStats'
 import type { MultisportEvent, RaceRow } from '../src/types'
 import { activity, at, bestEffort as be, trainingActivity as ta } from './factories'
+
+describe('months before a date', () => {
+  it('keeps the day and time, or clamps to the end of a shorter month', () => {
+    expect(monthsBefore(at(2026, 6, 15, 9, 30), 12)).toEqual(at(2025, 6, 15, 9, 30))
+    expect(monthsBefore(at(2026, 5, 31, 23, 59), 3)).toEqual(at(2026, 2, 28, 23, 59))
+    expect(monthsBefore(at(2026, 3, 31), 1)).toEqual(at(2026, 2, 28))
+    expect(monthsBefore(at(2026, 1, 31), 2)).toEqual(at(2025, 11, 30))
+    expect(monthsBefore(at(2024, 2, 29), 12)).toEqual(at(2023, 2, 28))
+    expect(monthsBefore(at(2028, 2, 29), 48)).toEqual(at(2024, 2, 29))
+  })
+
+  it('is not shifted by daylight saving time', () => {
+    // 31 Oct is after the clocks go back; 31 Jul (summer time) minus 3 months is 30 Apr
+    expect(monthsBefore(at(2026, 10, 31, 12), 3)).toEqual(at(2026, 7, 31, 12))
+    expect(monthsBefore(at(2026, 7, 31, 0, 30), 3)).toEqual(at(2026, 4, 30, 0, 30))
+  })
+
+  it('does not change the date it is given', () => {
+    const date = at(2026, 5, 31)
+    monthsBefore(date, 3)
+    expect(date).toEqual(at(2026, 5, 31))
+  })
+})
 
 describe('race predictor', () => {
   it('applies Riegel with exponent 1.06', () => {
@@ -67,6 +91,14 @@ describe('race predictor', () => {
     expect(result.allTime).toBe(true)
     expect(result.predictions.every((p) => p.source === old)).toBe(true)
     expect(predictRaces([be({ distance_meters: 400, duration_seconds: 60 })], today)).toEqual({ predictions: [], allTime: true })
+  })
+
+  it('counts an effort exactly 12 months back on a month end as recent', () => {
+    // 12 months before 29 Feb 2028 is 28 Feb 2027; setMonth rolled it over to 1 March, which
+    // dropped an effort from 28 February
+    const today = at(2028, 2, 29, 12)
+    const edge = be({ duration_seconds: 1300, date: '2027-02-28T12:00:00' })
+    expect(predictRaces([edge], today).allTime).toBe(false)
   })
 
   it('ignores efforts dated after today', () => {

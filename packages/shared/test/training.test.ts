@@ -42,6 +42,11 @@ describe('dates across daylight saving time', () => {
 
   it('starts ranges 3 or 12 months back, or not at all', () => {
     expect(rangeStart('3m', at(2026, 5, 20, 14))).toEqual(at(2026, 2, 20))
+    // A shorter target month ends the range on its last day instead of rolling into the next
+    expect(rangeStart('3m', at(2026, 5, 31, 14))).toEqual(at(2026, 2, 28))
+    expect(rangeStart('3m', at(2024, 5, 31))).toEqual(at(2024, 2, 29))
+    expect(rangeStart('3m', at(2026, 12, 31))).toEqual(at(2026, 9, 30))
+    expect(rangeStart('12m', at(2024, 2, 29))).toEqual(at(2023, 2, 28))
     expect(rangeStart('12m', at(2026, 7, 15, 9))).toEqual(at(2025, 7, 15))
     expect(rangeStart('all')).toBeNull()
   })
