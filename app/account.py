@@ -1,6 +1,5 @@
 """Deleting an account and everything that belongs to it."""
 
-from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from loguru import logger
@@ -8,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, or_, select, update
 from sqlmodel import SQLModel
 
-from app import garmin_sync, streams
+from app import fit_files, garmin_sync, streams
 from app.auth import (
     COOKIE_NAME,
     AccessToken,
@@ -88,22 +87,12 @@ def delete_account_data(user_id: str) -> int:
         conn.execute(delete(User).where(User.id == user_id))
 
     # Files go only once the database no longer refers to them
-    for path in fit_paths:
-        for cached in streams.streams_cache_files(path):
-            _remove(cached)
-        _remove(path)
+    fit_files.remove_unreferenced(fit_paths)
     garmin_sync.forget_account(user_id)
     from app.routes.garmin import forget_pending_mfa
 
     forget_pending_mfa(user_id)
     return count
-
-
-def _remove(path: Path) -> None:
-    try:
-        path.unlink(missing_ok=True)
-    except OSError as exc:
-        logger.warning("Could not delete {} of a deleted account: {}", path.name, exc)
 
 
 @router.post("/delete-account", status_code=204)

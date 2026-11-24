@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from app import garmin_sync, strava, streams
+from app import fit_files, garmin_sync, strava, streams
 from app.database import engine, require_id
 from app.errors import public_message
 from app.friends import friend_rows
@@ -264,13 +264,22 @@ def _delete_activity_rows(session, activity: Activity) -> None:
 
 @router.delete("/activities/{activity_id}", status_code=204)
 def delete_activity(activity_id: int) -> None:
+    """Delete an activity with its multisport legs, and its FIT file (with the cached streams)
+    unless another activity still uses that file, like the event of a deleted leg."""
     with Session(engine) as session:
         activity = fetch_activity(session, activity_id)
-        for child in session.exec(select(Activity).where(Activity.parent_id == activity_id)).all():
+        children = session.exec(select(Activity).where(Activity.parent_id == activity_id)).all()
+        files = [
+            path
+            for a in [activity, *children]
+            if (path := streams.fit_path_for(a.fit_file_path)) is not None
+        ]
+        for child in children:
             _delete_activity_rows(session, child)
         session.flush()
         _delete_activity_rows(session, activity)
         session.commit()
+    fit_files.remove_unreferenced(files)
 
 
 @router.post("/activities/upload-fit", status_code=201)

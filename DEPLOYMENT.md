@@ -202,7 +202,9 @@ Secrets (`DATABASE_URL`, `KINETIC_ORIGIN_SECRET`, …) stay in Fly and Vercel; n
   this is only an issue for unusually large files.
 - **Streams cache**: next to each FIT file, `uploads/` holds a `<name>.<digest>.streams.json.gz`
   (about 15 KB) once its activity page has been opened. It is rebuilt when missing, so it need
-  not be backed up and can be deleted at any time.
+  not be backed up and can be deleted at any time. Deleting an activity (or an account)
+  removes its FIT file and these caches, unless another activity still uses the file (the
+  legs of a multisport event share it).
 - The old single-server setup (`kinetic.service`, built web app served by FastAPI) still
   works; without `DATABASE_URL` the app keeps using SQLite in `app.db`.
 
