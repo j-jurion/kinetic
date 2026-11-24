@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   Button,
   CircularProgress,
@@ -6,6 +6,7 @@ import {
   DialogContent,
   IconButton,
   InputAdornment,
+  LinearProgress,
   TextField,
 } from '@mui/material'
 import { api } from '../lib/api'
@@ -16,17 +17,12 @@ import { AppleHealthCards } from '../components/AppleHealthCards'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
+import { useBackgroundJobs } from '../lib/backgroundJobs'
 
 interface Status {
   authenticated: boolean
   email: string
   default_since: string
-}
-
-interface SyncResult {
-  imported: number
-  skipped: number
-  errors: string[]
 }
 
 export function SyncPage() {
@@ -41,9 +37,9 @@ export function SyncPage() {
   const [mfaCode, setMfaCode] = useState('')
   const [since, setSince] = useState('')
   const [until, setUntil] = useState('')
-  const [syncing, setSyncing] = useState(false)
-  const [progress, setProgress] = useState<string[]>([])
-  const [result, setResult] = useState<SyncResult | null>(null)
+  // The sync runs in the background: it carries on when you leave this page
+  const { garmin, startGarminSync } = useBackgroundJobs()
+  const { running: syncing, log: progress, result } = garmin
 
   const refreshStatus = useCallback(async () => {
     const s = await api.get<Status>('/garmin/status')
@@ -103,7 +99,7 @@ export function SyncPage() {
     notify('Logged out — tokens removed', 'info')
   }
 
-  const sync = async () => {
+  const sync = () => {
     if (syncing) {
       notify('Sync already in progress', 'warning')
       return
@@ -119,54 +115,20 @@ export function SyncPage() {
       return
     }
 
-    setSyncing(true)
-    setProgress([])
-    setResult(null)
-    try {
-      const response = await fetch('/api/garmin/sync', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          since: sinceIso.slice(0, 10),
-          until: untilIso?.slice(0, 10) ?? null,
-          email: status?.authenticated ? '' : email,
-          password: status?.authenticated ? '' : password,
-        }),
-      })
-      if (!response.ok || !response.body) {
-        const data = await response.json().catch(() => ({}))
-        throw new Error(typeof data.detail === 'string' ? data.detail : 'Sync failed')
-      }
-      const reader = response.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop() ?? ''
-        for (const line of lines) {
-          if (!line.trim()) continue
-          const message = JSON.parse(line)
-          if (message.type === 'progress') {
-            // Keep the last 50 lines to avoid unbounded growth
-            setProgress((p) => [...p, message.message].slice(-50))
-          } else if (message.type === 'result') {
-            setResult(message)
-          } else if (message.type === 'error') {
-            notify(message.message, 'error', 8000)
-          }
-        }
-      }
-      await refreshStatus()
-    } catch (error) {
-      notify((error as Error).message, 'error', 8000)
-    } finally {
-      setSyncing(false)
-    }
+    startGarminSync({
+      since: sinceIso.slice(0, 10),
+      until: untilIso?.slice(0, 10) ?? null,
+      email: status?.authenticated ? '' : email,
+      password: status?.authenticated ? '' : password,
+    })
   }
+
+  // A sync logs in with the entered credentials and caches tokens: show that once it is done
+  const wasSyncing = useRef(syncing)
+  useEffect(() => {
+    if (wasSyncing.current && !syncing) void refreshStatus()
+    wasSyncing.current = syncing
+  }, [syncing, refreshStatus])
 
   if (!status) return null
 
@@ -267,7 +229,9 @@ export function SyncPage() {
             </span>
             <div className="column gap-0 flex-1 min-w-0">
               <span className="card-title">Sync activities</span>
-              <span className="text-caption text-grey-6">Activities already imported are skipped.</span>
+              <span className="text-caption text-grey-6">
+                Activities already imported are skipped. The sync keeps running when you leave this page.
+              </span>
             </div>
           </div>
           <div className="row items-center gap-3 w-full">
@@ -282,6 +246,15 @@ export function SyncPage() {
           >
             {syncing ? 'Syncing…' : 'Sync now'}
           </Button>
+
+          {syncing && garmin.total > 0 && (
+            <div className="column w-full gap-1">
+              <LinearProgress variant="determinate" value={(garmin.done / garmin.total) * 100} />
+              <span className="text-caption text-grey-6">
+                {garmin.done} of {garmin.total} activities
+              </span>
+            </div>
+          )}
 
           {progress.length > 0 && (
             <div className="console">
