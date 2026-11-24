@@ -498,7 +498,7 @@ export function ActivityDetailPage() {
       <ConfirmDeleteDialog
         activity={deleting ? a : null}
         onClose={() => setDeleting(false)}
-        onDeleted={() => navigate(detail.parent ? `/activity/${detail.parent.id}` : '/')}
+        onDeleted={() => navigate(detail.parent ? `/activity/${detail.parent.id}` : '/activities')}
       />
       <RaceResultDialog
         open={raceDialog}

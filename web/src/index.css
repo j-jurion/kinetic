@@ -263,6 +263,17 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 .leaflet-container { z-index: 0; font-family: 'Inter', 'Roboto', sans-serif; }
 
 /* ── Page helpers ──────────────────────────────────────────────────────── */
+.dashboard-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1rem; align-items: start; }
+.dashboard-panel { gap: .75rem; }
+.dashboard-more { display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; font-weight: 600; color: var(--primary); text-decoration: none; white-space: nowrap; }
+.dashboard-more:hover { text-decoration: underline; }
+.dashboard-panel .activity-row { box-shadow: none; }
+.dashboard-record { padding: 8px 6px; border-radius: 10px; }
+.dashboard-record:hover { background: var(--surface-2); }
+.dashboard-record-time { font-weight: 800; font-variant-numeric: tabular-nums; }
+.stat-delta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; font-size: .72rem; color: var(--text-muted); }
+.stat-delta .material-icons { vertical-align: -2px; }
+@media (max-width: 1100px) { .dashboard-grid { grid-template-columns: 1fr; } }
 .graphs-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 @media (max-width: 760px) {
   .graphs-grid { grid-template-columns: 1fr; }

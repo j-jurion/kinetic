@@ -18,8 +18,9 @@ import { FriendsPage } from './pages/Friends'
 import { FriendDetailPage } from './pages/FriendDetail'
 import { SyncPage } from './pages/Sync'
 
-// The chart pages pull in Plotly (several MB), so they load on first visit only
+// The dashboard and chart pages pull in Plotly (several MB), so they load on first visit only
 const GraphsPage = lazy(() => import('./pages/Graphs').then((m) => ({ default: m.GraphsPage })))
+const DashboardPage = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.DashboardPage })))
 const TrainingPage = lazy(() => import('./pages/Training').then((m) => ({ default: m.TrainingPage })))
 const BestEffortDistancePage = lazy(() =>
   import('./pages/BestEffortDistance').then((m) => ({ default: m.BestEffortDistancePage })),
@@ -34,7 +35,8 @@ createRoot(document.getElementById('root')!).render(
             <Route path="/login" element={<LoginPage mode="login" />} />
             <Route path="/register" element={<LoginPage mode="register" />} />
             <Route element={<RequireAuth><Layout /></RequireAuth>}>
-              <Route path="/" element={<ActivitiesPage />} />
+              <Route path="/" element={<Suspense><DashboardPage /></Suspense>} />
+              <Route path="/activities" element={<ActivitiesPage />} />
               <Route path="/activity/:id" element={<ActivityDetailPage />} />
               <Route path="/races" element={<RacesPage />} />
               <Route path="/map" element={<MapPage />} />

@@ -85,7 +85,7 @@ export function Layout() {
                 end={to === '/'}
                 className={({ isActive }) => {
                   const active =
-                    isActive || (to === '/' && location.pathname.startsWith('/activity/'))
+                    isActive || (to === '/activities' && location.pathname.startsWith('/activity/'))
                   return `nav-item ${active ? 'active' : ''}`
                 }}
               >
