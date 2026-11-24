@@ -50,19 +50,26 @@ export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSp
     if (/^[xy]axis\d*$/.test(key)) axes[key] = value as object
   }
   const themedAxes = Object.fromEntries(
-    Object.entries(axes).map(([key, value]) => [
-      key,
-      {
-        gridcolor: theme.grid,
-        zerolinecolor: theme.zeroline,
-        linecolor: theme.grid,
-        tickfont: { color: theme.muted, size: 11 },
-        title: { font: { color: theme.muted, size: 12 } },
-        ...value,
-        // Charts are static: no zooming or panning, hover tooltips still work
-        fixedrange: true,
-      },
-    ]),
+    Object.entries(axes).map(([key, value]) => {
+      const axis = value as { title?: string | { text?: string; font?: object } }
+      const own = typeof axis.title === 'string' ? { text: axis.title } : (axis.title ?? {})
+      return [
+        key,
+        {
+          gridcolor: theme.grid,
+          zerolinecolor: theme.zeroline,
+          linecolor: theme.grid,
+          tickfont: { color: theme.muted, size: 11 },
+          // Room between the tick labels and the axis title; automargin makes the margin grow
+          // to fit them, where a fixed margin pressed the title against labels like "10:00"
+          automargin: true,
+          ...value,
+          title: { standoff: 10, ...own, font: { color: theme.muted, size: 12, ...own.font } },
+          // Charts are static: no zooming or panning, hover tooltips still work
+          fixedrange: true,
+        },
+      ]
+    }),
   )
   // A chart title, left-aligned and bolder, like the card titles around it
   const title =
