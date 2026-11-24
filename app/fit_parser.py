@@ -110,11 +110,11 @@ def parse_fit_file(
         elif msg_name == "record":
             data_points.append({k: _safe_val(record, k) for k in record})
 
-    if is_multisport or _is_multisport(sessions_data):
+    if _is_multisport(sessions_data, flagged=is_multisport):
         return _build_multisport(fit_path, sessions_data, lap_records, data_points)
 
     # ── Single-sport path ─────────────────────────────────────────────────────
-    session_data = sessions_data[-1] if sessions_data else {}
+    session_data = _main_session(sessions_data)
     activity, laps, best_efforts = _build_single_activity(
         fit_path, session_data, lap_records, data_points, activity_name_hint, length_records
     )
@@ -201,20 +201,32 @@ def _build_single_activity(
     return activity, laps, best_efforts
 
 
-def _is_multisport(sessions: list[dict]) -> bool:
+def _is_multisport(sessions: list[dict], flagged: bool = False) -> bool:
     """Whether the sessions describe one event made of several legs.
 
-    Watches only tag a file as ``auto_multi_sport`` when the built-in multisport mode is
-    used; starting each leg by hand produces a ``manual`` activity with one session per
-    leg, so the sessions themselves have to be inspected. A transition leg or two
-    different sports both mean multisport, while repeated sessions of the same sport
-    (a paused or resumed workout) do not.
+    It takes at least two legs (sessions other than transitions). Watches tag a file as
+    ``auto_multi_sport`` (``flagged``) whenever a multisport activity profile was used, even
+    when only one leg was recorded, so the tag alone is not enough: a single swim or run
+    is a normal activity. Starting each leg by hand produces a ``manual`` activity with one
+    session per leg, so the sessions themselves have to be inspected: a transition leg or
+    two different sports mean multisport, while repeated sessions of the same sport (a
+    paused or resumed workout) do not, unless the watch tagged them as multisport.
     """
     sports = [str(s.get("sport", "")).lower() for s in sessions if s.get("sport")]
     legs = [sport for sport in sports if sport != "transition"]
     if len(legs) < 2:
         return False
-    return len(set(legs)) > 1 or "transition" in sports
+    return flagged or len(set(legs)) > 1 or "transition" in sports
+
+
+def _main_session(sessions: list[dict]) -> dict:
+    """The session of a single-sport file: the longest one that is not a transition."""
+    legs = [s for s in sessions if str(s.get("sport", "")).lower() != "transition"] or sessions
+    if not legs:
+        return {}
+    return max(
+        legs, key=lambda s: float(s.get("total_elapsed_time") or s.get("total_timer_time") or 0)
+    )
 
 
 def _detect_multisport_type(sport_sessions: list[dict]) -> SportType:

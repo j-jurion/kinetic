@@ -9,6 +9,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
+from loguru import logger
 
 from app.account import router as account_router
 from app.api import router
@@ -17,6 +18,7 @@ from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
 from app.friends import router as friends_router
+from app.repair import repair_single_leg_events
 from app.token_crypto import warn_if_unconfigured
 
 
@@ -25,6 +27,10 @@ async def lifespan(_app: FastAPI):
     create_db_and_tables()
     create_auth_tables()
     lock_down_postgres_tables()
+    try:
+        repair_single_leg_events()
+    except Exception:
+        logger.exception("Repairing single-leg multisport events failed")
     warn_if_unconfigured()
     yield
 
