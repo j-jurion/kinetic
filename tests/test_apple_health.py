@@ -15,7 +15,7 @@ from app import apple_health, garmin_sync, streams
 from app.fit_parser import parse_fit_file
 from app.models import Activity, SportType
 from app.ownership import current_owner
-from tests.apple_health_samples import START, outdoor_run, treadmill_run
+from tests.apple_health_samples import START, outdoor_run, swim_bike_run, treadmill_run
 
 ALICE, BOB = str(uuid.uuid4()), str(uuid.uuid4())
 
@@ -53,6 +53,36 @@ class ConversionTests(unittest.TestCase):
         self.assertAlmostEqual(rows[100]["speed"], 3.33, places=2)
         self.assertAlmostEqual(rows[100]["lat"], 50.883, places=4)
         self.assertIsNotNone(rows[102]["heart_rate"])  # interpolated between 5 s samples
+
+    def test_swim_bike_run_becomes_a_triathlon_with_its_legs(self):
+        _, (event, _, _, children) = self.roundtrip(swim_bike_run())
+        self.assertEqual(event.sport, SportType.triathlon)
+        self.assertEqual(event.duration_seconds, 1800)
+        self.assertEqual(event.distance_meters, 8000)
+        self.assertAlmostEqual(event.calories, 600, delta=2)  # shared out over the legs
+        legs = [child for child, _, _ in children]
+        self.assertEqual(
+            [leg.sport for leg in legs],
+            [SportType.swimming, SportType.cycling, SportType.running],
+        )
+        self.assertEqual([leg.distance_meters for leg in legs], [500, 6000, 1500])
+        self.assertEqual([leg.duration_seconds for leg in legs], [600, 600, 480])
+        self.assertTrue(all(leg.route_json for leg in legs))  # each leg its part of the route
+        self.assertEqual(legs[2].date - legs[0].date, timedelta(seconds=1320))
+        run_efforts = {e.distance_meters for e in children[2][2]}
+        self.assertEqual(run_efforts, {1000})
+
+    def test_a_bike_run_is_a_duathlon(self):
+        data = swim_bike_run()
+        data["legs"] = data["legs"][1:]
+        _, (event, _, _, children) = self.roundtrip(data)
+        self.assertEqual(event.sport, SportType.duathlon)
+        self.assertEqual([c.sport for c, _, _ in children], [SportType.cycling, SportType.running])
+
+    def test_one_leg_is_a_normal_workout(self):
+        data = {**outdoor_run(), "legs": [swim_bike_run()["legs"][2]]}
+        _, (activity, _, _, children) = self.roundtrip(data)
+        self.assertEqual((activity.sport, children), (SportType.running, []))
 
     def test_indoor_run_uses_distance_samples(self):
         path, (activity, laps, efforts, _) = self.roundtrip(treadmill_run())
@@ -153,6 +183,17 @@ class ImportTests(unittest.TestCase):
         self.assertEqual(len(apple_health.import_workouts([outdoor_run()])["imported"]), 1)
         owners = sorted(a.owner_id or "" for a in self.activities())
         self.assertEqual(owners, sorted([ALICE, ALICE, BOB]))
+
+    def test_a_multisport_workout_is_imported_once_with_its_legs(self):
+        self.as_owner(ALICE)
+        result = apple_health.import_workouts([swim_bike_run(), swim_bike_run()])
+        self.assertEqual((len(result["imported"]), result["skipped"]), (1, 1))
+        activities = self.activities()
+        event = next(a for a in activities if a.parent_id is None)
+        self.assertEqual(event.sport, SportType.triathlon)
+        legs = sorted((a for a in activities if a.parent_id == event.id), key=lambda a: a.date)
+        self.assertEqual([a.sport for a in legs],
+                         [SportType.swimming, SportType.cycling, SportType.running])
 
     def test_one_bad_workout_does_not_stop_the_rest(self):
         self.as_owner(ALICE)

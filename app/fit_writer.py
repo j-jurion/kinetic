@@ -16,7 +16,7 @@ DEG_TO_SEMICIRCLES = (2**31) / 180.0
 
 # Sport and sub-sport enum values from the FIT profile
 SPORTS = {
-    "generic": 0, "running": 1, "cycling": 2, "swimming": 5, "training": 10,
+    "generic": 0, "running": 1, "cycling": 2, "transition": 3, "swimming": 5, "training": 10,
     "walking": 11, "hiking": 17,
 }
 SUB_SPORTS = {

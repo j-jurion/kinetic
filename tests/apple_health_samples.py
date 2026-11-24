@@ -62,3 +62,55 @@ def treadmill_run(start: datetime = START) -> dict:
             {"date": fmt(start + timedelta(seconds=s)), "Avg": 150} for s in range(0, 1200, 5)
         ],
     }
+
+
+def swim_bike_run(start: datetime = START) -> dict:
+    """Apple's multisport workout: a 500 m open-water swim (0-10 min), a transition, a
+    6 km ride (11-21 min), a transition and a 1.5 km run (22-30 min), with one GPS route."""
+    route = [
+        {
+            "latitude": 50.88 + s * 3.0e-5,
+            "longitude": 4.70,
+            "timestamp": fmt(start + timedelta(seconds=s)),
+        }
+        for s in range(1800)
+    ]
+
+    def leg(name: str, first: int, last: int, km: float, **extra) -> dict:
+        return {
+            "name": name,
+            "start": fmt(start + timedelta(seconds=first)),
+            "end": fmt(start + timedelta(seconds=last)),
+            "distance": {"qty": km, "units": "km"},
+            **extra,
+        }
+
+    def distance(first: int, last: int, metres: float) -> list[dict]:
+        per = metres / ((last - first) // 10)
+        return [
+            {"date": fmt(start + timedelta(seconds=t)), "qty": per, "units": "m"}
+            for t in range(first + 10, last + 1, 10)
+        ]
+
+    return {
+        "name": "Swim Bike Run",
+        "start": fmt(start),
+        "end": fmt(start + timedelta(seconds=1800)),
+        "duration": 1800,
+        "location": "Outdoor",
+        "isIndoor": False,
+        "distance": {"qty": 0.5, "units": "km"},  # Apple's first statistic: the swim's
+        "activeEnergyBurned": {"qty": 600, "units": "kcal"},
+        "heartRateData": [
+            {"date": fmt(start + timedelta(seconds=s)), "Avg": 150} for s in range(0, 1800, 5)
+        ],
+        "swimDistance": distance(0, 600, 500),
+        "cyclingDistance": distance(660, 1260, 6000),
+        "walkingAndRunningDistance": distance(1320, 1800, 1500),
+        "route": route,
+        "legs": [
+            leg("Open Water Swim", 0, 600, 0.5, location="Open Water"),
+            leg("Outdoor Cycle", 660, 1260, 6.0),
+            leg("Outdoor Run", 1320, 1800, 1.5),
+        ],
+    }
