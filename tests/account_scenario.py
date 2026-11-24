@@ -147,3 +147,34 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
     )
     login("carol", new_password)
     assert client.get("/api/activities").status_code == 200
+
+    # Password guessing is cut off: after too many failures even the right password is refused
+    # until the window passes, and the refusal comes before any password hashing.
+    from app import rate_limit
+
+    client.cookies.clear()
+
+    def login_status(username, password):
+        return client.post(
+            "/api/auth/login", json={"username": username, "password": password}, headers=origin
+        )
+
+    for _ in range(rate_limit.FAILED_LOGINS_PER_USERNAME):
+        assert login_status("bob", "wrong-horse-battery").status_code == 400
+    blocked = login_status("bob", "correct-horse-battery")
+    assert blocked.status_code == 429, blocked.text
+    assert int(blocked.headers["Retry-After"]) > 0
+    rate_limit.reset_all()
+    assert login_status("bob", "correct-horse-battery").status_code == 204
+    # A successful login clears the username's failures
+    for _ in range(rate_limit.FAILED_LOGINS_PER_USERNAME - 1):
+        login_status("bob", "wrong-horse-battery")
+    assert login_status("bob", "correct-horse-battery").status_code == 204
+    assert login_status("bob", "wrong-horse-battery").status_code == 400
+    assert login_status("bob", "correct-horse-battery").status_code == 204
+
+    # Registrations from one address are capped
+    rate_limit.reset_all()
+    for index in range(rate_limit.REGISTRATIONS_PER_IP):
+        assert register(f"user{index}").status_code == 201
+    assert register("one-too-many").status_code == 429
