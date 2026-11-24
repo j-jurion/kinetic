@@ -3,6 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Optional
 
 from app import fit_writer
 
@@ -12,15 +13,21 @@ DURATION_SECONDS = 1800
 ORIGIN_LAT, ORIGIN_LON = 50.123456, 3.654321
 
 
-def sample_run_bytes(multisport_profile: bool = False) -> bytes:
+def sample_run_bytes(
+    multisport_profile: bool = False,
+    manufacturer: int = 255,
+    jumps: Optional[dict[int, float]] = None,
+) -> bytes:
     """A 30-minute run at ~3 m/s with heart rate, cadence and a 40 m climb in the middle.
 
     With ``multisport_profile`` the file is tagged ``auto_multi_sport``, as a watch does for a
     run started from a multisport activity profile, though it holds this one run only.
+    ``manufacturer`` 255 is how Kinetic marks files it writes itself; 1 is a Garmin watch.
+    ``jumps`` adds metres to the distance at some seconds.
     """
     writer = fit_writer.FitWriter()
     sport, sub_sport = fit_writer.sport_codes("running")
-    writer.write("file_id", type=4, manufacturer=255, product=0, serial_number=1,
+    writer.write("file_id", type=4, manufacturer=manufacturer, product=0, serial_number=1,
                  time_created=START)
     writer.write_sport(sport, sub_sport, "Synthetic run")
     writer.write("event", timestamp=START, event=0, event_type=0)
@@ -32,6 +39,7 @@ def sample_run_bytes(multisport_profile: bool = False) -> bytes:
     for t in range(DURATION_SECONDS + 1):
         speed = 3.0 + 0.3 * math.sin(t / 60)
         distance += speed if t else 0.0
+        distance += (jumps or {}).get(t, 0.0)
         # Flat, then a steady 40 m climb between minutes 10 and 15, then a descent
         if t < 600:
             altitude = 20.0
@@ -81,8 +89,13 @@ def sample_run_bytes(multisport_profile: bool = False) -> bytes:
     return writer.to_bytes()
 
 
-def write_sample_run(path: Path, multisport_profile: bool = False) -> Path:
-    path.write_bytes(sample_run_bytes(multisport_profile))
+def write_sample_run(
+    path: Path,
+    multisport_profile: bool = False,
+    manufacturer: int = 255,
+    jumps: Optional[dict[int, float]] = None,
+) -> Path:
+    path.write_bytes(sample_run_bytes(multisport_profile, manufacturer, jumps))
     return path
 
 
