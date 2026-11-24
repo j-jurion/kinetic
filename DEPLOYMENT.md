@@ -56,8 +56,8 @@ fly secrets set KINETIC_PREVIEW_ORIGINS="https://kinetic-*-jj1-0863.vercel.app"
 
 Take the pattern from a preview address in the Vercel dashboard (project name first, your
 team's slug last). Each preview has its own session, so sign in once per preview. Unset,
-previews cannot sign in. A malformed or too broad pattern (such as `https://*.vercel.app`)
-stops the API from starting rather than allowing more than intended.
+previews cannot sign in. A malformed or too broad pattern (such as `https://*.vercel.app`) is
+ignored, and `fly logs` shows a warning naming it; the API keeps running either way.
 
 ## 1. Supabase (database)
 
