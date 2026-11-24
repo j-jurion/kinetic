@@ -143,7 +143,7 @@ export function FindFriendsDialog({
           ) : (
             <span />
           )}
-          <Button onClick={onClose}>Close</Button>
+          <Button color="inherit" onClick={onClose}>Close</Button>
         </div>
       </DialogContent>
     </Dialog>
@@ -195,7 +195,7 @@ export function EditFriendDialog({ friend, onClose, onSaved }: { friend: Partial
         <TextField label="Name" value={name} autoFocus fullWidth onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
         <TextField label="Email (optional)" type="email" value={email} fullWidth onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()} />
         <div className="row justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={save}>
             {isNew ? 'Add' : 'Save'}
           </Button>
@@ -244,7 +244,7 @@ export function AcceptDialog({
           ))}
         </TextField>
         <div className="row justify-end gap-2">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={() => request && onAccept(request, choice === 'new' ? null : Number(choice))}>
             Accept
           </Button>
@@ -279,7 +279,7 @@ export function RemoveFriendDialog({ friend, onClose, onRemoved }: { friend: Fri
           {friend?.username && ' You stay in their own friends list.'}
         </div>
         <div className="row justify-end gap-2 q-mt-md">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" color="error" onClick={remove}>
             Remove
           </Button>

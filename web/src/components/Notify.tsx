@@ -3,7 +3,8 @@ import type { ReactNode } from 'react'
 import { Alert, Snackbar } from '@mui/material'
 
 type Severity = 'success' | 'error' | 'warning' | 'info'
-type NotifyFn = (message: string, severity?: Severity, timeout?: number) => void
+/** `timeout` is in ms; null keeps the toast until it is closed (for results you must not miss). */
+type NotifyFn = (message: string, severity?: Severity, timeout?: number | null) => void
 
 const NotifyContext = createContext<NotifyFn>(() => {})
 
@@ -14,7 +15,7 @@ interface Toast {
   key: number
   message: string
   severity: Severity
-  timeout: number
+  timeout: number | null
 }
 
 export function NotifyProvider({ children }: { children: ReactNode }) {

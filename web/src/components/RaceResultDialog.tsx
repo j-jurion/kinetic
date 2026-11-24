@@ -135,7 +135,7 @@ export function RaceResultDialog({ open, activityId, sport, existing, onClose, o
         <TextField label="Notes" value={fields.notes ?? ''} onChange={set('notes')} fullWidth multiline minRows={2} sx={{ mt: 1 }} />
 
         <div className="row justify-end gap-2 q-mt-md">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={save}>
             Save
           </Button>

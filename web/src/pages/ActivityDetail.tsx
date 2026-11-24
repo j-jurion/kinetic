@@ -36,6 +36,7 @@ import { RaceResultDialog } from '../components/RaceResultDialog'
 import { RouteMap } from '../components/RouteMap'
 import { useTextColor } from '../lib/useTextColor'
 import '../styles/detail.css'
+import { PageLoading } from '../components/PageLoading'
 
 // The charts pull in Plotly (several MB), so they load only once an activity is opened
 const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
@@ -312,7 +313,7 @@ export function ActivityDetailPage() {
       </div>
     )
   }
-  if (!detail) return null
+  if (!detail) return <PageLoading />
 
   const a = detail.activity
   const sport = a.sport

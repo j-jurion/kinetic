@@ -125,7 +125,7 @@ export function ActivityEditDialog({ open, activity, onClose, onSaved }: EditPro
           placeholder={selected.length ? '' : 'Type a name to add someone new'}
         />
         <div className="row justify-end gap-2 q-mt-md w-full">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" onClick={save} disabled={saving}>
             Save
           </Button>
@@ -159,7 +159,7 @@ export function ConfirmDeleteDialog({ activity, onClose, onDeleted }: DeleteProp
         <div className="text-h6">Delete '{activity?.name}'?</div>
         <div className="text-grey-6">This action cannot be undone.</div>
         <div className="row justify-end gap-2 q-mt-md w-full">
-          <Button onClick={onClose}>Cancel</Button>
+          <Button color="inherit" onClick={onClose}>Cancel</Button>
           <Button variant="contained" color="error" onClick={remove}>
             Delete
           </Button>

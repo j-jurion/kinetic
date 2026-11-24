@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
+import { Alert, Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
 import { api } from '../../lib/api'
 import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { useBackgroundJobs } from '../../lib/backgroundJobs'
@@ -224,6 +224,12 @@ export function AppleHealthSection({ onChange }: { onChange?: (token: AppleToken
             <LinearProgress variant="determinate" value={progress.fraction * 100} />
             <span className="text-caption text-grey-6">{progress.message}</span>
           </div>
+        )}
+
+        {apple.error && (
+          <Alert severity="error" variant="outlined" className="w-full">
+            Import failed: {apple.error}
+          </Alert>
         )}
 
         {summary && (

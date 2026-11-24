@@ -15,6 +15,7 @@ import { ChartCard, Toggle } from '../components/ChartCard'
 import { SelectField, SportSelect, YearSelect } from '../components/fields'
 import { PageHeader } from '../components/PageHeader'
 import { Plot } from '../components/Plot'
+import { PageLoading } from '../components/PageLoading'
 
 /** One chart from the shared Graphs page registry, in a card with its own controls. */
 function GraphCard({ graph, filters, data }: { graph: GraphDefinition; filters: GraphsFilters; data: GraphsData }) {
@@ -99,6 +100,7 @@ export function GraphsPage() {
         <SelectField label="Metric" width={128} value={metric} options={METRIC_OPTIONS} onChange={(v) => setMetric(v as Metric)} />
       </PageHeader>
 
+      {!stats && <PageLoading />}
       {stats && (
         <div className="column w-full gap-4">
           {rows.map((row) =>

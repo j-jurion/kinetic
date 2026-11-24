@@ -19,6 +19,7 @@ import { EmptyCard, StatTile, YearSelect } from '../components/fields'
 import { Medal, MultisportMarker } from '../components/icons'
 import { Plot } from '../components/Plot'
 import { RankingToolbar, YearBestDate } from '../components/RankingParts'
+import { PageLoading } from '../components/PageLoading'
 
 type Row = BestEffortRow & { rank: number; yearBest: boolean }
 
@@ -51,6 +52,7 @@ export function BestEffortDistancePage() {
         <YearSelect value={year} onChange={setYear} />
       </RankingToolbar>
 
+      {attempts === null && <PageLoading />}
       {attempts && attempts.length === 0 && (
         <EmptyCard icon="emoji_events">
           No {sportLabel(sport || ALL_RUNNING).toLowerCase()} attempts recorded at {label} yet.

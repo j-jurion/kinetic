@@ -7,6 +7,7 @@ import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivitiesMap } from '../components/ActivitiesMap'
 import { Icon, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
+import { PageLoading } from '../components/PageLoading'
 
 export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
@@ -33,7 +34,7 @@ export function MapPage() {
   const toggle = (sport: string) =>
     select(selected.includes(sport) ? selected.filter((s) => s !== sport) : (available ?? []).filter((s) => s === sport || selected.includes(s)))
 
-  if (!available) return null
+  if (!available) return <PageLoading />
 
   let summary = 'No activity types selected.'
   if (selected.length && data) {

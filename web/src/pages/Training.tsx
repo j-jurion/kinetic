@@ -26,6 +26,7 @@ import { useNotify } from '../components/Notify'
 import { Plot } from '../components/Plot'
 import { zonesChart } from '@kinetic/shared/charts/training'
 import type { Chart } from '@kinetic/shared/charts/training'
+import { PageLoading } from '../components/PageLoading'
 
 const FORM_CLASS: Record<FormBand, string> = {
   Fresh: 'text-positive',
@@ -163,7 +164,7 @@ export function TrainingPage() {
   const dynamicsTrend = useMemo(() => view && dynamicsChart(view, dynamics), [view, dynamics])
   const swimTrend = useMemo(() => view && swimChart(view, swimMetric), [view, swimMetric])
 
-  if (!overview || !view) return null
+  if (!overview || !view) return <PageLoading />
   const thresholds = thresholdText(overview.thresholds)
   const band = view.now ? formBand(view.now.tsb) : null
   const { split } = view

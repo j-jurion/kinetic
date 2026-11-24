@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, CircularProgress, IconButton, ListItemIcon, Menu, MenuItem } from '@mui/material'
+import { Button, IconButton, ListItemIcon, Menu, MenuItem } from '@mui/material'
 import { api } from '../lib/api'
 import { friendRequestsChanged } from '../lib/friendRequests'
 import { formatDate } from '@kinetic/shared/format'
@@ -12,6 +12,7 @@ import { EmptyCard } from '../components/fields'
 import { Icon } from '../components/icons'
 import { PageHeader, SectionHeading } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
+import { PageLoading } from '../components/PageLoading'
 
 const errorMessage = (error: unknown) => (error as Error).message
 
@@ -110,7 +111,7 @@ export function FriendsPage() {
       {(requests.incoming.length > 0 || requests.outgoing.length > 0) && (
         <SectionHeading icon="people">Your friends</SectionHeading>
       )}
-      {friends === null && <CircularProgress size={28} sx={{ alignSelf: "center" }} />}
+      {friends === null && <PageLoading />}
       {friends?.length === 0 && (
         <EmptyCard icon="group_add">
           No friends yet. Find them by username, or add someone without an account to tag them on activities.

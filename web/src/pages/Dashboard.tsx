@@ -19,6 +19,7 @@ import { EmptyCard, Stat } from '../components/fields'
 import { Icon, SportIcon } from '../components/icons'
 import { PageHeader, SectionHeading } from '../components/PageHeader'
 import { Plot } from '../components/Plot'
+import { PageLoading } from '../components/PageLoading'
 
 const FORM_CLASS: Record<FormBand, string> = {
   Fresh: 'text-positive',
@@ -177,6 +178,7 @@ export function DashboardPage() {
     <>
       <PageHeader icon="space_dashboard" kicker={greeting(today)} title="Dashboard" subtitle={`${dateText}. Here is where your training stands.`} />
 
+      {activities === null && <PageLoading />}
       {activities && activities.length === 0 && (
         <EmptyCard icon="directions_run">
           No activities yet. <Link to="/sync">Sync with Garmin or Apple Health</Link> or{' '}

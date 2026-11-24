@@ -18,6 +18,7 @@ import { TopActivitiesPage } from './pages/TopActivities'
 import { FriendsPage } from './pages/Friends'
 import { FriendDetailPage } from './pages/FriendDetail'
 import { SyncPage } from './pages/Sync'
+import { PageLoading } from './components/PageLoading'
 
 // The dashboard and chart pages pull in Plotly (several MB), so they load on first visit only
 const GraphsPage = lazy(() => import('./pages/Graphs').then((m) => ({ default: m.GraphsPage })))
@@ -37,16 +38,16 @@ createRoot(document.getElementById('root')!).render(
               <Route path="/login" element={<LoginPage mode="login" />} />
               <Route path="/register" element={<LoginPage mode="register" />} />
               <Route element={<RequireAuth><Layout /></RequireAuth>}>
-                <Route path="/" element={<Suspense><DashboardPage /></Suspense>} />
+                <Route path="/" element={<Suspense fallback={<PageLoading />}><DashboardPage /></Suspense>} />
                 <Route path="/activities" element={<ActivitiesPage />} />
                 <Route path="/activity/:id" element={<ActivityDetailPage />} />
                 <Route path="/races" element={<RacesPage />} />
                 <Route path="/map" element={<MapPage />} />
-                <Route path="/graphs" element={<Suspense><GraphsPage /></Suspense>} />
-                <Route path="/training" element={<Suspense><TrainingPage /></Suspense>} />
+                <Route path="/graphs" element={<Suspense fallback={<PageLoading />}><GraphsPage /></Suspense>} />
+                <Route path="/training" element={<Suspense fallback={<PageLoading />}><TrainingPage /></Suspense>} />
                 <Route path="/best-efforts" element={<BestEffortsPage />} />
                 <Route path="/best-efforts/top/:metric" element={<TopActivitiesPage />} />
-                <Route path="/best-efforts/:distance" element={<Suspense><BestEffortDistancePage /></Suspense>} />
+                <Route path="/best-efforts/:distance" element={<Suspense fallback={<PageLoading />}><BestEffortDistancePage /></Suspense>} />
                 <Route path="/friends" element={<FriendsPage />} />
                 <Route path="/friends/:id" element={<FriendDetailPage />} />
                 <Route path="/sync" element={<SyncPage />} />
