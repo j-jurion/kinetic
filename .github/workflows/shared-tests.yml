@@ -1,0 +1,30 @@
+name: Shared code tests
+
+# Unit tests of packages/shared, the calculations and formatting the web and mobile apps share.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: packages/shared (vitest + typecheck)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/shared
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/shared/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

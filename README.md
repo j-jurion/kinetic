@@ -100,6 +100,12 @@ npm install
 npm run dev
 ```
 
+The calculations shared by the web and mobile apps have unit tests:
+
+```bash
+cd packages/shared && npm ci && npm test
+```
+
 On PowerShell, set the variables for the API with:
 
 ```powershell

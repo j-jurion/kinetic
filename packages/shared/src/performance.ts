@@ -272,7 +272,7 @@ export function splitKind(label: string): SplitKind {
   if (/^t\s*2\b|transition\s*2|bike.*run/.test(text)) return 't2'
   if (/swim|zwem/.test(text)) return 'swim'
   if (/bike|cycl|ride|fiets/.test(text)) return 'bike'
-  if (/run|loop/.test(text)) return 'run'
+  if (/run|loop|lopen/.test(text)) return 'run'
   return 'other'
 }
 
