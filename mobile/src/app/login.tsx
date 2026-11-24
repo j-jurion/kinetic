@@ -37,7 +37,7 @@ export default function LoginScreen() {
         <T style={styles.brandName}>Kinetic</T>
       </View>
       <View style={[styles.card, { backgroundColor: c.card, borderColor: c.cardBorder }]}>
-        <Text style={[styles.eyebrow, { color: c.primary }]}>YOUR ACTIVITY, IN MOTION</Text>
+        <Text style={[styles.eyebrow, { color: c.primaryText }]}>YOUR ACTIVITY, IN MOTION</Text>
         <T style={styles.title}>{register ? 'Create account' : 'Sign in'}</T>
         <T muted>
           {register ? 'Choose a username and a password of at least 12 characters.' : 'Welcome back. Sign in to view your activities.'}
@@ -54,8 +54,8 @@ export default function LoginScreen() {
         />
         {message ? <Text style={{ color: c.negative }}>{message}</Text> : null}
         <Button title={register ? 'Create account' : 'Sign in'} onPress={submit} busy={busy} />
-        <Pressable onPress={() => setRegister(!register)} style={{ alignSelf: 'center', padding: 6 }}>
-          <Text style={{ color: c.primary }}>{register ? 'I already have an account' : 'Create an account'}</Text>
+        <Pressable onPress={() => setRegister(!register)} accessibilityRole="button" style={{ alignSelf: 'center', padding: 6 }}>
+          <Text style={{ color: c.primaryText }}>{register ? 'I already have an account' : 'Create an account'}</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>

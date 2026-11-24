@@ -9,10 +9,12 @@ import { LeafletView } from '../../components/LeafletView'
 import type { MapSpec } from '../../components/LeafletView'
 import { Button, Caption, Card, T, useColors } from '../../components/ui'
 import { api } from '../../lib/api'
+import { useTextColor } from '../../lib/theme'
 
 /** Every route on one map, coloured by sport; tap a route to list the activities under it. */
 export default function MapScreen() {
   const c = useColors()
+  const textColor = useTextColor()
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
@@ -64,10 +66,13 @@ export default function MapScreen() {
             <Pressable
               key={sport}
               onPress={() => toggle(sport)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
+              accessibilityLabel={sportLabel(sport)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderColor: color, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: on ? `${color}22` : 'transparent' }}
             >
               {on ? <Icon name="check" size={14} color={color} /> : <SportIcon sport={sport} size={14} color={color} />}
-              <T style={{ color, fontWeight: '600', fontSize: 12 }}>{sportLabel(sport)}</T>
+              <T style={{ color: textColor(color), fontWeight: '600', fontSize: 12 }}>{sportLabel(sport)}</T>
             </Pressable>
           )
         })}
@@ -81,7 +86,7 @@ export default function MapScreen() {
         <Caption>Select at least one activity type to show routes.</Caption>
       ) : (
         <View style={{ flex: 1 }}>
-          <LeafletView spec={spec} height="100%" onTap={(ids) => setTapped(ids.map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
+          <LeafletView spec={spec} height="100%" label="Map of all activities; tap a route to list the activities under it. They are also listed on the Activities tab." onTap={(ids) => setTapped(ids.map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
         </View>
       )}
       <Caption>{summary} · tap a route for its activities</Caption>
@@ -90,12 +95,17 @@ export default function MapScreen() {
         <Card style={{ position: 'absolute', left: 12, right: 12, bottom: 12, maxHeight: '45%', gap: 4 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <T style={{ fontWeight: '700' }}>{tapped.length === 1 ? '1 activity' : `${tapped.length} overlapping activities`}</T>
-            <Pressable onPress={() => setTapped([])} hitSlop={10}>
+            <Pressable onPress={() => setTapped([])} hitSlop={10} accessibilityRole="button" accessibilityLabel="Close">
               <Icon name="close" size={20} color={c.muted} />
             </Pressable>
           </View>
           {tapped.slice(0, 15).map((r) => (
-            <Pressable key={r.id} onPress={() => router.push(`/activity/${r.id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}>
+            <Pressable
+              key={r.id}
+              onPress={() => router.push(`/activity/${r.id}`)}
+              accessibilityRole="link"
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 }}
+            >
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: sportColor(r.sport, '#6b7280') }} />
               <View style={{ flex: 1 }}>
                 <T numberOfLines={1} style={{ fontWeight: '600' }}>{r.name}</T>

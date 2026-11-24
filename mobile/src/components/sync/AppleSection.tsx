@@ -36,7 +36,7 @@ function ShareField({ label, value }: { label: string; value: string }) {
       <T muted style={{ fontSize: 12 }}>{label}</T>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, padding: 8, borderRadius: 8, backgroundColor: c.soft }}>
         <T style={{ flex: 1, fontFamily: 'monospace', fontSize: 12 }}>{value}</T>
-        <IconButton icon="ios_share" size={18} onPress={() => Share.share({ message: value })} />
+        <IconButton icon="ios_share" size={18} onPress={() => Share.share({ message: value })} label={`Share ${label}`} />
       </View>
     </View>
   )
@@ -89,8 +89,8 @@ export function AppleSection({ onChange }: { onChange?: (token: AppleTokenInfo |
           right={
             info !== undefined && (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <Icon name={info ? 'check_circle' : 'error_outline'} size={16} color={info ? c.positive : c.muted} />
-                <T style={{ fontSize: 12, color: info ? c.positive : c.muted }}>{info ? 'Token active' : 'Not set up'}</T>
+                <Icon name={info ? 'check_circle' : 'error_outline'} size={16} color={info ? c.positiveText : c.muted} />
+                <T style={{ fontSize: 12, color: info ? c.positiveText : c.muted }}>{info ? 'Token active' : 'Not set up'}</T>
               </View>
             )
           }

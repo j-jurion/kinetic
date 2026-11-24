@@ -50,8 +50,9 @@ export function PlotView({ data, layout, height }: { data: Data[]; layout: Parti
     web.current?.injectJavaScript(`window.renderChart(${JSON.stringify(spec)}); true;`)
   }, [ready, data, layout, c.dark])
 
+  // Plotly draws a picture screen readers cannot follow: name the chart after its title
   return (
-    <View style={{ height }}>
+    <View style={{ height }} accessible accessibilityRole="image" accessibilityLabel={chartLabel(layout)}>
       {/* <object>: the default type argument (undefined) turns the props into never */}
       <WebView<object>
         ref={web}
@@ -70,4 +71,11 @@ export function PlotView({ data, layout, height }: { data: Data[]; layout: Parti
 export function ChartView({ chart, height = 320 }: { chart: Chart; height?: number }) {
   const [data, layout] = useMemo(() => chart, [chart])
   return <PlotView data={data} layout={layout} height={height} />
+}
+
+/** The chart's title as plain text (Plotly titles may hold <b>, <br> and the like). */
+function chartLabel(layout: Partial<Layout>): string {
+  const title = typeof layout.title === 'string' ? layout.title : layout.title?.text
+  const text = (title ?? '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  return text ? `Chart: ${text}` : 'Chart'
 }

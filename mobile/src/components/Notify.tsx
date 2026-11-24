@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { AccessibilityInfo, StyleSheet, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 type Severity = 'success' | 'error' | 'warning' | 'info'
@@ -11,7 +11,8 @@ const NotifyContext = createContext<NotifyFn>(() => {})
 /** Toast notifications, like the web app's. */
 export const useNotify = () => useContext(NotifyContext)
 
-const COLORS: Record<Severity, string> = { success: '#16a34a', error: '#c10015', warning: '#d97706', info: '#374151' }
+// Dark enough for white text (at least 4.5:1)
+const COLORS: Record<Severity, string> = { success: '#15803d', error: '#c10015', warning: '#b45309', info: '#374151' }
 
 interface Toast {
   key: number
@@ -25,6 +26,8 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
   const [toast, setToast] = useState<Toast | null>(null)
   const notify = useCallback<NotifyFn>((message, severity = 'info', timeout = 4000) => {
     setToast({ key: Date.now(), message, severity, timeout })
+    // Screen readers do not notice a toast appearing: read it out
+    AccessibilityInfo.announceForAccessibility(severity === 'error' ? `Error: ${message}` : message)
   }, [])
 
   useEffect(() => {
@@ -38,7 +41,7 @@ export function NotifyProvider({ children }: { children: ReactNode }) {
       {children}
       {toast && (
         <View pointerEvents="none" style={[styles.wrap, { bottom: insets.bottom + 70 }]}>
-          <View style={[styles.toast, { backgroundColor: COLORS[toast.severity] }]}>
+          <View style={[styles.toast, { backgroundColor: COLORS[toast.severity] }]} accessibilityLiveRegion="polite">
             <Text style={styles.text}>{toast.message}</Text>
           </View>
         </View>

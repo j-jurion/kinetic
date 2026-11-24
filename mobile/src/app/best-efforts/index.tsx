@@ -59,6 +59,7 @@ function TrophyTile({ title, icon, value, detail, activityName, activityDate, ur
 
 /** Riegel race-time predictions from the best efforts of the last 12 months. */
 function RacePredictor({ efforts, sport }: { efforts: BestEffortRow[]; sport: string }) {
+  const c = useColors()
   const { predictions, allTime } = useMemo(() => predictRaces(efforts), [efforts])
   if (!predictions.length) return null
   return (
@@ -80,13 +81,17 @@ function RacePredictor({ efforts, sport }: { efforts: BestEffortRow[]; sport: st
               <T style={{ fontSize: 12, fontWeight: '700', color: GOLD_TEXT }}>{distanceLabel(target, sport)}</T>
               <T style={{ fontSize: 22, fontWeight: '800' }}>{formatDuration(seconds)}</T>
               <Caption>{formatPace(target, seconds, sport)}</Caption>
-              <Pressable onPress={() => record && router.push(`/activity/${record.activity_id}`)}>
+              <Pressable
+                onPress={() => record && router.push(`/activity/${record.activity_id}`)}
+                disabled={!record}
+                accessibilityRole="link"
+              >
                 <Caption>Current PR: {record ? formatDuration(record.duration_seconds) : 'none yet'}</Caption>
               </Pressable>
               {margin !== null && Math.round(margin) > 0 && (
-                <T style={{ fontSize: 12, color: '#16a34a' }}>Prediction is {formatImprovement(margin).slice(1)} faster than your PR</T>
+                <T style={{ fontSize: 12, color: c.positiveText }}>Prediction is {formatImprovement(margin).slice(1)} faster than your PR</T>
               )}
-              <Pressable onPress={() => router.push(`/activity/${source.activity_id}`)}>
+              <Pressable onPress={() => router.push(`/activity/${source.activity_id}`)} accessibilityRole="link">
                 <Caption>
                   from your {distanceLabel(source.distance_meters, sport)} of {formatDate(source.date)} ({formatDuration(source.duration_seconds)})
                 </Caption>
@@ -149,11 +154,16 @@ function RecordTimeline({ efforts, sport, year }: { efforts: BestEffortRow[]; sp
                 </Caption>
               </View>
               {(open ? newest : newest.slice(0, COLLAPSED)).map(({ effort, improvement }) => (
-                <Pressable key={effort.id} onPress={() => router.push(`/activity/${effort.activity_id}`)} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Pressable
+                  key={effort.id}
+                  onPress={() => router.push(`/activity/${effort.activity_id}`)}
+                  accessibilityRole="link"
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}
+                >
                   <Caption>{formatDate(effort.date)}</Caption>
                   <T style={{ fontWeight: '700' }}>{formatDuration(effort.duration_seconds)}</T>
                   <T muted style={{ flex: 1, fontSize: 12 }} numberOfLines={1}>{effort.activity_name}</T>
-                  <T style={{ fontSize: 12, color: improvement !== null ? '#16a34a' : c.muted }}>{improvement !== null ? formatImprovement(improvement) : 'first'}</T>
+                  <T style={{ fontSize: 12, color: improvement !== null ? c.positiveText : c.muted }}>{improvement !== null ? formatImprovement(improvement) : 'first'}</T>
                 </Pressable>
               ))}
               {newest.length > COLLAPSED && (
@@ -166,8 +176,10 @@ function RecordTimeline({ efforts, sport, year }: { efforts: BestEffortRow[]; sp
                       return next
                     })
                   }
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
                 >
-                  <T style={{ color: c.primary, fontSize: 12 }}>{open ? 'Show fewer' : `Show all ${newest.length}`}</T>
+                  <T style={{ color: c.primaryText, fontSize: 12 }}>{open ? 'Show fewer' : `Show all ${newest.length}`}</T>
                 </Pressable>
               )}
             </Card>
@@ -211,7 +223,7 @@ function PowerSection({ preferRunning }: { preferRunning: boolean }) {
           <Stat label="Weight" value={weight ? `${weight.toFixed(1)} kg` : '–'} />
         </StatGrid>
         {estimate && (
-          <Pressable onPress={() => router.push(`/activity/${estimate.activity.id}`)}>
+          <Pressable onPress={() => router.push(`/activity/${estimate.activity.id}`)} accessibilityRole="link">
             <Caption>
               {estimate.asOf
                 ? `No 20-minute effort in the last 6 weeks; latest estimate is from ${estimate.asOf.toLocaleString('en-GB', { month: 'long', year: 'numeric' })}, based on `

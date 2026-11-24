@@ -113,8 +113,8 @@ export function GarminSection({ status, refreshStatus }: { status: GarminStatus;
         <CardTitle
           right={
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon name={status.authenticated ? 'check_circle' : 'error_outline'} size={16} color={status.authenticated ? c.positive : c.muted} />
-              <T style={{ fontSize: 12, color: status.authenticated ? c.positive : c.muted }}>{status.authenticated ? 'Connected' : 'Not connected'}</T>
+              <Icon name={status.authenticated ? 'check_circle' : 'error_outline'} size={16} color={status.authenticated ? c.positiveText : c.muted} />
+              <T style={{ fontSize: 12, color: status.authenticated ? c.positiveText : c.muted }}>{status.authenticated ? 'Connected' : 'Not connected'}</T>
             </View>
           }
         >

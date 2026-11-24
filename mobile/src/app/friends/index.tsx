@@ -112,7 +112,7 @@ export default function FriendsScreen() {
 function IconAction({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
   const c = useColors()
   return (
-    <Pressable onPress={onPress} hitSlop={8} accessibilityLabel={label} style={{ padding: 6 }}>
+    <Pressable onPress={onPress} hitSlop={8} accessibilityRole="button" accessibilityLabel={label} style={{ padding: 6 }}>
       <Icon name={icon} size={20} color={c.muted} />
     </Pressable>
   )

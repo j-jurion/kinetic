@@ -82,7 +82,11 @@ export function RaceResultSheet({ visible, activityId, sport, existing, onClose,
             style={{ flex: 1.2 }}
           />
           <Field label="Rank" keyboardType="number-pad" value={row.rank} onChangeText={(v) => setSplit(row.key, 'rank', v)} style={{ flex: 0.8 }} />
-          <IconButton icon="close" onPress={() => setSplits((rows) => rows.filter((r) => r.key !== row.key))} />
+          <IconButton
+            icon="close"
+            onPress={() => setSplits((rows) => rows.filter((r) => r.key !== row.key))}
+            label={`Remove split ${row.label || ''}`.trim()}
+          />
         </View>
       ))}
       <Button title="Add split" icon="add" variant="text" onPress={() => setSplits((rows) => [...rows, { key: Date.now(), label: '', time: '', rank: '' }])} />
