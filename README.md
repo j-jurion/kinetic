@@ -225,7 +225,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now kinetic
 ```
 
-Check logs with `sudo journalctl -u kinetic -f`.
+Check logs with `sudo journalctl -u kinetic -f`. [DEPLOYMENT.md](DEPLOYMENT.md#alternative-one-ubuntu-server)
+covers the environment file, publishing through a Cloudflare Tunnel and backups, and lists
+what is still open before opening registration to the public.
 
 ## Stack
 - **React + Vite** – web frontend (`web/`), with MUI components, Plotly charts and Leaflet maps

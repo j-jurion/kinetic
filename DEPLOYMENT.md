@@ -180,3 +180,82 @@ Secrets (`DATABASE_URL`, `KINETIC_ORIGIN_SECRET`, …) stay in Fly and Vercel; n
   this is only an issue for unusually large files.
 - The old single-server setup (`kinetic.service`, built web app served by FastAPI) still
   works; without `DATABASE_URL` the app keeps using SQLite in `app.db`.
+
+## Alternative: one Ubuntu server
+
+Instead of Vercel + Fly + Supabase, everything can run on one machine: FastAPI serves the
+API and the built web app (`web/dist`) on one origin, under systemd (`kinetic.service`, see
+the README). Without `DATABASE_URL` it uses SQLite; for real users, use a local PostgreSQL that
+only the machine can reach.
+
+- Keep the configuration in an environment file outside the checkout, readable only by root
+  and the `kinetic` group, and reference it with `EnvironmentFile=/etc/kinetic/kinetic.env`
+  under `[Service]`:
+
+  ```bash
+  sudo install -d -o root -g kinetic -m 0750 /etc/kinetic
+  sudo sh -c 'umask 027; printf "KINETIC_PUBLIC_ORIGIN=https://kinetic.example.com\n" > /etc/kinetic/kinetic.env'
+  sudo chown root:kinetic /etc/kinetic/kinetic.env
+  sudo chmod 0640 /etc/kinetic/kinetic.env
+  ```
+
+  Add `KINETIC_GARMIN_TOKEN_KEY` (and `DATABASE_URL` for PostgreSQL) to the same file.
+- Keep the app on `127.0.0.1:8000` and publish it through a
+  [Cloudflare Tunnel](https://developers.cloudflare.com/tunnel/concepts/routing/) instead of
+  forwarding a port on your router. Users sign in in the app, so do not put Cloudflare Access
+  in front of the whole site (it can still guard admin-only tools). Cloudflare's WAF and rate
+  rules add a layer in front of the app's own login limits.
+- Rebuild the web app (`npm ci && npm run build` in `web/`) on every deploy.
+- Back up the database, `uploads/` and the Garmin token key together, off the machine, and
+  test restoring them. The app is down whenever the machine, power or internet connection is.
+
+## Before opening registration to the public
+
+What a public service needs, and where Kinetic stands. Ticked items are in the code; the rest
+are open.
+
+**Accounts and data isolation**
+- [x] Username and password accounts; `app.reset_password` resets a forgotten password
+- [x] Every API endpoint requires a session, except login, registration, logout and the health
+      check; the Apple Health webhook takes its own revocable token instead
+- [x] HTTP-only, `SameSite=Strict` session cookies that expire after 12 hours and are revoked
+      on logout and password reset; state-changing requests must come from the app's origin
+- [x] Every query and write is scoped to the signed-in account (`app/ownership.py`), with
+      tests that one account cannot read, change or delete another's data
+- [x] Login and registration are rate-limited (`app/rate_limit.py`)
+- [x] Account deletion (the account menu on the web, the **More** tab on mobile)
+- [ ] Account export
+- [x] API responses are never cached (`Cache-Control: no-store`)
+
+**Integrations and files**
+- [x] Garmin tokens and email are per account and encrypted at rest
+- [ ] Check Garmin's terms for this kind of integration and credential handling
+- [x] Uploads get generated file names, size limits and type checks, live outside any served
+      folder, and malformed files fail cleanly with a message for the user
+- [ ] Organise uploads per account (they share one folder; ownership is in the database)
+- [x] One Garmin sync at a time per account
+- [ ] Limit how many imports and analyses run at once across all accounts
+
+**Storage and operations**
+- [x] PostgreSQL in production (Supabase) and persistent file storage (Fly volume)
+- [ ] Versioned database migrations (the app still upgrades its tables in code at startup)
+- [ ] Backups of the FIT files and Garmin tokens, and a tested restore (Supabase backs up the
+      database, depending on its plan)
+- [ ] Monitoring and alerts beyond Fly's health check (errors, disk space, database health)
+
+**Privacy and legal**
+- [ ] A privacy notice and terms, naming the services that process data (Vercel, Fly,
+      Supabase, the map tiles, Google Fonts) and how long data is kept
+- [ ] Legal advice on GPS and heart-rate data: health data can need an extra legal basis
+      under the GDPR (see the European Commission's
+      [guidance on legal grounds](https://commission.europa.eu/law/law-topic/data-protection/information-business-and-organisations/legal-grounds-processing-data_en))
+- [ ] Procedures for deletion requests, data breaches and how long backups are kept
+
+**Launch**
+- [ ] A security review and a load test
+- [ ] A small pilot group first, watching errors and resource use before opening up
+- [ ] Rewrite the Git history to remove the old FIT files before the repository goes public
+      (see the README)
+
+The mobile app is the native Expo app in `mobile/` (see its README), not an installable web
+app as an earlier plan suggested.
