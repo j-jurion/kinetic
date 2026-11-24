@@ -23,7 +23,7 @@ const HTML = `<!doctype html>
 <div id="chart"></div>
 <script>
   window.renderChart = function (spec) {
-    Plotly.react('chart', spec.data, spec.layout, { responsive: true, displaylogo: false, displayModeBar: false })
+    Plotly.react('chart', spec.data, spec.layout, { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false, doubleClick: false })
   }
   window.ReactNativeWebView.postMessage('ready')
 </script>

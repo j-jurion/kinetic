@@ -59,6 +59,8 @@ export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSp
         tickfont: { color: theme.muted, size: 11 },
         title: { font: { color: theme.muted, size: 12 } },
         ...value,
+        // Charts are static: no zooming or panning, hover tooltips still work
+        fixedrange: true,
       },
     ]),
   )
@@ -82,6 +84,7 @@ export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSp
       },
       ...layout,
       ...themedAxes,
+      dragmode: false,
       title,
       legend: { font: { size: 11, color: theme.muted }, ...layout.legend },
       font: { family: 'Inter, sans-serif', color: theme.text, ...(layout.font ?? {}) },

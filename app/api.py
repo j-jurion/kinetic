@@ -38,7 +38,7 @@ from app.models import (
 )
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
-from app.queries import multisport_parent_sports
+from app.queries import multisport_parent_sports, multisport_parents
 
 router = APIRouter()
 
@@ -622,18 +622,23 @@ def _best_effort_rows(
             stmt = stmt.where(BestEffort.year == year)
         stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
         results = session.exec(stmt).all()
-        parents = multisport_parent_sports(session, (a.parent_id for _, a in results))
+        parents = multisport_parents(session, (a.parent_id for _, a in results))
         raced = set(session.exec(select(RaceResult.activity_id)).all())
+
+        def parent_of(activity: Activity) -> Optional[Activity]:
+            return parents.get(activity.parent_id) if activity.parent_id else None
+
         return [
             {
                 **_dump(effort),
-                "activity_name": activity.name,
+                # A multisport leg is named after its event, e.g. the triathlon it belongs to
+                "activity_name": (parent_of(activity) or activity).name,
                 "kind": activity.kind.value,
                 # A race is an activity marked as one or with an official result entered
                 "is_race": activity.kind == ActivityKind.race or activity.id in raced,
                 # Climb of the whole activity, not just the best-effort segment
                 "elevation_gain_meters": activity.elevation_gain_meters,
-                "parent_sport": parents.get(activity.parent_id) if activity.parent_id else None,
+                "parent_sport": parent.sport.value if (parent := parent_of(activity)) else None,
             }
             for effort, activity in results
         ]

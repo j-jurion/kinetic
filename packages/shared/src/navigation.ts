@@ -6,9 +6,13 @@ export type NavItem = [string, string, string]
 
 export const NAV_SECTIONS: [string, NavItem[]][] = [
   [
+    'Home',
+    [['Dashboard', 'space_dashboard', '/']],
+  ],
+  [
     'Log',
     [
-      ['Activities', 'list', '/'],
+      ['Activities', 'list', '/activities'],
       ['Races', 'flag', '/races'],
       ['Map', 'map', '/map'],
     ],
@@ -34,7 +38,7 @@ export const NAV_ITEMS = NAV_SECTIONS.flatMap(([, items]) => items)
 
 /** The title of the page at a path. */
 export function pageTitle(path: string): string {
-  if (path === '/') return 'Activities'
+  if (path === '/') return 'Dashboard'
   if (path.startsWith('/activity/')) return 'Activity'
   if (path.startsWith('/best-efforts')) return 'Best Efforts'
   if (path.startsWith('/sync')) return 'Sync'
