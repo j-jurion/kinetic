@@ -34,8 +34,8 @@ export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
       el,
       themed.data,
       themed.layout,
-      // No "share chart" button: it would upload the chart's data to Plotly's cloud service
-      { responsive: true, displaylogo: false, showSendToCloud: false },
+      // Static charts: no toolbar, scroll or double-click zoom (the layout locks the axes too)
+      { responsive: true, displaylogo: false, displayModeBar: false, scrollZoom: false, doubleClick: false },
     ).then((plot: PlotlyHTMLElement) => {
       if (bound.current) return
       bound.current = true
