@@ -26,6 +26,13 @@ export function Layout() {
   const requestsLabel = `${friendRequests} friend ${friendRequests === 1 ? 'request' : 'requests'} waiting`
 
   useEffect(() => setDrawerOpen(false), [location.pathname])
+  // Escape closes the navigation drawer on small screens
+  useEffect(() => {
+    if (!drawerOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrawerOpen(false)
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [drawerOpen])
   useEffect(() => {
     document.title = title ? `${title} · Kinetic` : 'Kinetic'
   }, [title])
@@ -42,9 +49,19 @@ export function Layout() {
 
   return (
     <>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="app-header">
         <div className="row items-center no-wrap gap-3">
-          <IconButton className="menu-button" size="small" onClick={() => setDrawerOpen((o) => !o)} aria-label="Menu">
+          <IconButton
+            className="menu-button"
+            size="small"
+            onClick={() => setDrawerOpen((o) => !o)}
+            aria-label="Menu"
+            aria-expanded={drawerOpen}
+            aria-controls="app-navigation"
+          >
             <Badge color="primary" variant="dot" invisible={friendRequests === 0}>
               <Icon name="menu" />
             </Badge>
@@ -122,7 +139,7 @@ export function Layout() {
         onDeleted={() => window.location.assign('/login')}
       />
 
-      <nav className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-label="Main navigation">
+      <nav id="app-navigation" className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-label="Main navigation">
         {NAV_SECTIONS.map(([section, items]) => (
           <div key={section}>
             <div className="nav-section-label">{section}</div>
@@ -152,7 +169,7 @@ export function Layout() {
       </nav>
       <div className={`drawer-backdrop ${drawerOpen ? 'open' : ''}`} onClick={() => setDrawerOpen(false)} />
 
-      <main className="app-main">
+      <main id="main" tabIndex={-1} className="app-main">
         <div className="app-content column gap-4">
           <Outlet />
         </div>

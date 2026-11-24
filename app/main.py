@@ -13,7 +13,7 @@ from loguru import logger
 
 from app.account import router as account_router
 from app.api import router
-from app.auth import create_auth_tables, public_origin
+from app.auth import create_auth_tables, preview_origin_patterns, public_origin
 from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
@@ -68,6 +68,7 @@ def web_app(path: str):
 
 def main():
     public_origin()
+    preview_origin_patterns()  # a malformed KINETIC_PREVIEW_ORIGINS stops the start-up
 
     import uvicorn
 

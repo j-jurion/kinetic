@@ -36,7 +36,8 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       createTheme({
         palette: {
           mode: dark ? 'dark' : 'light',
-          primary: { main: '#f97316', contrastText: '#ffffff' },
+          // Light mode uses a darker orange: #f97316 as text on white is only 2.8:1 (WCAG asks 4.5)
+          primary: { main: dark ? '#f97316' : '#b93d0a', contrastText: '#ffffff' },
           secondary: { main: '#3b82f6' },
           error: { main: dark ? '#f87171' : '#c10015' },
           success: { main: '#16a34a' },
@@ -55,10 +56,11 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
             defaultProps: { disableElevation: true },
             styleOverrides: {
               root: { borderRadius: 10 },
+              // Dark enough for white text (at least 5:1 across the gradient)
               containedPrimary: {
-                backgroundImage: 'linear-gradient(135deg, #fb923c, #ea580c)',
-                boxShadow: '0 4px 12px rgba(234, 88, 12, .25)',
-                '&:hover': { boxShadow: '0 6px 16px rgba(234, 88, 12, .32)' },
+                backgroundImage: 'linear-gradient(135deg, #c2410c, #9a3412)',
+                boxShadow: '0 4px 12px rgba(194, 65, 12, .25)',
+                '&:hover': { boxShadow: '0 6px 16px rgba(194, 65, 12, .32)' },
               },
             },
           },

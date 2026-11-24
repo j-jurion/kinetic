@@ -99,6 +99,48 @@ def public_origin() -> str:
     return origin.rstrip("/")
 
 
+PREVIEW_ORIGINS_RULE = (
+    "KINETIC_PREVIEW_ORIGINS takes comma-separated https origins with one '*' in the first "
+    "part of the host name, e.g. https://kinetic-git-*-team.vercel.app"
+)
+
+
+def preview_origin_patterns() -> list[re.Pattern]:
+    """Extra origins allowed to make requests: the preview deployments of the web app.
+
+    ``KINETIC_PREVIEW_ORIGINS`` (optional) lists them as https origins whose first host label
+    holds one ``*``, matching letters, digits and hyphens only, so a pattern cannot reach
+    beyond its own domain. Unset, only ``KINETIC_PUBLIC_ORIGIN`` is allowed.
+    """
+    patterns = []
+    for raw in os.environ.get("KINETIC_PREVIEW_ORIGINS", "").split(","):
+        value = raw.strip().rstrip("/")
+        if not value:
+            continue
+        scheme, _, host = value.partition("://")
+        first, _, rest = host.partition(".")
+        if (
+            scheme != "https"
+            or host.count("*") != 1
+            or "*" not in first
+            or first == "*"  # would match every site on the domain
+            or rest.count(".") < 1
+            or not re.fullmatch(r"[a-z0-9*-]+", first)
+            or not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", rest)
+        ):
+            raise RuntimeError(PREVIEW_ORIGINS_RULE)
+        label = re.escape(first).replace(r"\*", "[a-z0-9-]+")
+        patterns.append(re.compile(f"https://{label}\\.{re.escape(rest)}"))
+    return patterns
+
+
+def allowed_origin(origin: str) -> bool:
+    """Whether a request's Origin is the web app: the public origin or one of its previews."""
+    if origin == public_origin():
+        return True
+    return any(pattern.fullmatch(origin) for pattern in preview_origin_patterns())
+
+
 def normalize_username(username: str) -> str:
     return username.strip().lower()
 

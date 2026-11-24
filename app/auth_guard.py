@@ -6,7 +6,7 @@ import os
 from starlette.datastructures import MutableHeaders
 from starlette.responses import JSONResponse
 
-from app.auth import APPLE_HEALTH, authenticated_owner, integration_owner, public_origin
+from app.auth import APPLE_HEALTH, allowed_origin, authenticated_owner, integration_owner
 from app.ownership import current_owner
 
 PUBLIC_PATHS = ("/api/auth/login", "/api/auth/register", "/api/auth/logout", "/api/health")
@@ -54,8 +54,9 @@ class AuthGuard:
 
         origin = headers.get(b"origin", b"").decode("latin-1")
         # Browsers send Origin on every cross-site and same-site state-changing request; the
-        # web app is served from the public origin, so anything else is a forged request.
-        if scope.get("method") not in ("GET", "HEAD", "OPTIONS") and origin != public_origin():
+        # web app is served from the public origin (or a preview of it, when allowed), so
+        # anything else is a forged request.
+        if scope.get("method") not in ("GET", "HEAD", "OPTIONS") and not allowed_origin(origin):
             await JSONResponse({"detail": "Invalid origin"}, status_code=403)(
                 scope, receive, send
             )

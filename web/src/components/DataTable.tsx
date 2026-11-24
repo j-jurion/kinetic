@@ -67,18 +67,26 @@ export function DataTable<T>({
           <tr>
             {columns.map((c) => {
               const sorted = sort?.name === c.name
+              const icon = c.sortValue && (
+                <Icon name={sorted && sort?.desc ? 'arrow_downward' : 'arrow_upward'} className="sort-icon" />
+              )
+              // Columns without a label (an icon column) still get a name for screen readers
+              const label = c.label || <span className="sr-only">{c.name.charAt(0).toUpperCase() + c.name.slice(1)}</span>
               return (
                 <th
                   key={c.name}
                   className={`${c.sortValue ? 'sortable' : ''} ${sorted ? 'sorted' : ''} align-${c.align ?? 'left'}`}
-                  onClick={c.sortValue ? () => toggleSort(c.name) : undefined}
+                  aria-sort={sorted ? (sort?.desc ? 'descending' : 'ascending') : c.sortValue ? 'none' : undefined}
                 >
-                  {c.align === 'right' && c.sortValue && (
-                    <Icon name={sorted && sort?.desc ? 'arrow_downward' : 'arrow_upward'} className="sort-icon" />
-                  )}
-                  {c.label}
-                  {c.align !== 'right' && c.sortValue && (
-                    <Icon name={sorted && sort?.desc ? 'arrow_downward' : 'arrow_upward'} className="sort-icon" />
+                  {c.sortValue ? (
+                    // A button, so sorting works with the keyboard as well as the mouse
+                    <button type="button" className="sort-button" onClick={() => toggleSort(c.name)}>
+                      {c.align === 'right' && icon}
+                      {label}
+                      {c.align !== 'right' && icon}
+                    </button>
+                  ) : (
+                    label
                   )}
                 </th>
               )

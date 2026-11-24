@@ -34,16 +34,18 @@ import { accountLabel } from '@kinetic/shared/friends'
 import { useNotify } from '../components/Notify'
 import { RaceResultDialog } from '../components/RaceResultDialog'
 import { RouteMap } from '../components/RouteMap'
+import { useTextColor } from '../lib/useTextColor'
 import '../styles/detail.css'
 
 // The charts pull in Plotly (several MB), so they load only once an activity is opened
 const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
 
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
+  const textColor = useTextColor()
   return (
     <div className="stat">
       <div className="stat-label">{label}</div>
-      <div className="stat-value" style={{ color }}>{value}</div>
+      <div className="stat-value" style={{ color: textColor(color) }}>{value}</div>
     </div>
   )
 }
@@ -263,6 +265,7 @@ export function ActivityDetailPage() {
   const { id } = useParams()
   const activityId = Number(id)
   const navigate = useNavigate()
+  const textColor = useTextColor()
   const [detail, setDetail] = useState<ActivityDetail | null | 'missing'>(null)
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -389,7 +392,7 @@ export function ActivityDetailPage() {
                   variant="outlined"
                   size="small"
                   startIcon={<SportIcon sport={child.sport} size={20} color={childColor} />}
-                  sx={{ color: childColor, borderColor: childColor }}
+                  sx={{ color: textColor(childColor), borderColor: childColor }}
                   onClick={() => navigate(`/activity/${child.id}`)}
                 >
                   {parts.join(' · ')}

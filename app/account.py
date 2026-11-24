@@ -91,7 +91,7 @@ def delete_account_data(user_id: str) -> int:
     for path in fit_paths:
         _remove(path)
     garmin_sync.forget_account(user_id)
-    from app.api import forget_pending_mfa
+    from app.routes.garmin import forget_pending_mfa
 
     forget_pending_mfa(user_id)
     return count

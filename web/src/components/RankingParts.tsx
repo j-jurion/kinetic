@@ -29,7 +29,7 @@ export function RankingToolbar({
           Best Efforts
         </Button>
         <SportIcon sport={sport} color="var(--grey-7)" />
-        <div className="text-h5 text-weight-bold">{title}</div>
+        <h1 className="text-h5 text-weight-bold q-ma-none">{title}</h1>
       </div>
       <div className="row gap-2">{children}</div>
     </div>
@@ -43,7 +43,7 @@ export function YearBestDate({ date, year, best }: { date: string; year: number;
       {date}
       {best && (
         <Tooltip title={`Best of ${year}`}>
-          <span style={{ display: 'inline-flex', marginLeft: 4 }}>
+          <span role="img" style={{ display: 'inline-flex', marginLeft: 4 }}>
             <Icon name="military_tech" size={16} color={GOLD} />
           </span>
         </Tooltip>

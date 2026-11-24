@@ -158,5 +158,5 @@ export function RouteMap({ activityId, sport, streams, hoverBus, legs }: Props) 
     }
   }, [streams, activityId, sport, hoverBus, legs])
 
-  return <div ref={ref} style={{ width: '100%', height: 380 }} />
+  return <div ref={ref} role="region" aria-label="Route map" style={{ width: '100%', height: 380 }} />
 }

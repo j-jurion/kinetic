@@ -52,7 +52,16 @@ export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
     }
   }, [])
 
-  return <div ref={ref} style={{ width: '100%', ...style }} />
+  // Plotly draws an SVG screen readers cannot follow: name the chart after its title instead
+  return <div ref={ref} role="img" aria-label={chartLabel(layout)} style={{ width: '100%', ...style }} />
+}
+
+/** The chart's title as plain text (Plotly titles may hold <b>, <br> and the like). */
+function chartLabel(layout: Partial<Layout>): string {
+  const title = typeof layout.title === 'string' ? layout.title : layout.title?.text
+  const text = (title ?? '').replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim()
+  return text ? `Chart: ${text}` : 'Chart'
+
 }
 
 export { noDataLayout }
