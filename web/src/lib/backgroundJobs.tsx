@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { api } from './api'
 import { importAppleHealthExport } from './appleHealthExport'
 import type { ImportProgress, ImportSummary } from './appleHealthExport'
+import type { DateRange } from '@kinetic/shared/format'
 import { activitiesFromFiles, activitiesFromZip, importStravaActivities } from './stravaExport'
 import type { StravaProgress, StravaSummary } from './stravaExport'
 import { useNotify } from '../components/Notify'
@@ -71,10 +72,10 @@ interface Jobs {
   /** Goes up whenever a job imported activities, so lists can reload. */
   dataVersion: number
   startGarminSync: (request: GarminRequest) => void
-  startAppleImport: (file: File, sinceMs: number | null) => void
+  startAppleImport: (file: File, range: DateRange) => void
   cancelAppleImport: () => void
   strava: StravaJob
-  startStravaImport: (source: StravaSource) => void
+  startStravaImport: (source: StravaSource, range: DateRange) => void
   cancelStravaImport: () => void
   uploadFiles: (files: File[]) => void
   /** Drops the finished uploads from the list. */
@@ -194,7 +195,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   )
 
   const startAppleImport = useCallback(
-    (file: File, sinceMs: number | null) => {
+    (file: File, range: DateRange) => {
       if (appleAbort.current) {
         notify('An import is already running', 'warning')
         return
@@ -211,7 +212,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
       const run = async () => {
         try {
           const summary = await importAppleHealthExport(file, {
-            sinceMs,
+            range,
             signal: controller.signal,
             onProgress: (progress) => setApple((job) => ({ ...job, progress })),
           })
@@ -240,7 +241,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
   const cancelAppleImport = useCallback(() => appleAbort.current?.abort(), [])
 
   const startStravaImport = useCallback(
-    (source: StravaSource) => {
+    (source: StravaSource, range: DateRange) => {
       if (stravaAbort.current) {
         notify('A Strava import is already running', 'warning')
         return
@@ -261,6 +262,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             source.kind === 'zip' ? await activitiesFromZip(source.file) : activitiesFromFiles(source.files)
           if (!activities.length) throw new Error('No .fit, .gpx or .tcx files chosen')
           const summary = await importStravaActivities(activities, {
+            range,
             signal: controller.signal,
             onProgress: (progress) => setStrava((job) => ({ ...job, progress })),
           })

@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import {
   csvInfoFor,
+  dateRangeFields,
+  filterByDate,
   fileName,
   isActivitiesCsv,
   isActivityFile,
   parseCsv,
+  parseStravaDate,
   readActivitiesCsv,
   runImports,
   type ImportFileResult,
   type ImportProgress,
 } from '../src/stravaImport'
+import { parseDateRange } from '../src/format'
 
 describe('activities.csv', () => {
   it('parses quoted fields with commas, quotes and newlines', () => {
@@ -108,5 +112,31 @@ describe('running the uploads', () => {
     const summary = await runImports([], { send: async () => ({ status: 'imported' }), onProgress: (p) => progress.push(p) })
     expect(summary).toEqual({ found: 0, imported: 0, skipped: 0, errors: [] })
     expect(progress.map((p) => p.fraction)).toEqual([1, 1])
+  })
+})
+
+describe('date range', () => {
+  it('reads activities.csv dates as UTC', () => {
+    expect(parseStravaDate('Mar 18, 2025, 4:53:59 PM')).toBe(Date.UTC(2025, 2, 18, 16, 53, 59))
+    expect(parseStravaDate('Dec 1, 2024, 12:05:00 AM')).toBe(Date.UTC(2024, 11, 1, 0, 5, 0))
+    expect(parseStravaDate('Jul 4, 2025 18:30:00')).toBe(Date.UTC(2025, 6, 4, 18, 30, 0))
+    expect(parseStravaDate('18 mars 2025')).toBeUndefined()
+    expect(parseStravaDate(undefined)).toBeUndefined()
+  })
+
+  it('keeps the date from activities.csv', () => {
+    const csv = readActivitiesCsv('Activity Date,Filename\n"Mar 18, 2025, 4:53:59 PM",activities/1.fit.gz\n')
+    expect(csv.get('activities/1.fit.gz')?.startMs).toBe(Date.UTC(2025, 2, 18, 16, 53, 59))
+  })
+
+  it('drops activities dated outside the range and keeps undated ones', () => {
+    const range = parseDateRange('01-03-2025', '31-03-2025')
+    const kept = filterByDate(
+      [{ startMs: Date.UTC(2025, 2, 18) }, { startMs: Date.UTC(2025, 3, 2) }, {}],
+      range,
+    )
+    expect(kept).toEqual([{ startMs: Date.UTC(2025, 2, 18) }, {}])
+    expect(dateRangeFields(range).map(([key]) => key)).toEqual(['since', 'until'])
+    expect(dateRangeFields(parseDateRange('', ''))).toEqual([])
   })
 })

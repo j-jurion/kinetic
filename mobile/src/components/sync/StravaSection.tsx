@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { View } from 'react-native'
 import * as DocumentPicker from 'expo-document-picker'
+import { parseDateRange } from '@kinetic/shared/format'
 import type { ImportProgress, ImportSummary } from '@kinetic/shared/stravaImport'
 import { useNotify } from '../Notify'
-import { Button, Caption, Card, CardTitle, Stat, StatGrid, T, useColors } from '../ui'
+import { Button, Caption, Card, CardTitle, Field, Stat, StatGrid, T, useColors } from '../ui'
 import { activitiesFromFiles, importStravaActivities, openStravaZip, type PickedFile } from '../../lib/stravaExport'
 
 type Source = { kind: 'zip'; file: PickedFile } | { kind: 'files'; files: PickedFile[] }
@@ -21,6 +22,8 @@ export function StravaSection() {
   const [source, setSource] = useState<Source | null>(null)
   const [progress, setProgress] = useState<ImportProgress | null>(null)
   const [summary, setSummary] = useState<ImportSummary | null>(null)
+  const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
   const abort = useRef<AbortController | null>(null)
 
   useEffect(() => () => abort.current?.abort(), [])
@@ -45,6 +48,13 @@ export function StravaSection() {
 
   const runImport = async () => {
     if (!source) return
+    let range
+    try {
+      range = parseDateRange(since, until)
+    } catch (error) {
+      notify((error as Error).message, 'error')
+      return
+    }
     const controller = new AbortController()
     abort.current = controller
     setSummary(null)
@@ -58,7 +68,7 @@ export function StravaSection() {
         activities = zip.activities
       } else activities = activitiesFromFiles(source.files)
       if (!activities.length) throw new Error('No .fit, .gpx or .tcx files chosen')
-      const result = await importStravaActivities(activities, { onProgress: setProgress, signal: controller.signal })
+      const result = await importStravaActivities(activities, { range, onProgress: setProgress, signal: controller.signal })
       setSummary(result)
       notify(`Strava import complete: ${result.imported} imported`, 'success')
     } catch (error) {
@@ -101,6 +111,10 @@ export function StravaSection() {
         <T muted numberOfLines={1} style={{ fontSize: 12 }}>
           {describe(source)} · .fit, .gpx or .tcx, gzipped or not
         </T>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Field label="From (dd-mm-yyyy)" placeholder="optional" value={since} onChangeText={setSince} style={{ flex: 1 }} />
+          <Field label="Until (dd-mm-yyyy)" placeholder="optional" value={until} onChangeText={setUntil} style={{ flex: 1 }} />
+        </View>
         <Button title={importing ? 'Importing…' : 'Import activities'} icon="download" onPress={runImport} busy={importing} disabled={!source} />
         {importing && <Button title="Cancel" variant="text" onPress={() => abort.current?.abort()} />}
 
@@ -115,7 +129,8 @@ export function StravaSection() {
 
         {summary && (
           <>
-            <T style={{ fontWeight: '700' }}>Import complete — {summary.found} activity files</T>
+            <T style={{ fontWeight: '700' }}>Import complete — {summary.found} activity files{since.trim() || until.trim() ? ' in the date range' : ''}
+            </T>
             <StatGrid>
               <Stat label="Imported" value={summary.imported} color={c.positive} />
               <Stat label="Skipped" value={summary.skipped} />

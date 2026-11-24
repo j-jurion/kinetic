@@ -5,6 +5,7 @@
 // are kept (heart rate, distance, power, cadence). Samples come before the workouts in the
 // file, so they are collected first and cut into per-workout slices at the end.
 
+import { inDateRange, type DateRange } from '@kinetic/shared/format'
 import { listZip, openEntry, readEntryText, type ZipEntry } from './zip'
 
 export interface ImportProgress {
@@ -385,7 +386,7 @@ function parseGpx(text: string) {
 
 export async function importAppleHealthExport(
   file: File,
-  options: { sinceMs?: number | null; onProgress: (p: ImportProgress) => void; signal?: AbortSignal },
+  options: { range?: DateRange; onProgress: (p: ImportProgress) => void; signal?: AbortSignal },
 ): Promise<ImportSummary> {
   const { onProgress, signal } = options
   const entries = await listZip(file)
@@ -416,7 +417,7 @@ export async function importAppleHealthExport(
   }
 
   const workouts = parser.workouts
-    .filter((w) => !options.sinceMs || w.startMs >= options.sinceMs)
+    .filter((w) => !options.range || inDateRange(w.startMs, options.range))
     .sort((a, b) => a.startMs - b.startMs)
   const { samples } = parser
   const order = samples.index()

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Alert, Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
 import { api } from '../../lib/api'
-import { formatDate, parseDateInput } from '@kinetic/shared/format'
+import { formatDate, parseDateRange } from '@kinetic/shared/format'
 import { useBackgroundJobs } from '../../lib/backgroundJobs'
 import { DateField } from '../DateField'
 import { Stat } from '../fields'
@@ -56,6 +56,7 @@ export function AppleHealthSection({ onChange }: { onChange?: (token: AppleToken
 
   const [file, setFile] = useState<File | null>(null)
   const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
   // The import runs in the background: it carries on when you leave this page
   const { apple, startAppleImport, cancelAppleImport } = useBackgroundJobs()
   const { progress, summary } = apple
@@ -95,12 +96,11 @@ export function AppleHealthSection({ onChange }: { onChange?: (token: AppleToken
 
   const runImport = () => {
     if (!file) return
-    const sinceIso = since.trim() ? parseDateInput(since) : null
-    if (since.trim() && !sinceIso) {
-      notify('Invalid date — use dd-mm-yyyy', 'error')
-      return
+    try {
+      startAppleImport(file, parseDateRange(since, until))
+    } catch (error) {
+      notify((error as Error).message, 'error')
     }
-    startAppleImport(file, sinceIso ? Date.parse(sinceIso) : null)
   }
 
   const importing = apple.running
@@ -205,7 +205,8 @@ export function AppleHealthSection({ onChange }: { onChange?: (token: AppleToken
           </span>
         </div>
         <div className="row items-center gap-3 w-full">
-          <DateField label="Only workouts since (optional)" value={since} onChange={setSince} />
+          <DateField label="From (optional)" value={since} onChange={setSince} />
+          <DateField label="Until (optional)" value={until} onChange={setUntil} />
         </div>
         <div className="row items-center gap-3 w-full">
           <Button

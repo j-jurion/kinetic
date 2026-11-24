@@ -235,3 +235,36 @@ export function filteredUrl(path: string, sport?: string | null, year?: number |
 export function distanceSlug(distance: number): string {
   return distance.toFixed(2).replace(/0+$/, '').replace(/\.$/, '')
 }
+
+/** An optional range of days, as epoch ms: from the start of `since` to the end of `until`. */
+export interface DateRange {
+  sinceMs: number | null
+  /** Exclusive: midnight after the last day. */
+  untilMs: number | null
+}
+
+/**
+ * The range of two optional dd-mm-yyyy fields (local days, both inclusive). Throws an Error
+ * with a message for the user when a date is invalid or the end comes before the start.
+ */
+export function parseDateRange(since: string, until: string): DateRange {
+  const day = (text: string) => {
+    if (!text.trim()) return null
+    const iso = parseDateInput(text)
+    if (!iso) throw new Error('Invalid date — use dd-mm-yyyy')
+    const [y, m, d] = iso.slice(0, 10).split('-').map(Number)
+    return new Date(y, m - 1, d)
+  }
+  const from = day(since)
+  const to = day(until)
+  if (from && to && to < from) throw new Error('The end date is before the start date')
+  return {
+    sinceMs: from ? from.getTime() : null,
+    untilMs: to ? new Date(to.getFullYear(), to.getMonth(), to.getDate() + 1).getTime() : null,
+  }
+}
+
+/** Whether a moment falls in the range; no range bounds means everything matches. */
+export function inDateRange(ms: number, range: DateRange): boolean {
+  return (range.sinceMs === null || ms >= range.sinceMs) && (range.untilMs === null || ms < range.untilMs)
+}
