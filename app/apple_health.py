@@ -547,8 +547,15 @@ def _family(sport: SportType) -> SportType:
 
 def is_duplicate(workout: Workout) -> bool:
     """Whether an activity of the same sport already starts within a minute of the workout."""
-    start = workout.start.replace(tzinfo=None)
-    family = _family(workout.sport_type)
+    return activity_exists_near(workout.start, workout.sport_type)
+
+
+def activity_exists_near(start: datetime, sport: SportType) -> bool:
+    """Whether an activity of the same sport family starts within a minute of ``start``."""
+    if start.tzinfo is not None:
+        start = start.astimezone(timezone.utc)
+    start = start.replace(tzinfo=None)  # stored as naive UTC
+    family = _family(sport)
     with Session(engine) as session:
         sports = session.exec(
             select(Activity.sport).where(

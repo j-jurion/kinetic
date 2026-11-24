@@ -4,6 +4,8 @@ Activity tracking web app: a React (Vite) frontend in `web/` on top of a FastAPI
 
 ## Features
 - Upload Garmin `.fit` files or add activities manually
+- Bulk import of a Strava export (`.fit`, `.gpx` and `.tcx` activity files, gzipped or not); see
+  [Strava](#strava)
 - Apple Watch workouts, pushed automatically by the Health Auto Export iOS app or imported from
   an Apple Health `export.zip` (see [Apple Watch](#apple-watch))
 - Activities list with distance, pace, HR, duration
@@ -63,6 +65,18 @@ A workout is skipped when an activity of the same sport already starts within a 
 so re-importing is harmless and workouts that also reached Kinetic from Garmin are not
 duplicated. Apple Watch data has heart rate, GPS, distance and (cycling/running) power, but no
 Garmin running dynamics or training-effect fields; laps are generated per km (5 km cycling).
+
+### Strava
+
+On the **Sync** page, choose the zip from Strava (Settings → My Account → *Download or Delete
+Your Account* → *Request your archive*). The browser reads it, so photos and the rest of the
+archive are never uploaded, and sends each file from its `activities/` folder to
+`POST /api/activities/import-file` with the activity's name, type and description from
+`activities.csv`. Loose `.fit`, `.gpx` and `.tcx` files (gzipped or not) can be chosen
+instead, many at once. FIT files are imported as they are; GPX and TCX files are converted into
+a FIT file (`app/strava.py`) like Apple Watch workouts. As with Apple Health, a file is skipped
+when an activity of the same sport already starts within a minute of it, so importing an export
+again, or activities that also came in from Garmin, adds nothing.
 
 ## Setup
 

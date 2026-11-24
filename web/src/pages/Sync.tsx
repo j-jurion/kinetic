@@ -13,6 +13,7 @@ import { formatDate, parseDateInput } from '@kinetic/shared/format'
 import { Stat } from '../components/fields'
 import { DateField } from '../components/DateField'
 import { AppleHealthCards } from '../components/AppleHealthCards'
+import { StravaCard } from '../components/StravaCard'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
@@ -311,6 +312,7 @@ export function SyncPage() {
         </div>
 
         <AppleHealthCards />
+        <StravaCard />
       </div>
 
       <Dialog open={mfaOpen} onClose={() => setMfaOpen(false)}>
