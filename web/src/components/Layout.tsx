@@ -4,9 +4,11 @@ import { Badge, Button, IconButton, Tooltip } from '@mui/material'
 import { NAV_SECTIONS, pageTitle } from '@kinetic/shared/navigation'
 import { api } from '../lib/api'
 import { useIncomingFriendRequests } from '../lib/friendRequests'
+import { jobStatuses, useBackgroundJobs } from '../lib/backgroundJobs'
 import { useDarkMode } from '../theme'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
+import { SyncStatus } from './SyncStatus'
 
 /** The shared app shell: header, navigation drawer and page content. */
 export function Layout() {
@@ -17,6 +19,7 @@ export function Layout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const title = pageTitle(location.pathname)
   const friendRequests = useIncomingFriendRequests()
+  const syncing = jobStatuses(useBackgroundJobs()).some((s) => s.state === 'running')
   const requestsLabel = `${friendRequests} friend ${friendRequests === 1 ? 'request' : 'requests'} waiting`
 
   useEffect(() => setDrawerOpen(false), [location.pathname])
@@ -56,6 +59,7 @@ export function Layout() {
           )}
         </div>
         <div className="row items-center no-wrap gap-2">
+          <SyncStatus />
           {friendRequests > 0 && (
             <Tooltip title={requestsLabel}>
               <IconButton size="small" color="inherit" aria-label={requestsLabel} onClick={() => navigate('/friends')}>
@@ -96,6 +100,7 @@ export function Layout() {
                     {friendRequests}
                   </span>
                 )}
+                {to === '/sync' && syncing && <span className="nav-sync-dot" aria-label="Syncing" />}
               </NavLink>
             ))}
           </div>

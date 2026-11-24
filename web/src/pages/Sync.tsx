@@ -7,6 +7,7 @@ import { StravaSection } from '../components/sync/StravaSection'
 import { Icon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { useNotify } from '../components/Notify'
+import { useBackgroundJobs } from '../lib/backgroundJobs'
 
 type Platform = 'garmin' | 'apple' | 'strava'
 

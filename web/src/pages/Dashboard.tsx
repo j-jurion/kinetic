@@ -12,6 +12,7 @@ import type { FormBand } from '@kinetic/shared/training'
 import { TRAINING_CAPTIONS, signed, trainingView } from '@kinetic/shared/trainingPage'
 import type { ActivityRow, BestEffortRow, TrainingOverview } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
+import { useBackgroundJobs } from '../lib/backgroundJobs'
 import { ActivityRowCard } from '../components/ActivityMonths'
 import { ChartCard } from '../components/ChartCard'
 import { EmptyCard, Stat } from '../components/fields'
@@ -154,12 +155,14 @@ export function DashboardPage() {
   const latestActivities = useLatestRequest()
   const latestTraining = useLatestRequest()
   const latestEfforts = useLatestRequest()
+  // Reload when a background sync or upload brings in activities
+  const { dataVersion } = useBackgroundJobs()
 
   useEffect(() => {
     latestActivities(api.get<ActivityRow[]>('/activities'), setActivities)
     latestTraining(api.get<TrainingOverview>('/training'), setTraining)
     latestEfforts(api.get<BestEffortRow[]>('/best-efforts'), setEfforts)
-  }, [latestActivities, latestTraining, latestEfforts])
+  }, [latestActivities, latestTraining, latestEfforts, dataVersion])
 
   const summary = useMemo(() => (activities ? dashboardSummary(activities) : null), [activities])
   const view = useMemo(() => (training ? trainingView(training, '3m') : null), [training])
