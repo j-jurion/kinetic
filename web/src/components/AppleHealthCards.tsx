@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
 import { api } from '../lib/api'
 import { formatDate, parseDateInput } from '@kinetic/shared/format'
-import { importAppleHealthExport, type ImportProgress, type ImportSummary } from '../lib/appleHealthExport'
+import { useBackgroundJobs } from '../lib/backgroundJobs'
 import { DateField } from './DateField'
 import { Stat } from './fields'
 import { Icon } from './icons'
@@ -56,9 +56,9 @@ export function AppleHealthCards() {
 
   const [file, setFile] = useState<File | null>(null)
   const [since, setSince] = useState('')
-  const [progress, setProgress] = useState<ImportProgress | null>(null)
-  const [summary, setSummary] = useState<ImportSummary | null>(null)
-  const abort = useRef<AbortController | null>(null)
+  // The import runs in the background: it carries on when you leave this page
+  const { apple, startAppleImport, cancelAppleImport } = useBackgroundJobs()
+  const { progress, summary } = apple
   const fileInput = useRef<HTMLInputElement>(null)
 
   const refresh = useCallback(async () => {
@@ -69,8 +69,6 @@ export function AppleHealthCards() {
   useEffect(() => {
     refresh().catch((error) => notify((error as Error).message, 'error'))
   }, [refresh, notify])
-
-  useEffect(() => () => abort.current?.abort(), [])
 
   const createToken = async () => {
     if (info && !window.confirm('Create a new token? The current one stops working.')) return
@@ -94,35 +92,17 @@ export function AppleHealthCards() {
     notify('Token revoked', 'info')
   }
 
-  const runImport = async () => {
+  const runImport = () => {
     if (!file) return
     const sinceIso = since.trim() ? parseDateInput(since) : null
     if (since.trim() && !sinceIso) {
       notify('Invalid date — use dd-mm-yyyy', 'error')
       return
     }
-    const controller = new AbortController()
-    abort.current = controller
-    setSummary(null)
-    setProgress({ phase: 'reading', fraction: 0, message: 'Opening export…' })
-    try {
-      const result = await importAppleHealthExport(file, {
-        sinceMs: sinceIso ? Date.parse(sinceIso) : null,
-        onProgress: setProgress,
-        signal: controller.signal,
-      })
-      setSummary(result)
-      notify(`Apple Health import complete: ${result.imported} imported`, 'success')
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') notify('Import cancelled', 'info')
-      else notify((error as Error).message, 'error', 8000)
-    } finally {
-      abort.current = null
-      setProgress(null)
-    }
+    startAppleImport(file, sinceIso ? Date.parse(sinceIso) : null)
   }
 
-  const importing = progress !== null
+  const importing = apple.running
   const webhookUrl = `${window.location.origin}${WEBHOOK_PATH}`
 
   return (
@@ -204,7 +184,6 @@ export function AppleHealthCards() {
           hidden
           onChange={(e) => {
             setFile(e.target.files?.[0] ?? null)
-            setSummary(null)
           }}
         />
         <div className="row items-center gap-3 w-full">
@@ -217,7 +196,11 @@ export function AppleHealthCards() {
             Choose export.zip
           </Button>
           <span className="text-caption text-grey-6 ellipsis flex-1 min-w-0">
-            {file ? `${file.name} (${(file.size / 1024 / 1024).toFixed(0)} MB)` : 'No file chosen'}
+            {file
+              ? `${file.name} (${(file.size / 1024 / 1024).toFixed(0)} MB)`
+              : importing
+                ? `Importing ${apple.fileName}`
+                : 'No file chosen'}
           </span>
         </div>
         <div className="row items-center gap-3 w-full">
@@ -232,7 +215,7 @@ export function AppleHealthCards() {
           >
             {importing ? 'Importing…' : 'Import workouts'}
           </Button>
-          {importing && <Button onClick={() => abort.current?.abort()}>Cancel</Button>}
+          {importing && <Button onClick={cancelAppleImport}>Cancel</Button>}
         </div>
 
         {progress && (

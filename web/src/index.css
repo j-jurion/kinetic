@@ -458,6 +458,33 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 }
 .friend-count-badge { margin-left: 6px; vertical-align: 1px; }
 .nav-badge { margin-left: auto; }
+.nav-sync-dot {
+  margin-left: auto; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary); animation: sync-pulse 1.2s ease-in-out infinite;
+}
+.nav-badge + .nav-sync-dot { margin-left: 8px; }
+@keyframes sync-pulse { 50% { opacity: .3; } }
+
+/* ── Background sync status in the header ──────────────────────────────── */
+.sync-status {
+  display: inline-flex; align-items: center; gap: 2px;
+  height: 30px; padding: 0 6px 0 4px; border-radius: 999px;
+  border: 1px solid var(--card-border); background: var(--surface-2);
+  font-size: .78rem; font-weight: 600; white-space: nowrap;
+}
+.sync-status--running { color: var(--primary); }
+.sync-status--done { color: var(--positive); }
+.sync-status--error { color: var(--negative); }
+.sync-status-button {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 4px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer;
+}
+.sync-status-label { font-variant-numeric: tabular-nums; }
+.sync-status-more { font-size: .7rem; opacity: .75; }
+/* Phones: just the icon, the tooltip and the Sync page have the details */
+@media (max-width: 600px) {
+  .sync-status-label, .sync-status-more { display: none; }
+}
 .friend-hero .page-header-main { align-items: center; }
 .friend-sport-chip {
   display: inline-flex; align-items: center; gap: 6px;

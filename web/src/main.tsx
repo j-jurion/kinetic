@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import './index.css'
 import { AppThemeProvider } from './theme'
 import { NotifyProvider } from './components/Notify'
+import { BackgroundJobsProvider } from './lib/backgroundJobs'
 import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { LoginPage } from './pages/Login'
@@ -30,28 +31,30 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <AppThemeProvider>
       <NotifyProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<LoginPage mode="login" />} />
-            <Route path="/register" element={<LoginPage mode="register" />} />
-            <Route element={<RequireAuth><Layout /></RequireAuth>}>
-              <Route path="/" element={<Suspense><DashboardPage /></Suspense>} />
-              <Route path="/activities" element={<ActivitiesPage />} />
-              <Route path="/activity/:id" element={<ActivityDetailPage />} />
-              <Route path="/races" element={<RacesPage />} />
-              <Route path="/map" element={<MapPage />} />
-              <Route path="/graphs" element={<Suspense><GraphsPage /></Suspense>} />
-              <Route path="/training" element={<Suspense><TrainingPage /></Suspense>} />
-              <Route path="/best-efforts" element={<BestEffortsPage />} />
-              <Route path="/best-efforts/top/:metric" element={<TopActivitiesPage />} />
-              <Route path="/best-efforts/:distance" element={<Suspense><BestEffortDistancePage /></Suspense>} />
-              <Route path="/friends" element={<FriendsPage />} />
-              <Route path="/friends/:id" element={<FriendDetailPage />} />
-              <Route path="/sync" element={<SyncPage />} />
-              <Route path="*" element={<div className="text-grey-6 q-mt-xl">Page not found.</div>} />
-            </Route>
-          </Routes>
-        </BrowserRouter>
+        <BackgroundJobsProvider>
+          <BrowserRouter>
+            <Routes>
+              <Route path="/login" element={<LoginPage mode="login" />} />
+              <Route path="/register" element={<LoginPage mode="register" />} />
+              <Route element={<RequireAuth><Layout /></RequireAuth>}>
+                <Route path="/" element={<Suspense><DashboardPage /></Suspense>} />
+                <Route path="/activities" element={<ActivitiesPage />} />
+                <Route path="/activity/:id" element={<ActivityDetailPage />} />
+                <Route path="/races" element={<RacesPage />} />
+                <Route path="/map" element={<MapPage />} />
+                <Route path="/graphs" element={<Suspense><GraphsPage /></Suspense>} />
+                <Route path="/training" element={<Suspense><TrainingPage /></Suspense>} />
+                <Route path="/best-efforts" element={<BestEffortsPage />} />
+                <Route path="/best-efforts/top/:metric" element={<TopActivitiesPage />} />
+                <Route path="/best-efforts/:distance" element={<Suspense><BestEffortDistancePage /></Suspense>} />
+                <Route path="/friends" element={<FriendsPage />} />
+                <Route path="/friends/:id" element={<FriendDetailPage />} />
+                <Route path="/sync" element={<SyncPage />} />
+                <Route path="*" element={<div className="text-grey-6 q-mt-xl">Page not found.</div>} />
+              </Route>
+            </Routes>
+          </BrowserRouter>
+        </BackgroundJobsProvider>
       </NotifyProvider>
     </AppThemeProvider>
   </StrictMode>,

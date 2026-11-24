@@ -16,6 +16,7 @@ import type { Activity, Friend } from '@kinetic/shared/types'
 import { FriendPicker } from './FriendPicker'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
+import { useBackgroundJobs } from '../lib/backgroundJobs'
 
 interface EditProps {
   open: boolean
@@ -168,40 +169,26 @@ export function ConfirmDeleteDialog({ activity, onClose, onDeleted }: DeleteProp
   )
 }
 
-interface UploadItem {
-  key: number
-  name: string
-  status: 'pending' | 'done' | 'error'
-  error?: string
-}
-
 /** Upload one or more .fit files; each is imported as soon as it is selected. */
+/**
+ * Upload one or more .fit files. The uploads run in the background, so the dialog can be closed
+ * (and the page left) while they are still going; the header shows their progress.
+ */
 export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [items, setItems] = useState<UploadItem[]>([])
+  const { uploads: items, uploadFiles, clearUploads } = useBackgroundJobs()
   const [dragging, setDragging] = useState(false)
   const input = useRef<HTMLInputElement>(null)
 
+  // A fresh list each time, keeping uploads that are still going
   useEffect(() => {
-    if (open) setItems([])
-  }, [open])
+    if (open) clearUploads()
+  }, [open, clearUploads])
 
   const upload = (files: FileList | null) => {
-    if (!files) return
-    for (const file of Array.from(files)) {
-      const key = Math.random()
-      setItems((list) => [...list, { key, name: file.name, status: 'pending' }])
-      const form = new FormData()
-      form.append('file', file)
-      api
-        .upload('/activities/upload-fit', form)
-        .then(() => setItems((list) => list.map((i) => (i.key === key ? { ...i, status: 'done' } : i))))
-        .catch((error: Error) =>
-          setItems((list) => list.map((i) => (i.key === key ? { ...i, status: 'error', error: error.message } : i))),
-        )
-    }
+    if (files?.length) uploadFiles(Array.from(files))
   }
 
-  const pending = items.filter((i) => i.status === 'pending').length
+  const pending = items.filter((i) => i.status === 'queued' || i.status === 'uploading').length
   const ok = items.filter((i) => i.status === 'done').length
   const failed = items.filter((i) => i.status === 'error').length
   const status = pending
@@ -215,11 +202,11 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
   }
 
   return (
-    <Dialog open={open} onClose={() => !pending && onClose()} maxWidth={false}>
+    <Dialog open={open} onClose={onClose} maxWidth={false}>
       <DialogContent sx={{ p: 3, width: 'min(520px, calc(100vw - 32px))' }}>
         <div className="text-h6 q-mb-xs">Upload .fit files</div>
         <div className="text-body2 text-grey-6 q-mb-md">
-          Select one or more Garmin .fit files. Each is imported as soon as it is selected.
+          Select one or more Garmin .fit files. They upload in the background: you can close this and keep browsing.
         </div>
         <div className="row items-center gap-2 q-mb-sm" style={{ minHeight: 24 }}>
           {pending > 0 && <CircularProgress size={18} />}
@@ -256,8 +243,10 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
           <div style={{ maxHeight: 220, overflowY: 'auto', padding: items.length ? 8 : 0 }}>
             {items.map((item) => (
               <div key={item.key} className="row items-center no-wrap gap-2 text-body2" style={{ padding: '2px 4px' }}>
-                {item.status === 'pending' ? (
+                {item.status === 'uploading' ? (
                   <CircularProgress size={14} />
+                ) : item.status === 'queued' ? (
+                  <Icon name="schedule" size={16} className="text-grey-6" />
                 ) : (
                   <Icon
                     name={item.status === 'done' ? 'check_circle' : 'error'}
@@ -283,8 +272,8 @@ export function UploadDialog({ open, onClose }: { open: boolean; onClose: () => 
           />
         </div>
         <div className="row justify-end">
-          <Button variant="contained" onClick={onClose} disabled={pending > 0}>
-            Done
+          <Button variant="contained" onClick={onClose}>
+            {pending > 0 ? 'Continue in background' : 'Done'}
           </Button>
         </div>
       </DialogContent>
