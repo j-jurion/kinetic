@@ -57,6 +57,14 @@ def create_db_and_tables() -> None:
                 sqlalchemy.text("ALTER TABLE activity ADD COLUMN garmin_activity_id BIGINT")
             )
             conn.commit()
+        if "has_route" not in existing:
+            conn.execute(
+                sqlalchemy.text(
+                    "ALTER TABLE activity ADD COLUMN has_route BOOLEAN NOT NULL DEFAULT FALSE"
+                )
+            )
+            conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN map_route_json TEXT"))
+            conn.commit()
         if "owner_id" not in existing:
             conn.execute(sqlalchemy.text("ALTER TABLE activity ADD COLUMN owner_id VARCHAR"))
         friend_columns = _columns(conn, "friend")
@@ -79,6 +87,37 @@ def create_db_and_tables() -> None:
             )
         _add_garmin_id_index(conn)
         conn.commit()
+        _backfill_route_shapes(conn)
+
+
+def _backfill_route_shapes(conn, batch: int = 200) -> int:
+    """Fill has_route and map_route_json of activities stored before they existed.
+
+    Runs once per activity: after that has_route is true for every stored route, and new
+    routes get both columns when they are saved (app/route_shapes.py).
+    """
+    from app.route_shapes import map_route_json
+
+    done = 0
+    while True:
+        rows = conn.execute(
+            sqlalchemy.text(
+                "SELECT id, route_json FROM activity "
+                "WHERE route_json IS NOT NULL AND has_route = FALSE LIMIT :batch"
+            ),
+            {"batch": batch},
+        ).all()
+        if not rows:
+            return done
+        for row in rows:
+            conn.execute(
+                sqlalchemy.text(
+                    "UPDATE activity SET has_route = TRUE, map_route_json = :shape WHERE id = :id"
+                ),
+                {"shape": map_route_json(row.route_json), "id": row.id},
+            )
+        conn.commit()
+        done += len(rows)
 
 
 def _add_garmin_id_index(conn) -> None:

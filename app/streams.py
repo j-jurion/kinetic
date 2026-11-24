@@ -4,11 +4,16 @@ Only summaries, laps and the route are stored in the database, so the detail cha
 original FIT file on request. Parsing is slow, so files are cached once read.
 """
 
+import gzip
+import hashlib
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
+
+from loguru import logger
 
 from app import analysis
 from app.garmin_sync import UPLOAD_DIR
@@ -296,3 +301,55 @@ def _round(value: Optional[float], digits: int = 0) -> Optional[float]:
     if value is None:
         return None
     return round(value, digits) if digits else round(value)
+
+
+# ── Cache ─────────────────────────────────────────────────────────────────────
+
+# Reading and analysing a FIT file takes up to a second, and an activity page asks for its
+# streams on every visit. The result is kept on disk next to the FIT file, so it survives
+# restarts; the file name holds a digest of everything the result depends on, so a changed
+# file or argument (or a new STREAMS_CACHE_VERSION) is computed afresh.
+STREAMS_CACHE_VERSION = 1
+STREAMS_CACHE_SUFFIX = ".streams.json.gz"
+
+
+def streams_cache_files(fit_path: Path) -> list[Path]:
+    """Every cached result of one FIT file."""
+    return list(fit_path.parent.glob(f"{fit_path.stem}.*{STREAMS_CACHE_SUFFIX}"))
+
+
+def cached_read_streams(
+    path: Path,
+    sport: str,
+    start: Optional[datetime] = None,
+    duration_seconds: Optional[float] = None,
+    max_hr: Optional[float] = None,
+    ftp: Optional[float] = None,
+) -> dict:
+    """``read_streams`` as the API returns it (JSON-ready), cached on disk."""
+    from fastapi.encoders import jsonable_encoder
+
+    stat = path.stat()
+    key = repr((
+        STREAMS_CACHE_VERSION, stat.st_mtime_ns, stat.st_size, sport,
+        start.isoformat() if start else None, duration_seconds, max_hr, ftp,
+    ))
+    digest = hashlib.sha256(key.encode()).hexdigest()[:16]
+    cache = path.with_name(f"{path.stem}.{digest}{STREAMS_CACHE_SUFFIX}")
+    try:
+        return json.loads(gzip.decompress(cache.read_bytes()))
+    except (OSError, ValueError, EOFError):
+        pass  # not cached yet, or unreadable: compute it
+
+    data = jsonable_encoder(read_streams(path, sport, start, duration_seconds, max_hr, ftp))
+    try:
+        temporary = cache.with_name(cache.name + ".tmp")
+        temporary.write_bytes(gzip.compress(json.dumps(data, separators=(",", ":")).encode()))
+        temporary.replace(cache)
+        # Results for earlier arguments of this file are stale now
+        for old in streams_cache_files(path):
+            if old != cache:
+                old.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("Could not cache the streams of {}", path.name)
+    return data

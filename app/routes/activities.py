@@ -2,10 +2,10 @@
 imports, and an activity's laps, route, per-second streams, detail and friends."""
 
 import json
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Query, UploadFile
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func
@@ -88,30 +88,64 @@ class ActivityUpdate(BaseModel):
 # ── Activities ────────────────────────────────────────────────────────────────
 
 
+def _activities_query(sport: Optional[str], year: Optional[int], friend: Optional[int]):
+    """The activities a list shows: without a sport filter only top-level activities (a
+    multisport event stands for its legs); with one, the legs of that sport on their own."""
+    stmt = select(Activity)
+    if friend is not None:
+        stmt = stmt.where(
+            col(Activity.id).in_(
+                select(ActivityFriend.activity_id).where(ActivityFriend.friend_id == friend)
+            )
+        )
+    sport_types = sport_filter(sport)
+    if sport_types:
+        stmt = stmt.where(col(Activity.sport).in_(sport_types))
+    else:
+        stmt = stmt.where(col(Activity.parent_id).is_(None))
+    return in_year(stmt, Activity.date, year)
+
+
+def _parse_cursor(before: str) -> tuple[datetime, int]:
+    """``before`` is "<date>,<id>" of the last activity of the previous page."""
+    try:
+        when, activity_id = before.rsplit(",", 1)
+        return datetime.fromisoformat(when), int(activity_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid 'before' cursor") from None
+
+
 @router.get("/activities")
 def list_activities(
-    sport: Optional[str] = None, year: Optional[int] = None, friend: Optional[int] = None
+    sport: Optional[str] = None,
+    year: Optional[int] = None,
+    friend: Optional[int] = None,
+    since: Optional[date] = None,
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    before: Optional[str] = None,
 ) -> list[dict]:
     """Activities, newest first.
 
     Without a sport filter only top-level activities are listed (a multisport event stands
     for its legs); with a filter, legs of that sport are listed on their own. ``friend``
-    keeps the activities that friend is tagged on.
+    keeps the activities that friend is tagged on, ``since`` those on or after a date.
+
+    Without ``limit`` every activity is listed. With it, a page of at most ``limit``; the next
+    page starts after the last one: pass its date and id as ``before="<date>,<id>"``.
     """
     with Session(engine) as session:
-        stmt = select(Activity)
-        if friend is not None:
+        stmt = _activities_query(sport, year, friend)
+        if since is not None:
+            stmt = stmt.where(col(Activity.date) >= datetime.combine(since, time.min))
+        if before is not None:
+            when, activity_id = _parse_cursor(before)
             stmt = stmt.where(
-                col(Activity.id).in_(
-                    select(ActivityFriend.activity_id).where(ActivityFriend.friend_id == friend)
-                )
+                (col(Activity.date) < when)
+                | ((col(Activity.date) == when) & (col(Activity.id) < activity_id))
             )
-        sport_types = sport_filter(sport)
-        if sport_types:
-            stmt = stmt.where(col(Activity.sport).in_(sport_types))
-        else:
-            stmt = stmt.where(col(Activity.parent_id).is_(None))
-        stmt = in_year(stmt, Activity.date, year).order_by(col(Activity.date).desc())
+        stmt = stmt.order_by(col(Activity.date).desc(), col(Activity.id).desc())
+        if limit is not None:
+            stmt = stmt.limit(limit)
         activities = session.exec(stmt).all()
 
         ids = [a.id for a in activities]
@@ -130,6 +164,35 @@ def list_activities(
             data["parent_sport"] = parents.get(activity.parent_id) if activity.parent_id else None
             rows.append(data)
         return rows
+
+
+@router.get("/activities/totals")
+def activity_totals(
+    sport: Optional[str] = None, year: Optional[int] = None, friend: Optional[int] = None
+) -> dict:
+    """Count, distance, time and climbing of the activities ``/activities`` lists with the same
+    filters, so a paged list can show the totals of all of them. A multisport leg counts only
+    when its event is not listed as well."""
+    with Session(engine) as session:
+        listed = _activities_query(sport, year, friend).subquery()
+        row = session.exec(
+            select(
+                func.count(listed.c.id),
+                func.coalesce(func.sum(listed.c.distance_meters), 0),
+                func.coalesce(func.sum(listed.c.duration_seconds), 0),
+                func.coalesce(func.sum(listed.c.elevation_gain_meters), 0),
+            ).where(
+                listed.c.parent_id.is_(None)
+                | listed.c.parent_id.not_in(select(listed.c.id).scalar_subquery())
+            )
+        ).one()
+    count, meters, seconds, climb = row
+    return {
+        "count": count,
+        "meters": float(meters),
+        "seconds": float(seconds),
+        "climb": float(climb),
+    }
 
 
 def _set_activity_friends(session, activity_id: int, friend_ids: list[int]) -> None:
@@ -288,7 +351,7 @@ async def get_streams(activity_id: int) -> dict:
     leg = activity.parent_id is not None
     try:
         data = await run_in_thread(
-            streams.read_streams,
+            streams.cached_read_streams,
             path,
             activity.sport.value,
             activity.date if leg else None,

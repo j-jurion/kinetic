@@ -1,21 +1,19 @@
 import { useMemo, useState } from 'react'
 import { StyleSheet, View } from 'react-native'
-import { byMonth, hours, km, monthSummary, monthTitle, totals } from '@kinetic/shared/activityList'
-import { qs } from '@kinetic/shared/api'
-import type { Activity, ActivityRow } from '@kinetic/shared/types'
+import { byMonth, hours, km, monthSummary, monthTitle } from '@kinetic/shared/activityList'
+import type { Activity } from '@kinetic/shared/types'
 import { ActivityEditSheet, UploadSheet } from '../../components/ActivitySheets'
 import { ActivityCard } from '../../components/ActivityCard'
 import { Button, Empty, FilterRow, PageHeader, Screen, SportSelect, Stat, StatGrid, T, YearSelect } from '../../components/ui'
-import { useApi } from '../../lib/useApi'
+import { usePagedActivities } from '../../lib/usePagedActivities'
 
 export default function ActivitiesScreen() {
   const [sport, setSport] = useState('')
   const [year, setYear] = useState<number | null>(null)
   const [editing, setEditing] = useState<Activity | null | undefined>(undefined)
   const [uploading, setUploading] = useState(false)
-  const { data: activities, reload } = useApi<ActivityRow[]>(`/activities${qs({ sport, year })}`)
-
-  const summary = useMemo(() => (activities ? totals(activities) : null), [activities])
+  // A page at a time, with the totals of every activity the filters list
+  const { activities, totals: summary, hasMore, loadingMore, loadMore, reload } = usePagedActivities({ sport, year })
   const months = useMemo(() => (activities ? byMonth(activities) : []), [activities])
 
   return (
@@ -59,6 +57,8 @@ export default function ActivitiesScreen() {
           ))}
         </View>
       ))}
+
+      {hasMore && <Button title={loadingMore ? 'Loading…' : 'Load more'} variant="outlined" busy={loadingMore} onPress={loadMore} />}
 
       <ActivityEditSheet visible={editing !== undefined} activity={editing ?? null} onClose={() => setEditing(undefined)} onSaved={reload} />
       <UploadSheet

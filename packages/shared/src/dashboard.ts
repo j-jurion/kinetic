@@ -28,6 +28,14 @@ function between(activities: ActivityRow[], from: Date, to: Date): Totals {
   )
 }
 
+/**
+ * The first day the dashboard looks at (1 January of last year, for the year-on-year
+ * comparison), as yyyy-mm-dd: it only needs the activities since then (`/activities?since=`).
+ */
+export function dashboardSince(today = new Date()): string {
+  return `${today.getFullYear() - 1}-01-01`
+}
+
 /** Weekly and year-to-date totals, and the latest activities. Expects top-level activities, newest first. */
 export function dashboardSummary(activities: ActivityRow[], today = new Date(), recentCount = 5): DashboardSummary {
   const monday = weekStart(today)

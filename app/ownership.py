@@ -3,7 +3,7 @@
 from contextvars import ContextVar
 
 from sqlalchemy import event, inspect, select
-from sqlalchemy.orm import with_loader_criteria
+from sqlalchemy.orm import defer, with_loader_criteria
 from sqlmodel import Session as SQLModelSession
 from sqlmodel import SQLModel, col
 
@@ -20,6 +20,8 @@ from app.models import (
 )
 
 current_owner: ContextVar[str | None] = ContextVar("current_owner", default=None)
+# Activity columns that queries skip unless they ask for them (see scope_queries)
+HEAVY_COLUMNS = ("route_json", "map_route_json")
 
 
 class UserSession(SQLModelSession):
@@ -44,7 +46,16 @@ def scope_queries(execute_state):
     activity_ids = select(activity.c.id).where(activity.c.owner_id == owner_id)
     friend_ids = select(friend.c.id).where(friend.c.owner_id == owner_id)
     race_ids = select(race.c.id).where(race.c.activity_id.in_(activity_ids))
-    execute_state.statement = execute_state.statement.options(
+    statement = execute_state.statement
+    # The full GPS route and its map version are large; load them only when asked for with
+    # .execution_options(activity_columns=(...)) or by reading the attribute in the session
+    if not execute_state.is_column_load and not execute_state.is_relationship_load:
+        wanted = execute_state.execution_options.get("activity_columns", ())
+        if any(d.get("expr") is Activity for d in statement.column_descriptions):
+            statement = statement.options(
+                *(defer(getattr(Activity, name)) for name in HEAVY_COLUMNS if name not in wanted)
+            )
+    execute_state.statement = statement.options(
         with_loader_criteria(Activity, col(Activity.owner_id) == owner_id, include_aliases=True),
         with_loader_criteria(Friend, col(Friend.owner_id) == owner_id, include_aliases=True),
         with_loader_criteria(

@@ -89,6 +89,8 @@ def delete_account_data(user_id: str) -> int:
 
     # Files go only once the database no longer refers to them
     for path in fit_paths:
+        for cached in streams.streams_cache_files(path):
+            _remove(cached)
         _remove(path)
     garmin_sync.forget_account(user_id)
     from app.routes.garmin import forget_pending_mfa

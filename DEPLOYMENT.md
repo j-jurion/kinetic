@@ -200,6 +200,9 @@ Secrets (`DATABASE_URL`, `KINETIC_ORIGIN_SECRET`, …) stay in Fly and Vercel; n
   long run is cut off, rerun it (both skip work already done) or sync shorter date ranges.
 - **Upload size**: FIT uploads go through the Vercel proxy too; single files are small, so
   this is only an issue for unusually large files.
+- **Streams cache**: next to each FIT file, `uploads/` holds a `<name>.<digest>.streams.json.gz`
+  (about 15 KB) once its activity page has been opened. It is rebuilt when missing, so it need
+  not be backed up and can be deleted at any time.
 - The old single-server setup (`kinetic.service`, built web app served by FastAPI) still
   works; without `DATABASE_URL` the app keeps using SQLite in `app.db`.
 

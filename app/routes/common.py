@@ -12,7 +12,7 @@ from app.models import (
     Activity,
     SportType,
 )
-from app.ownership import current_owner
+from app.ownership import HEAVY_COLUMNS, current_owner
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -38,11 +38,8 @@ def dump(model) -> dict:
 
 
 def activity_dump(activity: Activity) -> dict:
-    """An activity without its (large) GPS route."""
-    data = dump(activity)
-    data.pop("route_json", None)
-    data["has_route"] = bool(activity.route_json)
-    return data
+    """An activity without its (large) GPS routes; ``has_route`` says whether it has one."""
+    return activity.model_dump(mode="json", exclude=set(HEAVY_COLUMNS))
 
 
 def fetch_activity(session, activity_id: int) -> Activity:
