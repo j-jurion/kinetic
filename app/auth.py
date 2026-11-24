@@ -6,10 +6,12 @@ import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from functools import lru_cache
 from http.cookies import CookieError, SimpleCookie
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from loguru import logger
 from pwdlib import PasswordHash
 from pydantic import BaseModel, Field
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, delete, inspect, select, text
@@ -111,27 +113,46 @@ def preview_origin_patterns() -> list[re.Pattern]:
     ``KINETIC_PREVIEW_ORIGINS`` (optional) lists them as https origins whose first host label
     holds one ``*``, matching letters, digits and hyphens only, so a pattern cannot reach
     beyond its own domain. Unset, only ``KINETIC_PUBLIC_ORIGIN`` is allowed.
+
+    An entry that breaks these rules is ignored with a warning in the log, never an error:
+    a mistake in this optional setting must not take the API down.
     """
+    return _parse_preview_origins(os.environ.get("KINETIC_PREVIEW_ORIGINS", ""))
+
+
+@lru_cache(maxsize=8)
+def _parse_preview_origins(setting: str) -> list[re.Pattern]:
     patterns = []
-    for raw in os.environ.get("KINETIC_PREVIEW_ORIGINS", "").split(","):
-        value = raw.strip().rstrip("/")
+    for raw in setting.split(","):
+        # Forgive quotes, spaces, upper case and a trailing slash pasted along with the origin
+        value = raw.strip().strip("\"'").strip().lower().rstrip("/")
         if not value:
             continue
-        scheme, _, host = value.partition("://")
-        first, _, rest = host.partition(".")
-        if (
-            scheme != "https"
-            or host.count("*") != 1
-            or "*" not in first
-            or first == "*"  # would match every site on the domain
-            or rest.count(".") < 1
-            or not re.fullmatch(r"[a-z0-9*-]+", first)
-            or not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", rest)
-        ):
-            raise RuntimeError(PREVIEW_ORIGINS_RULE)
-        label = re.escape(first).replace(r"\*", "[a-z0-9-]+")
-        patterns.append(re.compile(f"https://{label}\\.{re.escape(rest)}"))
+        pattern = _preview_pattern(value)
+        if pattern is None:
+            logger.warning(
+                "Ignoring KINETIC_PREVIEW_ORIGINS entry {!r}: {}", value, PREVIEW_ORIGINS_RULE
+            )
+        else:
+            patterns.append(pattern)
     return patterns
+
+
+def _preview_pattern(value: str) -> re.Pattern | None:
+    scheme, _, host = value.partition("://")
+    first, _, rest = host.partition(".")
+    if (
+        scheme != "https"
+        or host.count("*") != 1
+        or "*" not in first
+        or first == "*"  # would match every site on the domain
+        or rest.count(".") < 1
+        or not re.fullmatch(r"[a-z0-9*-]+", first)
+        or not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", rest)
+    ):
+        return None
+    label = re.escape(first).replace(r"\*", "[a-z0-9-]+")
+    return re.compile(f"https://{label}\\.{re.escape(rest)}")
 
 
 def allowed_origin(origin: str) -> bool:

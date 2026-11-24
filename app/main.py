@@ -90,7 +90,7 @@ def web_app(path: str):
 
 def main():
     public_origin()
-    preview_origin_patterns()  # a malformed KINETIC_PREVIEW_ORIGINS stops the start-up
+    preview_origin_patterns()  # logs any KINETIC_PREVIEW_ORIGINS entry it has to ignore
 
     import uvicorn
 

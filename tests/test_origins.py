@@ -43,7 +43,9 @@ class OriginTests(unittest.TestCase):
             self.assertTrue(allowed_origin("https://a-1.example.com"))
             self.assertTrue(allowed_origin("https://b-2.example.org"))
 
-    def test_too_broad_or_malformed_patterns_are_refused(self):
+    def test_too_broad_or_malformed_patterns_are_ignored_not_fatal(self):
+        # A mistake in this optional setting once crashed the API at start-up: it must only
+        # be logged, with previews then unable to sign in
         for value in (
             "http://kinetic-*.vercel.app",  # not https
             "https://*.vercel.app",  # the whole first label
@@ -52,10 +54,26 @@ class OriginTests(unittest.TestCase):
             "https://kinetic-*-*.vercel.app",  # more than one *
             "https://kinetic.vercel.app",  # no * at all: use KINETIC_PUBLIC_ORIGIN
             "https://kinetic-*.vercel.app/path",
+            "kinetic-*-jj1-0863.vercel.app",  # no scheme
         ):
             with env(value), self.subTest(value=value):
-                with self.assertRaises(RuntimeError):
-                    preview_origin_patterns()
+                self.assertEqual(preview_origin_patterns(), [])
+                self.assertTrue(allowed_origin(PUBLIC))
+                self.assertFalse(allowed_origin("https://kinetic-a-jj1-0863.vercel.app"))
+
+    def test_a_bad_entry_does_not_disable_the_good_ones(self):
+        with env("https://*.vercel.app, https://kinetic-*-jj1-0863.vercel.app"):
+            self.assertEqual(len(preview_origin_patterns()), 1)
+            self.assertTrue(allowed_origin("https://kinetic-git-main-jj1-0863.vercel.app"))
+
+    def test_quotes_spaces_case_and_slashes_are_forgiven(self):
+        for value in (
+            '"https://kinetic-*-jj1-0863.vercel.app"',
+            "'https://kinetic-*-jj1-0863.vercel.app/'",
+            "  HTTPS://Kinetic-*-JJ1-0863.Vercel.App  ",
+        ):
+            with env(value), self.subTest(value=value):
+                self.assertTrue(allowed_origin("https://kinetic-git-main-jj1-0863.vercel.app"))
 
 
 if __name__ == "__main__":
