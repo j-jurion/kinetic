@@ -100,6 +100,14 @@ npm install
 npm run dev
 ```
 
+Run the same checks as CI before pushing (`uv sync` installs pytest and ruff):
+
+```bash
+uv run ruff check app tests run.py
+uv run pytest -q
+cd web && npm run lint && npm run build
+```
+
 On PowerShell, set the variables for the API with:
 
 ```powershell
@@ -165,13 +173,21 @@ uv run python -m app.bootstrap_test_account --source kinetic.db --backup-dir /se
 The backup directory must exist. The source remains unchanged and the command refuses to
 overwrite a nonempty destination. Keep the printed password and backups secure.
 
-Account export and deletion, production rate limits and public-deployment security review
-are not implemented yet. Do not expose this test configuration publicly.
+Login and registration are rate-limited per client address and per username (see
+`app/rate_limit.py`): after 10 failed logins for a username, or 20 from one address, within
+15 minutes, further attempts get a `429` response until the window passes; one address
+can register at most 10 accounts an hour. The counters live in memory, which suits the single
+API machine; restarting the API clears them.
+
+Account export and deletion and a public-deployment security review are not implemented yet.
+Do not expose this test configuration publicly.
 Every state-changing API request must carry an `Origin` header equal to
 `KINETIC_PUBLIC_ORIGIN`; this protects the session cookie against cross-site requests.
 
-Some database and FIT files are already tracked by Git. Ignore rules do not
-remove tracked files or their history; review them before making the repository public.
+Personal recordings (`data/`, `*.fit`) are ignored by Git and are no longer tracked; tests
+use a generated synthetic run (`tests/fit_samples.py`). Earlier commits still contain FIT files
+with GPS tracks, so rewrite the history (e.g. `git filter-repo --path data --invert-paths`)
+before making the repository public.
 
 ### Deploy to Vercel + Fly.io + Supabase
 

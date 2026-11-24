@@ -147,8 +147,9 @@ After the one-time setup above, pushing to `main` deploys everything:
 - **Vercel** builds every push itself (GitHub integration from step 3): `main` goes to
   production, other branches get preview URLs. Optional: **Settings → Build and Deployment →
   Root Directory → "Skip deployments when there are no changes to the root directory"**.
-- **Fly.io** is deployed by `.github/workflows/fly-deploy.yml` when backend files change on
-  `main` (or manually from the Actions tab). Give it a token once:
+- **Fly.io** is deployed by `.github/workflows/fly-deploy.yml` on every push to `main` (or
+  manually from the Actions tab), only after the checks in `.github/workflows/ci.yml` (ruff,
+  pytest, web lint and build) pass. Those checks also run on pull requests and other branches. Give it a token once:
 
   ```powershell
   fly tokens create deploy -x 999999h
