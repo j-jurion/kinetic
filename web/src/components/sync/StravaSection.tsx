@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Button, CircularProgress, LinearProgress } from '@mui/material'
+import { Alert, Button, CircularProgress, LinearProgress } from '@mui/material'
 import { useBackgroundJobs, type StravaSource } from '../../lib/backgroundJobs'
 import { Stat } from '../fields'
 import { Icon } from '../icons'
@@ -133,6 +133,12 @@ export function StravaSection() {
             <LinearProgress variant="determinate" value={progress.fraction * 100} />
             <span className="text-caption text-grey-6">{progress.message}</span>
           </div>
+        )}
+
+        {strava.error && (
+          <Alert severity="error" variant="outlined" className="w-full">
+            Import failed: {strava.error}
+          </Alert>
         )}
 
         {summary && (

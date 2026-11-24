@@ -10,6 +10,7 @@ import { Icon } from '../components/icons'
 import { ActivityMonths } from '../components/ActivityMonths'
 import { LoadMore } from '../components/LoadMore'
 import { PageHeader } from '../components/PageHeader'
+import { PageLoading } from '../components/PageLoading'
 
 export function ActivitiesPage() {
   const [sport, setSport] = useState('')
@@ -48,6 +49,7 @@ export function ActivitiesPage() {
         </div>
       )}
 
+      {activities === null && <PageLoading />}
       {activities && activities.length === 0 && (
         <EmptyCard icon="directions_run">No activities yet. Upload a .fit file or add one manually.</EmptyCard>
       )}

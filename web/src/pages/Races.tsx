@@ -9,6 +9,7 @@ import { EmptyCard } from '../components/fields'
 import { MultisportMarker, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import '../styles/races.css'
+import { PageLoading } from '../components/PageLoading'
 
 // Plotly is large: the multisport charts load only when there are such races
 const RaceBreakdownCharts = lazy(() => import('../components/performance/RaceBreakdownCharts'))
@@ -25,7 +26,7 @@ export function RacesPage() {
 
   const multisport = useMemo(() => breakdownEvents(results ?? [], multisportEvents), [results, multisportEvents])
 
-  if (!results) return null
+  if (!results) return <PageLoading />
 
   return (
     <>

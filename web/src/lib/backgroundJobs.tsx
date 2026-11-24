@@ -84,6 +84,8 @@ interface Jobs {
 const IDLE_GARMIN: GarminJob = { id: 0, running: false, log: [], done: 0, total: 0, result: null, error: null }
 const IDLE_APPLE: AppleJob = { id: 0, running: false, fileName: '', progress: null, summary: null, error: null }
 const IDLE_STRAVA: StravaJob = { id: 0, running: false, label: '', progress: null, summary: null, error: null }
+// Results of a sync or import stay on screen until closed, so they can't be missed
+const STAY = null
 const MAX_LOG_LINES = 50
 // .fit files are parsed on the server; a few at a time keeps a big batch from flooding it
 const UPLOAD_CONCURRENCY = 3
@@ -165,7 +167,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             } else if (message.type === 'error') {
               const error = String(message.message)
               setGarmin((job) => ({ ...job, error }))
-              notify(error, 'error', 8000)
+              notify(error, 'error', STAY)
             }
           })
           if (result) {
@@ -173,13 +175,14 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             notify(
               `Garmin sync complete: ${r.imported} imported${r.errors.length ? `, ${r.errors.length} failed` : ''}`,
               r.errors.length ? 'warning' : 'success',
+              STAY,
             )
             imported(r.imported)
           }
         } catch (error) {
           const message = (error as Error).message
           setGarmin((job) => ({ ...job, error: message }))
-          notify(message, 'error', 8000)
+          notify(message, 'error', STAY)
         } finally {
           garminRunning.current = false
           setGarmin((job) => ({ ...job, running: false }))
@@ -213,13 +216,17 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             onProgress: (progress) => setApple((job) => ({ ...job, progress })),
           })
           setApple((job) => ({ ...job, summary }))
-          notify(`Apple Health import complete: ${summary.imported} imported`, 'success')
+          notify(
+            `Apple Health import complete: ${summary.imported} imported${summary.errors.length ? `, ${summary.errors.length} failed` : ''}`,
+            summary.errors.length ? 'warning' : 'success',
+            STAY,
+          )
           imported(summary.imported)
         } catch (error) {
           const cancelled = (error as Error).name === 'AbortError'
           const message = cancelled ? 'Import cancelled' : (error as Error).message
           setApple((job) => ({ ...job, error: cancelled ? null : message }))
-          notify(message, cancelled ? 'info' : 'error', cancelled ? 5000 : 8000)
+          notify(message, cancelled ? 'info' : 'error', cancelled ? 5000 : STAY)
         } finally {
           appleAbort.current = null
           setApple((job) => ({ ...job, running: false, progress: null }))
@@ -261,13 +268,14 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
           notify(
             `Strava import complete: ${summary.imported} imported${summary.errors.length ? `, ${summary.errors.length} failed` : ''}`,
             summary.errors.length ? 'warning' : 'success',
+            STAY,
           )
           imported(summary.imported)
         } catch (error) {
           const cancelled = (error as Error).name === 'AbortError'
           const message = cancelled ? 'Import cancelled' : (error as Error).message
           setStrava((job) => ({ ...job, error: cancelled ? null : message }))
-          notify(message, cancelled ? 'info' : 'error', cancelled ? 5000 : 8000)
+          notify(message, cancelled ? 'info' : 'error', cancelled ? 5000 : STAY)
         } finally {
           stravaAbort.current = null
           setStrava((job) => ({ ...job, running: false, progress: null }))
@@ -310,6 +318,7 @@ export function BackgroundJobsProvider({ children }: { children: ReactNode }) {
             notify(
               `Upload complete: ${done} ${done === 1 ? 'activity' : 'activities'} imported${failed ? `, ${failed} failed` : ''}`,
               failed ? 'warning' : 'success',
+              STAY,
             )
             imported(done)
           } else {

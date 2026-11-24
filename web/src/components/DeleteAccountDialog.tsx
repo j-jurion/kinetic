@@ -50,7 +50,7 @@ export function DeleteAccountDialog({ open, onClose, onDeleted }: { open: boolea
             helperText={error || 'Enter your password to confirm.'}
           />
           <div className="row items-center justify-end gap-2">
-            <Button onClick={close} disabled={busy}>
+            <Button color="inherit" onClick={close} disabled={busy}>
               Cancel
             </Button>
             <Button

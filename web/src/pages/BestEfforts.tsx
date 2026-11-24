@@ -24,6 +24,7 @@ import { PowerSection } from '../components/performance/PowerSection'
 import { RacePredictor } from '../components/performance/RacePredictor'
 import { RecordTimeline } from '../components/performance/RecordTimeline'
 import '../styles/trophy.css'
+import { PageLoading } from '../components/PageLoading'
 
 interface TileProps {
   title: string
@@ -132,6 +133,7 @@ export function BestEffortsPage() {
         </div>
       </div>
 
+      {!overview && <PageLoading />}
       {overview && (
         <div className="column w-full gap-4">
           <div className="w-full trophy-grid">

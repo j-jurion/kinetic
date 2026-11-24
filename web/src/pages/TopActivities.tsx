@@ -9,6 +9,7 @@ import type { ActivityRow } from '@kinetic/shared/types'
 import { useFilters } from '../lib/useFilters'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { DataTable } from '../components/DataTable'
+import { PageLoading } from '../components/PageLoading'
 import { EmptyCard, SportSelect, StatTile, YearSelect } from '../components/fields'
 import { Icon, Medal, MultisportMarker } from '../components/icons'
 import { RankingToolbar, YearBestDate } from '../components/RankingParts'
@@ -55,6 +56,7 @@ export function TopActivitiesPage() {
         <YearSelect value={year} onChange={setYear} />
       </RankingToolbar>
 
+      {activities === null && <PageLoading />}
       {activities && activities.length === 0 && (
         <EmptyCard icon={config.icon}>
           No {sportLabel(sport || ALL_RUNNING).toLowerCase()} activities with {metric} data yet.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Button, CircularProgress, IconButton } from '@mui/material'
+import { Button, IconButton } from '@mui/material'
 import { hours, km, totals } from '@kinetic/shared/activityList'
 import { formatDate, sportLabel } from '@kinetic/shared/format'
 import { accountLabel, sportCounts } from '@kinetic/shared/friends'
@@ -12,6 +12,7 @@ import { FriendAvatar } from '../components/FriendAvatar'
 import { EditFriendDialog, FindFriendsDialog, RemoveFriendDialog } from '../components/FriendDialogs'
 import { Icon, SportIcon } from '../components/icons'
 import { SectionHeading } from '../components/PageHeader'
+import { PageLoading } from '../components/PageLoading'
 
 /**
  * One friend: the activities you did together and what they add up to. Only your own log is
@@ -43,7 +44,7 @@ export function FriendDetailPage() {
   const first = activities?.length ? activities[activities.length - 1].date : null
 
   if (missing) return <EmptyCard icon="person_off">This friend no longer exists.</EmptyCard>
-  if (!friend) return <CircularProgress size={28} sx={{ alignSelf: 'center' }} />
+  if (!friend) return <PageLoading />
 
   return (
     <>

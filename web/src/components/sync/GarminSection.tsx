@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  Alert,
   Button,
   CircularProgress,
   Dialog,
@@ -247,6 +248,12 @@ export function GarminSection({ status, refreshStatus }: { status: GarminStatus;
             </div>
           )}
 
+          {garmin.error && !syncing && (
+            <Alert severity="error" variant="outlined" className="w-full">
+              Sync failed: {garmin.error}
+            </Alert>
+          )}
+
           {result && (
             <div className="column w-full gap-2">
               <span className="card-label">Sync complete</span>
@@ -285,7 +292,7 @@ export function GarminSection({ status, refreshStatus }: { status: GarminStatus;
             slotProps={{ htmlInput: { maxLength: 8 } }}
           />
           <div className="row gap-2 q-mt-md">
-            <Button onClick={() => setMfaOpen(false)}>Cancel</Button>
+            <Button color="inherit" onClick={() => setMfaOpen(false)}>Cancel</Button>
             <Button variant="contained" onClick={submitMfa}>
               Submit
             </Button>
