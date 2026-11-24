@@ -287,14 +287,32 @@ def _fit_start_and_sport(content: bytes) -> tuple[Optional[datetime], SportType]
     return None, SportType.other
 
 
+def parse_moment(value: Optional[str]) -> Optional[datetime]:
+    """An ISO 8601 moment as naive UTC (naive input counts as UTC); None for empty input."""
+    if not value or not value.strip():
+        return None
+    return _naive_utc(datetime.fromisoformat(value.strip().replace("Z", "+00:00")))
+
+
+def _naive_utc(moment: datetime) -> datetime:
+    if moment.tzinfo is not None:
+        moment = moment.astimezone(timezone.utc).replace(tzinfo=None)
+    return moment
+
+
 def import_file(
     filename: str,
     content: bytes,
     name: Optional[str] = None,
     activity_type: Optional[str] = None,
     description: Optional[str] = None,
+    window: tuple[Optional[datetime], Optional[datetime]] = (None, None),
 ) -> dict[str, Any]:
-    """Import one Strava activity file; ``{"status": "imported"|"skipped", "id": ...}``."""
+    """Import one Strava activity file; ``{"status": "imported"|"skipped", "id": ...}``.
+
+    ``window`` is an optional (since, until) range in naive UTC; a file that starts before
+    ``since`` or at/after ``until`` is skipped. A file without a start time is imported.
+    """
     from app.garmin_sync import import_fit_bytes
 
     kind, data = decompress(filename, content)
@@ -308,6 +326,12 @@ def import_file(
         start, sport = workout.start, workout.sport_type
         fit_bytes = apple_health.to_fit(workout)
 
+    since, until = window
+    if start is not None and (
+        (since is not None and _naive_utc(start) < since)
+        or (until is not None and _naive_utc(start) >= until)
+    ):
+        return {"status": "skipped", "id": None}
     if start is not None and apple_health.activity_exists_near(start, sport):
         return {"status": "skipped", "id": None}
 

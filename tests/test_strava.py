@@ -167,6 +167,21 @@ class ImportTests(unittest.TestCase):
         (activity,) = self.activities()
         self.assertEqual((activity.name, activity.sport), ("Zwift", SportType.cycling))
 
+    def test_files_outside_the_date_window_are_skipped(self):
+        data, fit = gpx(), apple_health.to_fit(strava.parse_tcx(tcx()))
+        later = (strava.parse_moment("2023-05-15T00:00:00Z"), None)
+        earlier = (None, strava.parse_moment("2023-05-14T07:30:00+00:00"))
+        for window in (later, earlier):
+            self.assertEqual(strava.import_file("1.gpx", data, window=window)["status"], "skipped")
+            self.assertEqual(strava.import_file("2.fit", fit, window=window)["status"], "skipped")
+        self.assertEqual(self.activities(), [])
+
+        inside = (
+            strava.parse_moment("2023-05-14T00:00:00"),
+            strava.parse_moment("2023-05-15T00:00:00Z"),
+        )
+        self.assertEqual(strava.import_file("1.gpx", data, window=inside)["status"], "imported")
+
 
 if __name__ == "__main__":
     unittest.main()

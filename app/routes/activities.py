@@ -303,20 +303,27 @@ async def import_activity_file(
     name: Optional[str] = Form(None),
     activity_type: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    since: Optional[str] = Form(None),
+    until: Optional[str] = Form(None),
 ) -> dict:
     """One activity file from a Strava export (or any .fit/.gpx/.tcx, optionally gzipped).
 
     The name, type and description come from the export's activities.csv. Returns
     ``{"status": "imported", "activity": {...}}`` or ``{"status": "skipped"}`` when an
-    activity of the same sport already starts within a minute of it.
+    activity of the same sport already starts within a minute of it, or when it starts
+    before ``since`` or at/after ``until`` (ISO 8601 moments, both optional).
     """
     filename = file.filename or ""
+    try:
+        window = (strava.parse_moment(since), strava.parse_moment(until))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid since/until date") from None
     content = await file.read(strava.MAX_FILE_BYTES + 1)
     if len(content) > strava.MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="File is too large")
     try:
         result = await run_in_thread(
-            strava.import_file, filename, content, name, activity_type, description
+            strava.import_file, filename, content, name, activity_type, description, window
         )
     except Exception as exc:
         message = public_message(exc, "it is not a readable activity", "File import failed")

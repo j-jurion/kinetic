@@ -13,7 +13,9 @@ import {
   markYearBests,
   ordinal,
   parseDate,
+  inDateRange,
   parseDateInput,
+  parseDateRange,
   resolveSports,
   sportColor,
   sportLabel,
@@ -165,5 +167,23 @@ describe('small helpers', () => {
     expect(filteredUrl('/best-efforts')).toBe('/best-efforts')
     expect(filteredUrl('/best-efforts', 'running', 2026)).toBe('/best-efforts?sport=running&year=2026')
     expect(filteredUrl('/x', null, 2026)).toBe('/x?year=2026')
+  })
+})
+
+describe('date ranges', () => {
+  it('covers whole local days, both inclusive', () => {
+    const range = parseDateRange('01-03-2025', '31-03-2025')
+    expect(range).toEqual({ sinceMs: at(2025, 3, 1).getTime(), untilMs: at(2025, 4, 1).getTime() })
+    expect(inDateRange(at(2025, 3, 31, 23, 59).getTime(), range)).toBe(true)
+    expect(inDateRange(at(2025, 4, 1).getTime(), range)).toBe(false)
+    expect(inDateRange(at(2025, 2, 28, 23, 59).getTime(), range)).toBe(false)
+  })
+
+  it('leaves out empty bounds and rejects bad input', () => {
+    expect(parseDateRange('', ' ')).toEqual({ sinceMs: null, untilMs: null })
+    expect(inDateRange(0, parseDateRange('', ''))).toBe(true)
+    expect(parseDateRange('', '05-03-2025').sinceMs).toBeNull()
+    expect(() => parseDateRange('31-02-2025', '')).toThrow('Invalid date')
+    expect(() => parseDateRange('05-03-2025', '01-03-2025')).toThrow('before the start')
   })
 })

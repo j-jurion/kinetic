@@ -1,8 +1,11 @@
 import { useRef, useState } from 'react'
 import { Alert, Button, CircularProgress, LinearProgress } from '@mui/material'
+import { parseDateRange } from '@kinetic/shared/format'
 import { useBackgroundJobs, type StravaSource } from '../../lib/backgroundJobs'
+import { DateField } from '../DateField'
 import { Stat } from '../fields'
 import { Icon } from '../icons'
+import { useNotify } from '../Notify'
 
 function describe(source: StravaSource | null): string {
   if (!source) return 'No file chosen'
@@ -13,7 +16,10 @@ function describe(source: StravaSource | null): string {
 
 /** Strava: how to get the archive, and the bulk import of it (or of loose activity files). */
 export function StravaSection() {
+  const notify = useNotify()
   const [source, setSource] = useState<StravaSource | null>(null)
+  const [since, setSince] = useState('')
+  const [until, setUntil] = useState('')
   // The import runs in the background: it carries on when you leave this page
   const { strava, startStravaImport, cancelStravaImport } = useBackgroundJobs()
   const { progress, summary } = strava
@@ -22,7 +28,12 @@ export function StravaSection() {
 
   const runImport = () => {
     if (!source) return
-    startStravaImport(source)
+    try {
+      startStravaImport(source, parseDateRange(since, until))
+    } catch (error) {
+      notify((error as Error).message, 'error')
+      return
+    }
     setSource(null)
   }
 
@@ -116,6 +127,10 @@ export function StravaSection() {
           {importing && !source ? `Importing ${strava.label}` : describe(source)}
         </span>
         <span className="text-caption text-grey-6">.fit, .gpx and .tcx files, gzipped or not.</span>
+        <div className="row items-center gap-3 w-full">
+          <DateField label="From (optional)" value={since} onChange={setSince} />
+          <DateField label="Until (optional)" value={until} onChange={setUntil} />
+        </div>
         <div className="row items-center gap-3 w-full">
           <Button
             variant="contained"

@@ -2,6 +2,8 @@
 // (see zip.ts) and uploads files its own way; this module knows which files to send, what
 // activities.csv says about them, and runs the uploads a few at a time with progress.
 
+import { inDateRange, type DateRange } from './format'
+
 export interface ImportProgress {
   /** 0..1 */
   fraction: number
@@ -20,6 +22,8 @@ export interface StravaFileInfo {
   title?: string
   type?: string
   description?: string
+  /** Start time (epoch ms) from the "Activity Date" column, when it could be read. */
+  startMs?: number
 }
 
 /** The API's answer for one uploaded file (POST /activities/import-file). */
@@ -83,6 +87,7 @@ export function readActivitiesCsv(text: string): ActivitiesCsv {
   const title = column('activity name')
   const type = column('activity type')
   const description = column('activity description')
+  const date = column('activity date')
   if (file < 0) return byFile
   for (const row of rows) {
     const path = row[file]?.trim()
@@ -91,9 +96,43 @@ export function readActivitiesCsv(text: string): ActivitiesCsv {
       title: row[title]?.trim() || undefined,
       type: row[type]?.trim() || undefined,
       description: row[description]?.trim() || undefined,
+      startMs: parseStravaDate(row[date]),
     })
   }
   return byFile
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+
+/**
+ * activities.csv dates, in UTC: "Mar 18, 2025, 4:53:59 PM" (English exports; also without the
+ * comma before the time, or 24-hour). Parsed by hand because Hermes' Date.parse does not read
+ * them. Undefined when the format is not recognised.
+ */
+export function parseStravaDate(text: string | undefined): number | undefined {
+  const m = /^([A-Za-z]{3})[a-z]*\.? (\d{1,2}), (\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AP]M)?$/i.exec(text?.trim() ?? '')
+  if (!m) return undefined
+  const month = MONTHS.indexOf(m[1].toLowerCase())
+  if (month < 0) return undefined
+  let hour = Number(m[4])
+  if (m[7]) hour = (hour % 12) + (m[7].toUpperCase() === 'PM' ? 12 : 0)
+  return Date.UTC(Number(m[3]), month, Number(m[2]), hour, Number(m[5]), Number(m[6] ?? 0))
+}
+
+/**
+ * The activities that may fall in the range. Those without a known date are kept: the server
+ * checks the date in the file itself (see dateRangeFields).
+ */
+export function filterByDate<T extends { startMs?: number }>(activities: T[], range: DateRange): T[] {
+  return activities.filter((a) => a.startMs === undefined || inDateRange(a.startMs, range))
+}
+
+/** The form fields that make the server skip a file starting outside the range. */
+export function dateRangeFields(range: DateRange): [string, string][] {
+  const fields: [string, string][] = []
+  if (range.sinceMs !== null) fields.push(['since', new Date(range.sinceMs).toISOString()])
+  if (range.untilMs !== null) fields.push(['until', new Date(range.untilMs).toISOString()])
+  return fields
 }
 
 /** The CSV details of a zip entry; the export root may sit in a folder of the zip. */

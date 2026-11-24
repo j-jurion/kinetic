@@ -5,6 +5,8 @@
 
 import {
   csvInfoFor,
+  dateRangeFields,
+  filterByDate,
   fileName,
   isActivitiesCsv,
   isActivityFile,
@@ -16,6 +18,7 @@ import {
   type ImportSummary,
   type StravaFileInfo,
 } from '@kinetic/shared/stravaImport'
+import type { DateRange } from '@kinetic/shared/format'
 import { listZip, openEntry, readEntryText } from './zip'
 
 export type { ImportProgress as StravaProgress, ImportSummary as StravaSummary }
@@ -44,13 +47,14 @@ export function activitiesFromFiles(files: File[]): StravaActivity[] {
   return files.filter((f) => isActivityFile(f.name)).map((f) => ({ name: f.name, file: f }))
 }
 
-async function send(activity: StravaActivity, signal?: AbortSignal): Promise<ImportFileResult> {
+async function send(activity: StravaActivity, range: DateRange, signal?: AbortSignal): Promise<ImportFileResult> {
   const blob = typeof activity.file === 'function' ? await activity.file() : activity.file
   const form = new FormData()
   form.append('file', blob, activity.name)
   if (activity.title) form.append('name', activity.title)
   if (activity.type) form.append('activity_type', activity.type)
   if (activity.description) form.append('description', activity.description)
+  for (const [key, value] of dateRangeFields(range)) form.append(key, value)
   const response = await fetch('/api/activities/import-file', {
     method: 'POST',
     credentials: 'same-origin',
@@ -68,10 +72,15 @@ async function send(activity: StravaActivity, signal?: AbortSignal): Promise<Imp
   return (await response.json()) as ImportFileResult
 }
 
-/** Upload the activities a couple at a time; duplicates are skipped by the server. */
+/**
+ * Upload the activities a couple at a time; duplicates are skipped by the server. With a date
+ * range, activities that activities.csv dates outside it are not sent, and the server skips
+ * files whose own start falls outside it.
+ */
 export function importStravaActivities(
   activities: StravaActivity[],
-  options: { onProgress: (p: ImportProgress) => void; signal?: AbortSignal },
+  options: { range: DateRange; onProgress: (p: ImportProgress) => void; signal?: AbortSignal },
 ): Promise<ImportSummary> {
-  return runImports(activities, { ...options, send: (a) => send(a, options.signal) })
+  const { range, ...rest } = options
+  return runImports(filterByDate(activities, range), { ...rest, send: (a) => send(a, range, rest.signal) })
 }
