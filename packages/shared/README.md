@@ -43,3 +43,22 @@ plotly.js, the mobile app with the same plotly.js in a WebView, both after `them
 (`GRAPHS_PAGE`) with their controls, and both apps render the list in order, so adding,
 removing or reordering a chart there changes both apps. Other pages can be turned into such a
 registry the same way.
+
+## Tests
+
+The calculations and formatting here have unit tests in `test/`, run with
+[Vitest](https://vitest.dev):
+
+```bash
+cd packages/shared
+npm ci
+npm test            # once; `npm run test:watch` reruns on changes
+npm run typecheck   # type-checks the tests
+```
+
+`package.json` in this folder only holds that test tooling; the apps still import `src/`
+directly. Tests run in the `Europe/Brussels` time zone (set in `vitest.config.ts`), because API
+dates are read as local time and a zone with daylight saving time catches 23- and 25-hour-day
+bugs. `test/factories.ts` builds API objects with neutral defaults, so a test only names the
+fields it is about. CI runs them on every pull request and before every deploy
+(`.github/workflows/ci.yml`).

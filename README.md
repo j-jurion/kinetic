@@ -100,12 +100,14 @@ npm install
 npm run dev
 ```
 
-Run the same checks as CI before pushing (`uv sync` installs pytest and ruff):
+Run the same checks as CI before pushing (`uv sync` installs pytest and ruff; the last line
+runs the unit tests of the calculations shared by the web and mobile apps):
 
 ```bash
 uv run ruff check app tests run.py
 uv run pytest -q
 cd web && npm run lint && npm run build
+cd ../packages/shared && npm ci && npm test
 ```
 
 On PowerShell, set the variables for the API with:
