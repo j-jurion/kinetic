@@ -19,7 +19,7 @@ from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
 from app.friends import router as friends_router
-from app.repair import repair_single_leg_events
+from app.repair import repair_impossible_best_efforts, repair_single_leg_events
 from app.token_crypto import warn_if_unconfigured
 
 # Endpoints that stream progress as JSON lines while they work
@@ -49,6 +49,10 @@ async def lifespan(_app: FastAPI):
         repair_single_leg_events()
     except Exception:
         logger.exception("Repairing single-leg multisport events failed")
+    try:
+        repair_impossible_best_efforts()
+    except Exception:
+        logger.exception("Recomputing impossible best efforts failed")
     warn_if_unconfigured()
     yield
 

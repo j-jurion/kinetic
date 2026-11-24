@@ -34,6 +34,24 @@ SPORT_MAP: dict[str, SportType] = {
 _MAX_SWIM_SPEED_MS = 2.2
 # How far a measuring window may overshoot its target distance before it is unusable
 _MAX_OVERSHOOT = 0.05
+# A best effort faster than the world record over 1 km is a data artifact (running: 2:11.96,
+# 7.58 m/s; cycling: well above any 1 km time trial, even downhill)
+MAX_EFFORT_SPEED_MS: dict[SportType, float] = {
+    SportType.running: 7.6,
+    SportType.trail_running: 7.6,
+    SportType.cycling: 25.0,
+    SportType.swimming: _MAX_SWIM_SPEED_MS,
+}
+# In files Kinetic writes itself (Apple Health and Strava imports), distance comes from raw
+# GPS or batched samples. Faster than this between two points is a jump in that data, not
+# movement: a GPS fix that lands far away, or distance that arrives in one batch after a
+# pause. A watch's own distance is filtered on the watch; its catch-up after a GPS gap (tens
+# of metres in a second) is real distance and is kept.
+_MAX_STEP_SPEED_MS: dict[SportType, float] = {
+    SportType.running: 12.0,
+    SportType.trail_running: 12.0,
+    SportType.cycling: 35.0,
+}
 
 # FIT sub_sport values that refine the recorded sport
 SUB_SPORT_MAP: dict[tuple[str, str], SportType] = {
@@ -84,12 +102,15 @@ def parse_fit_file(
     length_records: list[dict] = []
     data_points: list[dict] = []
 
+    written_by_kinetic = False
     message: Any
     for message in fitfile.get_messages():
         msg_name = message.name
         record = {f.name: f for f in message.fields}
 
-        if msg_name == "session":
+        if msg_name == "file_id":
+            written_by_kinetic = _safe_val(record, "manufacturer") in ("development", 255)
+        elif msg_name == "session":
             sessions_data.append({k: _safe_val(record, k) for k in record})
         elif msg_name == "activity":
             atype = _safe_val(record, "type")
@@ -109,6 +130,12 @@ def parse_fit_file(
             length_records.append({k: _safe_val(record, k) for k in record})
         elif msg_name == "record":
             data_points.append({k: _safe_val(record, k) for k in record})
+
+    if written_by_kinetic and sessions_data:
+        main = _main_session(sessions_data)
+        cap = _MAX_STEP_SPEED_MS.get(resolve_sport(main.get("sport"), main.get("sub_sport")))
+        if cap is not None:
+            _remove_distance_jumps(data_points, cap)
 
     if _is_multisport(sessions_data, flagged=is_multisport):
         return _build_multisport(fit_path, sessions_data, lap_records, data_points)
@@ -416,6 +443,29 @@ def pool_swim_segments(
     return segments
 
 
+def _remove_distance_jumps(data_points: list[dict], max_speed: float) -> None:
+    """Let no step add more distance than ``max_speed`` covers in its time, in place.
+
+    What a jump added is taken off every later point, so the rest of the activity keeps its
+    own pace and a window across the jump measures only the running around it.
+    """
+    removed = 0.0
+    previous: Optional[tuple[float, float]] = None
+    for dp in data_points:
+        t, d = dp.get("timestamp"), dp.get("distance")
+        if t is None or d is None:
+            continue
+        ts = t.timestamp() if hasattr(t, "timestamp") else float(t)
+        raw = float(d)
+        if previous is not None:
+            step = raw - previous[1]
+            allowed = max_speed * max(ts - previous[0], 0.0)
+            if step > allowed:
+                removed += step - allowed
+        previous = (ts, raw)
+        dp["distance"] = raw - removed
+
+
 def best_efforts_from_segments(
     activity: Activity, segments: list[list[dict]]
 ) -> list[BestEffort]:
@@ -435,6 +485,8 @@ def _extract_best_efforts(activity: Activity, data_points: list[dict]) -> list[B
     A window that overshoots the target by more than `_MAX_OVERSHOOT` is skipped: its
     split time cannot be derived, which happens across data gaps and in pools whose
     length does not divide the target distance.
+
+    A window faster than the sport's record is dropped: it measured a jump in the data.
     """
     target_distances = BEST_EFFORT_DISTANCES.get(activity.sport, [])
     if not target_distances or not data_points:
@@ -457,8 +509,8 @@ def _extract_best_efforts(activity: Activity, data_points: list[dict]) -> list[B
         return []
 
     efforts: list[BestEffort] = []
-    # Open-water GPS drifts badly; reject windows no swimmer could have swum
-    max_speed = _MAX_SWIM_SPEED_MS if activity.sport == SportType.swimming else None
+    # Open-water GPS drifts badly, and data jumps on land; reject windows nobody could do
+    max_speed = MAX_EFFORT_SPEED_MS.get(activity.sport)
     for target_dist in target_distances:
         best_time: Optional[float] = None
         j = 0

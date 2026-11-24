@@ -6,6 +6,10 @@ profile): a "Multisport" activity with one leg, without laps or best efforts of 
 The parser no longer does that; this turns the events already imported into the normal
 activity they are. A real multisport event always has at least two legs, so nothing else
 is touched.
+
+Earlier versions also counted jumps in the distance data (a GPS fix far off, or distance
+that arrived in one batch after a pause) as covered ground, which gave best efforts such as
+1 km in 23 seconds. ``repair_impossible_best_efforts`` recomputes those from the FIT file.
 """
 
 import re
@@ -15,7 +19,7 @@ from sqlalchemy import func
 from sqlmodel import Session, col, select
 
 from app.database import engine
-from app.fit_parser import parse_fit_file
+from app.fit_parser import MAX_EFFORT_SPEED_MS, parse_fit_file
 from app.models import (
     Activity,
     ActivityFriend,
@@ -159,3 +163,72 @@ def repair_single_leg_events() -> int:
         finally:
             current_owner.reset(token)
     return len(repaired)
+
+
+def impossible_best_efforts(session: Session) -> list[BestEffort]:
+    """Every best effort, of all accounts, faster than its sport allows."""
+    rows: list[BestEffort] = []
+    for sport, speed in MAX_EFFORT_SPEED_MS.items():
+        rows.extend(
+            session.exec(
+                select(BestEffort).where(
+                    BestEffort.sport == sport,
+                    col(BestEffort.distance_meters) > col(BestEffort.duration_seconds) * speed,
+                )
+            ).all()
+        )
+    return rows
+
+
+def recompute_best_efforts(session: Session, activity: Activity) -> None:
+    """Replace the activity's best efforts with those its FIT file gives now.
+
+    Without a readable file (or for a multisport leg, whose file holds the whole event) only
+    the impossible efforts are removed, and the others are kept.
+    """
+    fresh = None
+    path = fit_path_for(activity.fit_file_path) if activity.parent_id is None else None
+    if path is not None:
+        try:
+            _parsed, _laps, efforts, children = parse_fit_file(path)
+            if not children:
+                fresh = efforts
+        except Exception:
+            logger.exception("Could not re-read the FIT file of activity {}", activity.id)
+
+    current = _rows(session, BestEffort, activity.id)
+    if fresh is None:
+        impossible = {row.id for row in impossible_best_efforts(session)}
+        for row in current:
+            if row.id in impossible:
+                session.delete(row)
+        return
+    for row in current:
+        session.delete(row)
+    session.flush()
+    for effort in fresh:
+        # The activity's own date: it may have been edited since the import
+        effort.activity_id = activity.id
+        effort.date = activity.date
+        effort.year = activity.date.year
+        session.add(effort)
+
+
+def repair_impossible_best_efforts() -> int:
+    """Recompute the best efforts of every activity with an impossible one; returns how many."""
+    with Session(engine) as session:
+        activity_ids = sorted({row.activity_id for row in impossible_best_efforts(session)})
+    for activity_id in activity_ids:
+        with Session(engine) as session:
+            activity = session.get(Activity, activity_id)
+            if activity is None:
+                continue
+            try:
+                recompute_best_efforts(session, activity)
+                session.commit()
+            except Exception:
+                session.rollback()
+                logger.exception("Could not recompute the best efforts of activity {}", activity_id)
+                continue
+        logger.info("Recomputed the best efforts of activity {}", activity_id)
+    return len(activity_ids)

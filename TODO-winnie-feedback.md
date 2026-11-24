@@ -21,7 +21,7 @@ Source: `Kinetic.pdf` (5 pages of notes with screenshots). Items are grouped by 
 - [ ] **Feature (nice to have)**: Click from a chart point to its activity, or to the activities in that period (for example to explain outliers).
 
 ## Best efforts
-- [ ] **Bug**: The 1 km best efforts are impossible: #1 is 0:23, #2 is 0:28 and #3 is 1:05. The activity profile shows GPS gaps across pauses (straight-line jumps in pace and elevation), so a pause gap gets counted as distance covered almost instantly. Fixes: skip segments that span a pause or timer stop, reject implausible speeds, and recompute the existing best efforts.
+- [x] **Bug**: The 1 km best efforts are impossible: #1 is 0:23, #2 is 0:28 and #3 is 1:05. The activity profile shows GPS gaps across pauses (straight-line jumps in pace and elevation), so a pause gap gets counted as distance covered almost instantly. Fixes: skip segments that span a pause or timer stop, reject implausible speeds, and recompute the existing best efforts.
 
 ## Friends
 - [ ] **Feature**: Detect activities done together automatically, or suggest them for the user to confirm, based on the same location/route and start time.
