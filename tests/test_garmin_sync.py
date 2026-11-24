@@ -1,4 +1,5 @@
 import io
+import os
 import tempfile
 import unittest
 import uuid
@@ -7,12 +8,13 @@ from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
 from garminconnect import GarminConnectAuthenticationError, GarminConnectTooManyRequestsError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app import garmin_sync, metrics
+from app import garmin_sync, metrics, token_crypto
 from app.models import Activity
 from app.ownership import current_owner
 
@@ -36,6 +38,11 @@ class FakeGarmin:
 
     class ActivityDownloadFormat:
         ORIGINAL = "original"
+
+    class client:  # noqa: N801  (mirrors garminconnect's attribute name)
+        @staticmethod
+        def dumps():
+            return '{"refreshed": true}'
 
     def __init__(self, ids, failures=None):
         self.ids = ids
@@ -63,8 +70,11 @@ class GarminTestCase(unittest.TestCase):
         workdir = tempfile.TemporaryDirectory()
         self.addCleanup(workdir.cleanup)
         root = Path(workdir.name)
+        self.root = root
         self.uploads = root / "uploads"
+        self.key = Fernet.generate_key().decode()
         for patcher in (
+            patch.dict(os.environ, {token_crypto.KEY_ENV: self.key}),
             patch.object(garmin_sync, "engine", self.engine),
             patch.object(metrics, "engine", self.engine),
             patch.object(garmin_sync, "TOKEN_ROOT", root / "tokens"),
@@ -117,7 +127,7 @@ class GarminSyncIsolationTests(GarminTestCase):
         self.as_owner(ALICE)
         garmin_sync._running_syncs.add(ALICE)
         self.addCleanup(garmin_sync._running_syncs.discard, ALICE)
-        with self.assertRaisesRegex(RuntimeError, "already running"):
+        with self.assertRaisesRegex(garmin_sync.GarminError, "already running"):
             garmin_sync.sync_garmin_activities(datetime(2026, 1, 1).date())
 
 
@@ -177,7 +187,7 @@ class GarminSyncRunTests(GarminTestCase):
             raise GarminConnectAuthenticationError("401")
 
         with patch.object(garmin_sync, "login_with_tokens", rejected):
-            with self.assertRaisesRegex(RuntimeError, "sign in again"):
+            with self.assertRaisesRegex(garmin_sync.GarminError, "sign in again"):
                 garmin_sync.sync_garmin_activities(date(2026, 1, 1))
         self.assertFalse(garmin_sync.tokens_exist())
 
@@ -197,6 +207,79 @@ class GarminSyncRunTests(GarminTestCase):
             result = self.sync(garmin)
         self.assertEqual(garmin.downloads, [7])
         self.assertEqual((result["imported"], result["skipped"], result["errors"]), (0, 1, []))
+
+
+
+class GarminTokenEncryptionTests(GarminTestCase):
+    def account_files(self):
+        return {p.name: p.read_bytes() for p in garmin_sync._token_dir().iterdir()}
+
+    def test_tokens_and_email_are_encrypted_on_disk(self):
+        self.as_owner(ALICE)
+        garmin_sync.save_tokens(FakeGarmin([]))
+        garmin_sync.save_email("alice@garmin.example")
+        files = self.account_files()
+        self.assertEqual(sorted(files), ["garmin_email.enc", "garmin_tokens.enc"])
+        for content in files.values():
+            self.assertNotIn(b"alice", content)
+            self.assertNotIn(b"refreshed", content)
+        self.assertEqual(garmin_sync.load_tokens(), '{"refreshed": true}')
+        self.assertEqual(garmin_sync.saved_email(), "alice@garmin.example")
+        for path in garmin_sync._token_dir().iterdir():
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_plain_text_files_of_earlier_versions_are_encrypted(self):
+        self.as_owner(ALICE)
+        directory = garmin_sync._token_dir()
+        (directory / "garmin_tokens.json").write_text('{"old": 1}')
+        (directory / "garmin_email").write_text("alice@garmin.example")
+        self.assertTrue(garmin_sync.tokens_exist())
+        self.assertEqual(garmin_sync.saved_email(), "alice@garmin.example")
+        self.assertEqual(sorted(self.account_files()), ["garmin_email.enc", "garmin_tokens.enc"])
+        self.assertEqual(garmin_sync.load_tokens(), '{"old": 1}')
+
+    def test_without_a_key_garmin_is_refused_and_plain_text_is_kept(self):
+        self.as_owner(ALICE)
+        (garmin_sync._token_dir() / "garmin_tokens.json").write_text("{}")
+        with patch.dict(os.environ, {token_crypto.KEY_ENV: "", "KINETIC_ALLOW_INSECURE_HTTP": ""}):
+            self.assertTrue(garmin_sync.tokens_exist())
+            self.assertEqual(garmin_sync.saved_email(), "")
+            with self.assertRaisesRegex(token_crypto.TokenKeyError, "not configured"):
+                garmin_sync.save_email("alice@garmin.example")
+        self.assertEqual(sorted(self.account_files()), ["garmin_tokens.json"])
+
+    def test_tokens_from_another_key_ask_to_sign_in_again(self):
+        self.as_owner(ALICE)
+        garmin_sync.save_tokens(FakeGarmin([]))
+        with patch.dict(os.environ, {token_crypto.KEY_ENV: Fernet.generate_key().decode()}):
+            with self.assertRaisesRegex(garmin_sync.GarminError, "sign in again"):
+                garmin_sync.load_tokens()
+        self.assertFalse(garmin_sync.tokens_exist())
+
+    def test_keys_can_be_rotated(self):
+        self.as_owner(ALICE)
+        garmin_sync.save_tokens(FakeGarmin([]))
+        rotated = f"{Fernet.generate_key().decode()},{self.key}"
+        with patch.dict(os.environ, {token_crypto.KEY_ENV: rotated}):
+            self.assertEqual(garmin_sync.load_tokens(), '{"refreshed": true}')
+
+    def test_sync_stores_refreshed_tokens(self):
+        self.as_owner(ALICE)
+        garmin_sync.save_email("alice@garmin.example")
+        (garmin_sync._token_dir() / "garmin_tokens.json").write_text('{"old": 1}')
+        with patch.object(garmin_sync, "login_with_tokens", lambda: FakeGarmin([])):
+            garmin_sync.sync_garmin_activities(date(2026, 1, 1), date(2026, 1, 31))
+        self.assertEqual(garmin_sync.load_tokens(), '{"refreshed": true}')
+
+    def test_forget_account_removes_its_files_only(self):
+        self.as_owner(ALICE)
+        garmin_sync.save_email("alice@garmin.example")
+        self.as_owner(BOB)
+        garmin_sync.save_email("bob@garmin.example")
+        garmin_sync.forget_account(ALICE)
+        self.assertEqual(garmin_sync.saved_email(), "bob@garmin.example")
+        self.as_owner(ALICE)
+        self.assertEqual(garmin_sync.saved_email(), "")
 
 
 if __name__ == "__main__":

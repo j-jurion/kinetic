@@ -15,11 +15,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from loguru import logger
 from sqlmodel import col, select
 
 from app import fit_writer
 from app.database import engine
+from app.errors import UserError, public_message
 from app.models import Activity, SportType
 from app.ownership import UserSession as Session
 
@@ -35,7 +35,7 @@ _MAX_GAP_SECONDS = 120.0
 _FAMILIES = {SportType.trail_running: SportType.running}
 
 
-class WorkoutError(ValueError):
+class WorkoutError(UserError):
     """A workout that cannot be converted."""
 
 
@@ -583,9 +583,11 @@ def import_workouts(items: Any) -> dict:
                 continue
             result["imported"].append(import_fit_bytes(to_fit(workout)))
         except Exception as exc:  # one bad workout must not stop the rest
-            logger.warning("Apple Health workout {} not imported: {}", index, exc)
             label = item.get("name") if isinstance(item, dict) else None
-            result["errors"].append({"index": index, "name": label, "error": str(exc)[:200]})
+            message = public_message(
+                exc, "Could not import this workout", f"Apple Health workout {index} not imported"
+            )
+            result["errors"].append({"index": index, "name": label, "error": message[:200]})
     return result
 
 

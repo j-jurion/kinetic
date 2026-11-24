@@ -22,6 +22,7 @@ from sqlmodel import col, select
 
 from app import apple_health, auth, garmin_sync, metrics, strava, streams
 from app.database import engine, require_id
+from app.errors import public_message
 from app.formatting import SPORTS, resolve_sports
 from app.friends import friend_rows
 from app.models import (
@@ -280,7 +281,8 @@ async def upload_fit(file: UploadFile) -> dict:
     try:
         activity_id = await _run_in_thread(garmin_sync.import_fit_bytes, content)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not import file: {exc}") from None
+        message = public_message(exc, "it is not a readable FIT activity", "FIT upload failed")
+        raise HTTPException(status_code=400, detail=f"Could not import file: {message}") from None
     return get_activity(activity_id)
 
 
@@ -306,7 +308,8 @@ async def import_activity_file(
             strava.import_file, filename, content, name, activity_type, description
         )
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Could not import file: {exc}") from None
+        message = public_message(exc, "it is not a readable activity", "File import failed")
+        raise HTTPException(status_code=400, detail=f"Could not import file: {message}") from None
     if result["status"] == "skipped":
         return {"status": "skipped"}
     return {"status": "imported", "activity": get_activity(result["id"])}
@@ -888,8 +891,8 @@ def analyse_activities() -> StreamingResponse:
             )
             messages.put({"type": "result", **result})
         except Exception as exc:
-            logger.exception("Analysing activities failed")
-            messages.put({"type": "error", "message": str(exc)})
+            message = public_message(exc, "Analysing the activities failed", "Analysing failed")
+            messages.put({"type": "error", "message": message})
         finally:
             messages.put(None)
 
@@ -949,6 +952,11 @@ def garmin_status() -> dict:
     }
 
 
+def forget_pending_mfa(owner_id: str) -> None:
+    with _pending_lock:
+        _pending_mfa.pop(owner_id, None)
+
+
 @router.post("/garmin/login")
 def garmin_login(data: GarminLogin) -> dict:
     email = data.email.strip()
@@ -957,7 +965,8 @@ def garmin_login(data: GarminLogin) -> dict:
     try:
         result = garmin_sync.attempt_login(email, data.password)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from None
+        message = public_message(exc, "Could not sign in to Garmin Connect", "Garmin login failed")
+        raise HTTPException(status_code=400, detail=message) from None
     if result.get("needs_mfa"):
         with _pending_lock:
             _pending_mfa[_owner()] = (result["_client"], result["_state"], email, time.time())
@@ -976,7 +985,8 @@ def garmin_mfa(data: GarminMfa) -> dict:
     try:
         garmin_sync.complete_mfa(client, state, data.code.strip())
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"MFA failed: {exc}") from None
+        message = public_message(exc, "the code was not accepted", "Garmin MFA failed")
+        raise HTTPException(status_code=400, detail=f"MFA failed: {message}") from None
     garmin_sync.save_email(email)
     return {"ok": True}
 
@@ -1012,7 +1022,8 @@ def garmin_sync_activities(data: GarminSyncRequest) -> StreamingResponse:
             )
             messages.put({"type": "result", **result})
         except Exception as exc:
-            messages.put({"type": "error", "message": str(exc)})
+            message = public_message(exc, "The Garmin sync failed", "Garmin sync failed")
+            messages.put({"type": "error", "message": message})
         finally:
             messages.put(None)
 
