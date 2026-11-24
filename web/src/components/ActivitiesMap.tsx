@@ -259,5 +259,12 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
     }
   }, [routes])
 
-  return <div ref={ref} style={{ width: '100%', height: '100%', position: 'relative' }} />
+  return (
+    <div
+      ref={ref}
+      role="region"
+      aria-label="Map of all activities; the activities are also listed on the Activities page"
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    />
+  )
 }

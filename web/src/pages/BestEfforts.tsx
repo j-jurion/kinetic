@@ -94,7 +94,7 @@ export function BestEffortsPage() {
         <div className="row w-full items-center justify-between no-wrap gap-4">
           <div className="column gap-2 trophy-hero-content trophy-hero-copy">
             <div className="trophy-kicker">YOUR PERSONAL RECORDS</div>
-            <div className="text-h3 text-weight-bold trophy-hero-title">Your trophy case</div>
+            <h1 className="text-h3 text-weight-bold trophy-hero-title q-ma-none">Your trophy case</h1>
             <div className="text-body1 trophy-hero-subtitle">Every distance. Every climb. Your best, celebrated.</div>
           </div>
           <Icon name="emoji_events" size={76} className="trophy-hero-icon trophy-hero-content trophy-hero-art" />

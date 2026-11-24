@@ -5,6 +5,9 @@
   --primary: #f97316;
   --primary-strong: #ea580c;
   --primary-soft: rgba(249, 115, 22, .1);
+  /* Text in the brand and positive colours: darker in light mode for 4.5:1 contrast */
+  --primary-text: #b93d0a;
+  --positive-text: #15803d;
   --secondary: #3b82f6;
   --negative: #c10015;
   --positive: #16a34a;
@@ -12,7 +15,7 @@
   --surface: #ffffff;
   --surface-2: #f8f9fb;
   --text: #111827;
-  --text-muted: #6b7280;
+  --text-muted: #636b77;
   --border: rgba(15, 23, 42, 0.1);
   --card-border: rgba(15, 23, 42, 0.07);
   --header-border: rgba(15, 23, 42, 0.07);
@@ -34,6 +37,8 @@
 html.dark,
 body.body--dark {
   --primary-soft: rgba(249, 115, 22, .14);
+  --primary-text: #fb923c;
+  --positive-text: var(--positive);
   --positive: #4ade80;
   --page-bg: #0f1115;
   --surface: #171a21;
@@ -123,6 +128,7 @@ a { color: inherit; }
 .q-mb-xs { margin-bottom: 4px; }
 .q-mb-sm { margin-bottom: 8px; }
 .q-mb-md { margin-bottom: 16px; }
+.q-ma-none { margin: 0; }
 .q-ml-xs { margin-left: 4px; }
 .q-ml-sm { margin-left: 8px; }
 .q-my-sm { margin-top: 8px; margin-bottom: 8px; }
@@ -142,8 +148,8 @@ a { color: inherit; }
 .text-grey-5 { color: var(--grey-5); }
 .text-grey-6 { color: var(--grey-6); }
 .text-grey-7 { color: var(--grey-7); }
-.text-primary { color: var(--primary); }
-.text-positive { color: var(--positive); }
+.text-primary { color: var(--primary-text); }
+.text-positive { color: var(--positive-text); }
 .text-negative { color: var(--negative); }
 .text-amber { color: #f59e0b; }
 
@@ -197,7 +203,7 @@ a { color: inherit; }
   transition: background .15s ease, color .15s ease;
 }
 .nav-item:hover { background: var(--hover); color: var(--text); }
-.nav-item.active { color: var(--primary-strong); background: var(--primary-soft); font-weight: 600; }
+.nav-item.active { color: var(--primary-text); background: var(--primary-soft); font-weight: 600; }
 .body--dark .nav-item.active { color: #fdba74; }
 .nav-item.active::before {
   content: ""; position: absolute; left: -12px; top: 9px; bottom: 9px; width: 3px;
@@ -239,8 +245,14 @@ a { color: inherit; }
 .data-table th:last-child { border-top-right-radius: 10px; }
 .data-table th.sortable { cursor: pointer; }
 .data-table th.sortable:hover { color: var(--text); }
+.data-table .sort-button {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 2px;
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+}
+.data-table .sort-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; border-radius: 4px; }
 .data-table th .sort-icon { font-size: 16px; vertical-align: middle; opacity: 0; transition: opacity .2s; }
-.data-table th.sortable:hover .sort-icon, .data-table th.sorted .sort-icon { opacity: 1; }
+.data-table th.sortable:hover .sort-icon, .data-table th.sorted .sort-icon,
+.data-table .sort-button:focus-visible .sort-icon { opacity: 1; }
 .data-table td { padding: 8px 10px; height: 38px; border-bottom: 1px solid var(--card-border); font-variant-numeric: tabular-nums; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table tbody tr:hover td { background: var(--hover); }
@@ -265,7 +277,7 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 /* ── Page helpers ──────────────────────────────────────────────────────── */
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 1rem; align-items: start; }
 .dashboard-panel { gap: .75rem; }
-.dashboard-more { display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; font-weight: 600; color: var(--primary); text-decoration: none; white-space: nowrap; }
+.dashboard-more { display: inline-flex; align-items: center; gap: 2px; font-size: .8rem; font-weight: 600; color: var(--primary-text); text-decoration: none; white-space: nowrap; }
 .dashboard-more:hover { text-decoration: underline; }
 .dashboard-panel .activity-row { box-shadow: none; }
 .dashboard-record { padding: 8px 6px; border-radius: 10px; }
@@ -448,7 +460,7 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
   display: inline-flex; align-items: center; gap: 4px;
   font-size: .78rem; color: var(--grey-6);
 }
-.friend-account--linked { color: var(--primary-strong); font-weight: 600; }
+.friend-account--linked { color: var(--primary-text); font-weight: 600; }
 .body--dark .friend-account--linked { color: #fdba74; }
 .friend-count-badge, .nav-badge {
   display: inline-grid; place-items: center;
@@ -472,8 +484,8 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
   border: 1px solid var(--card-border); background: var(--surface-2);
   font-size: .78rem; font-weight: 600; white-space: nowrap;
 }
-.sync-status--running { color: var(--primary); }
-.sync-status--done { color: var(--positive); }
+.sync-status--running { color: var(--primary-text); }
+.sync-status--done { color: var(--positive-text); }
 .sync-status--error { color: var(--negative); }
 .sync-status-button {
   display: inline-flex; align-items: center; gap: 6px;
@@ -608,3 +620,30 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 .copy-field code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .text-warning { color: #b45309; }
 .body--dark .text-warning { color: #fbbf24; }
+
+/* Read by screen readers, not shown */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* "Skip to content": the first stop for keyboard users, shown only while focused */
+.skip-link {
+  position: fixed; top: 8px; left: 8px; z-index: 3000;
+  padding: 8px 14px; border-radius: 8px;
+  background: var(--surface); color: var(--text); font-weight: 600; text-decoration: none;
+  box-shadow: var(--card-shadow-hover);
+  transform: translateY(-200%);
+}
+.skip-link:focus { transform: none; outline: 2px solid var(--primary); outline-offset: 2px; }
+.app-main:focus { outline: none; }
+
+/* Fewer animations for people who ask their system for that */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -76,6 +76,7 @@
     box-shadow: 0 16px 30px rgba(75, 54, 23, .15);
     outline: none;
 }
+.trophy-tile:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .trophy-tile-heading {
     width: calc(100% + 32px);
     margin: -16px -16px 8px;
@@ -124,7 +125,7 @@
 .trophy-tile .separator { background: rgba(133, 101, 53, .14); }
 .trophy-tile-footer { margin-top: auto; padding-top: 8px; }
 .trophy-activity { color: #322719; font-weight: 650; }
-.trophy-date { color: #82776a; }
+.trophy-date { color: #6b5d4f; }
 .trophy-summary {
     border: 1px solid rgba(120, 130, 145, .14);
     background: linear-gradient(135deg, rgba(255,255,255,.94), rgba(247,248,250,.94));
@@ -143,7 +144,7 @@
 }
 .trophy-filter .MuiOutlinedInput-notchedOutline { border-color: rgba(168, 120, 38, .25); }
 .trophy-filter .Mui-focused .MuiOutlinedInput-notchedOutline { border-color: #a87826 !important; }
-.trophy-filter .MuiInputLabel-root { color: #82776a; }
+.trophy-filter .MuiInputLabel-root { color: #6b5d4f; }
 .trophy-filter .MuiInputLabel-root.Mui-focused { color: #a87826; }
 .trophy-filter .MuiSelect-select { font-weight: 600; }
 .trophy-filter .field-prepend, .trophy-filter .MuiSelect-icon { color: #a87826; }
@@ -217,6 +218,7 @@
 }
 .perf-pr-row:first-child { border-top: none; }
 .perf-pr-row:hover, .perf-pr-row:focus-visible { background: rgba(226, 183, 94, .12); outline: none; }
+.perf-pr-row:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .perf-pr-date { width: 78px; flex-shrink: 0; }
 .perf-pr-time { color: #7e4a18; min-width: 64px; flex-shrink: 0; }
 .perf-improvement {

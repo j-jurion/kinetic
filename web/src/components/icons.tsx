@@ -19,6 +19,7 @@ export function Icon({ name, size = 24, color, className, style, title, onClick 
       className={`material-icons ${className ?? ''}`}
       style={{ fontSize: size, color, lineHeight: 1, userSelect: 'none', ...style }}
       aria-hidden={title ? undefined : true}
+      role={title ? 'img' : undefined}
       aria-label={title}
       onClick={onClick}
     >
@@ -88,7 +89,7 @@ export function MultisportMarker({ parentSport }: { parentSport?: string | null 
   if (!parentSport) return null
   return (
     <Tooltip title={sportLabel(parentSport)}>
-      <span style={{ display: 'inline-flex', marginLeft: 8, verticalAlign: 'middle' }}>
+      <span role="img" style={{ display: 'inline-flex', marginLeft: 8, verticalAlign: 'middle' }}>
         <SportIcon sport={parentSport} size={20} />
       </span>
     </Tooltip>
@@ -100,9 +101,9 @@ export function Medal({ rank, size = 22, tooltip }: { rank: number; size?: numbe
   const color = MEDAL_COLORS[rank]
   if (!color) return null
   return (
-    <Tooltip title={tooltip ?? MEDAL_LABELS[rank]}>
-      <span style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
-        <Icon name="military_tech" size={size} color={color} title={`${MEDAL_LABELS[rank]} place medal`} />
+    <Tooltip title={tooltip ?? `${MEDAL_LABELS[rank]} place medal`}>
+      <span role="img" style={{ display: 'inline-flex', verticalAlign: 'middle' }}>
+        <Icon name="military_tech" size={size} color={color} />
       </span>
     </Tooltip>
   )
