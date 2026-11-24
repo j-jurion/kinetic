@@ -178,3 +178,23 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
     for index in range(rate_limit.REGISTRATIONS_PER_IP):
         assert register(f"user{index}").status_code == 201
     assert register("one-too-many").status_code == 429
+
+    # A preview deployment of the web app (another origin) may sign in only once allowed
+    import os
+
+    preview = "https://kinetic-git-feature-team.vercel.app"
+    rate_limit.reset_all()
+    client.cookies.clear()
+
+    def login_from(origin):
+        return client.post(
+            "/api/auth/login",
+            json={"username": "bob", "password": "correct-horse-battery"},
+            headers={"Origin": origin},
+        )
+
+    assert login_from(preview).status_code == 403
+    os.environ["KINETIC_PREVIEW_ORIGINS"] = "https://kinetic-git-*-team.vercel.app"
+    assert login_from(preview).status_code == 204
+    assert login_from("https://kinetic-git-feature-other.vercel.app").status_code == 403
+    del os.environ["KINETIC_PREVIEW_ORIGINS"]

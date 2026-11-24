@@ -22,6 +22,7 @@ Configuration the code reads:
 | `KINETIC_PUBLIC_ORIGIN` | Fly secret | Exact Vercel origin, e.g. `https://kinetic.vercel.app` |
 | `KINETIC_ORIGIN_SECRET` | Fly secret **and** Vercel env var | Same long random string on both |
 | `KINETIC_GARMIN_TOKEN_KEY` | Fly secret | Key that encrypts the stored Garmin tokens and email (see below) |
+| `KINETIC_PREVIEW_ORIGINS` | Fly secret (optional) | Vercel preview addresses that may sign in, e.g. `https://kinetic-*-jj1-0863.vercel.app` (see below) |
 | `KINETIC_UPLOAD_DIR`, `KINETIC_GARMIN_TOKEN_DIR` | `fly.toml` | `/data/uploads`, `/data/garmin_tokens` |
 
 Generate the origin secret once (PowerShell):
@@ -36,6 +37,27 @@ copy somewhere safe: if it is lost, every account has to sign in to Garmin again
 is lost). To rotate it, set `KINETIC_GARMIN_TOKEN_KEY="<new key>,<old key>"`; tokens are
 re-encrypted with the new key at each sync, so the old key can be removed after a while.
 Plain-text tokens left by earlier versions are encrypted the first time they are read.
+
+### Signing in on Vercel preview deployments
+
+Vercel builds a preview of every branch, at its own address such as
+`https://kinetic-git-<branch>-<team>.vercel.app`. Its `/api` calls go to the **production**
+API on Fly (the address in `web/vercel.json`), so a preview shows the branch's web app with
+production accounts and data; changes to the API only take effect once merged and deployed.
+
+The API refuses requests from any address other than `KINETIC_PUBLIC_ORIGIN` ("Invalid
+origin"), which also refuses signing in on a preview. To allow your previews, set
+`KINETIC_PREVIEW_ORIGINS` to their address pattern; the `*` stands for any letters, digits and
+hyphens in the first part of the host name only (several patterns: comma-separated):
+
+```powershell
+fly secrets set KINETIC_PREVIEW_ORIGINS="https://kinetic-*-jj1-0863.vercel.app"
+```
+
+Take the pattern from a preview address in the Vercel dashboard (project name first, your
+team's slug last). Each preview has its own session, so sign in once per preview. Unset,
+previews cannot sign in. A malformed or too broad pattern (such as `https://*.vercel.app`)
+stops the API from starting rather than allowing more than intended.
 
 ## 1. Supabase (database)
 
