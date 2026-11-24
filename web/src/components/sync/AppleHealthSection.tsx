@@ -1,17 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button, CircularProgress, IconButton, LinearProgress, Tooltip } from '@mui/material'
-import { api } from '../lib/api'
+import { api } from '../../lib/api'
 import { formatDate, parseDateInput } from '@kinetic/shared/format'
-import { importAppleHealthExport, type ImportProgress, type ImportSummary } from '../lib/appleHealthExport'
-import { DateField } from './DateField'
-import { Stat } from './fields'
-import { Icon } from './icons'
-import { useNotify } from './Notify'
-
-interface TokenInfo {
-  created_at: string
-  last_used_at: string | null
-}
+import { importAppleHealthExport, type ImportProgress, type ImportSummary } from '../../lib/appleHealthExport'
+import { DateField } from '../DateField'
+import { Stat } from '../fields'
+import { Icon } from '../icons'
+import { useNotify } from '../Notify'
 
 const WEBHOOK_PATH = '/api/integrations/apple-health/webhook'
 
@@ -47,10 +42,15 @@ function CopyField({ label, value }: { label: string; value: string }) {
   )
 }
 
+export interface AppleTokenInfo {
+  created_at: string
+  last_used_at: string | null
+}
+
 /** Health Auto Export webhook setup and the Apple Health export.zip import. */
-export function AppleHealthCards() {
+export function AppleHealthSection({ onChange }: { onChange?: (token: AppleTokenInfo | null) => void }) {
   const notify = useNotify()
-  const [info, setInfo] = useState<TokenInfo | null | undefined>(undefined)
+  const [info, setInfo] = useState<AppleTokenInfo | null | undefined>(undefined)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [tokenBusy, setTokenBusy] = useState(false)
 
@@ -62,9 +62,10 @@ export function AppleHealthCards() {
   const fileInput = useRef<HTMLInputElement>(null)
 
   const refresh = useCallback(async () => {
-    const response = await api.get<{ token: TokenInfo | null }>('/integrations/apple-health')
+    const response = await api.get<{ token: AppleTokenInfo | null }>('/integrations/apple-health')
     setInfo(response.token)
-  }, [])
+    onChange?.(response.token)
+  }, [onChange])
 
   useEffect(() => {
     refresh().catch((error) => notify((error as Error).message, 'error'))
@@ -126,16 +127,16 @@ export function AppleHealthCards() {
   const webhookUrl = `${window.location.origin}${WEBHOOK_PATH}`
 
   return (
-    <>
+    <div className="sync-grid">
       <div className="card">
         <div className="card-heading">
           <span className="card-heading-icon">
             <Icon name="watch" size={22} />
           </span>
           <div className="column gap-0 flex-1 min-w-0">
-            <span className="card-title">Apple Watch</span>
-            <span className="text-caption text-grey-6 ellipsis">
-              {info ? `Last workout received: ${when(info.last_used_at)}` : 'Automatic sync through Health Auto Export'}
+            <span className="card-title">Automatic sync</span>
+            <span className="text-caption text-grey-6">
+              {info ? `Last workout received: ${when(info.last_used_at)}` : 'New workouts are sent by the Health Auto Export app'}
             </span>
           </div>
           {info !== undefined && (
@@ -190,7 +191,7 @@ export function AppleHealthCards() {
             <Icon name="folder_zip" size={22} />
           </span>
           <div className="column gap-0 flex-1 min-w-0">
-            <span className="card-title">Apple Health export</span>
+            <span className="card-title">Import history</span>
             <span className="text-caption text-grey-6">
               Health app → your profile → Export All Health Data. Read in this browser; only workouts are sent.
             </span>
@@ -258,6 +259,6 @@ export function AppleHealthCards() {
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }

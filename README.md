@@ -68,8 +68,8 @@ Garmin running dynamics or training-effect fields; laps are generated per km (5 
 
 ### Strava
 
-On the **Sync** page, choose the zip from Strava (Settings → My Account → *Download or Delete
-Your Account* → *Request your archive*). The browser reads it, so photos and the rest of the
+On the **Strava** tab of the **Sync** page (web or mobile), choose the zip from Strava (Settings →
+My Account → *Download or Delete Your Account* → *Request your archive*). The app reads it, so photos and the rest of the
 archive are never uploaded, and sends each file from its `activities/` folder to
 `POST /api/activities/import-file` with the activity's name, type and description from
 `activities.csv`. Loose `.fit`, `.gpx` and `.tcx` files (gzipped or not) can be chosen

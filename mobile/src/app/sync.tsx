@@ -1,195 +1,118 @@
 import { useCallback, useEffect, useState } from 'react'
-import { View } from 'react-native'
-import { formatDate, parseDateInput } from '@kinetic/shared/format'
+import { Pressable, View } from 'react-native'
+import { router, useLocalSearchParams } from 'expo-router'
 import { Icon } from '../components/Icon'
 import { useNotify } from '../components/Notify'
-import { Button, Caption, Card, CardTitle, Field, FormSheet, Loading, PageHeader, Screen, Stat, StatGrid, T, useColors } from '../components/ui'
-import { api, postStream } from '../lib/api'
+import { AppleSection, type AppleTokenInfo } from '../components/sync/AppleSection'
+import { GarminSection, type GarminStatus } from '../components/sync/GarminSection'
+import { StravaSection } from '../components/sync/StravaSection'
+import { Loading, PageHeader, Screen, T, useColors } from '../components/ui'
+import { api } from '../lib/api'
 
-interface Status {
-  authenticated: boolean
-  email: string
-  default_since: string
-}
+type Platform = 'garmin' | 'apple' | 'strava'
 
-interface SyncResult {
-  imported: number
-  skipped: number
-  errors: string[]
-}
+const PLATFORMS: { key: Platform; icon: string; name: string; method: string }[] = [
+  { key: 'garmin', icon: 'watch', name: 'Garmin', method: 'Sync account' },
+  { key: 'apple', icon: 'phone_iphone', name: 'Apple Watch', method: 'Auto sync' },
+  { key: 'strava', icon: 'directions_run', name: 'Strava', method: 'Import archive' },
+]
 
+const isPlatform = (value: unknown): value is Platform => PLATFORMS.some((p) => p.key === value)
+
+/** The Sync screen: one tab per platform, each with its own way of bringing activities in. */
 export default function SyncScreen() {
   const notify = useNotify()
   const c = useColors()
-  const [status, setStatus] = useState<Status | null>(null)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [authBusy, setAuthBusy] = useState(false)
-  const [mfaOpen, setMfaOpen] = useState(false)
-  const [mfaCode, setMfaCode] = useState('')
-  const [since, setSince] = useState('')
-  const [until, setUntil] = useState('')
-  const [syncing, setSyncing] = useState(false)
-  const [progress, setProgress] = useState<string[]>([])
-  const [result, setResult] = useState<SyncResult | null>(null)
+  const params = useLocalSearchParams<{ source?: string }>()
+  const [platform, setPlatform] = useState<Platform>(isPlatform(params.source) ? params.source : 'garmin')
+  const [garmin, setGarmin] = useState<GarminStatus | null>(null)
+  const [appleToken, setAppleToken] = useState<AppleTokenInfo | null | undefined>(undefined)
 
-  const refreshStatus = useCallback(async () => {
-    const s = await api.get<Status>('/garmin/status')
-    setStatus(s)
-    return s
+  const refreshGarmin = useCallback(async () => {
+    const status = await api.get<GarminStatus>('/garmin/status')
+    setGarmin(status)
+    return status
   }, [])
 
   useEffect(() => {
-    refreshStatus().then((s) => {
-      setEmail(s.email)
-      setSince(formatDate(s.default_since))
-    })
-  }, [refreshStatus])
+    refreshGarmin().catch((error) => notify((error as Error).message, 'error'))
+    api
+      .get<{ token: AppleTokenInfo | null }>('/integrations/apple-health')
+      .then((r) => setAppleToken(r.token))
+      .catch(() => setAppleToken(null))
+  }, [refreshGarmin, notify])
 
-  const authenticate = async () => {
-    if (!email.trim() || !password) return notify('Email and password are required', 'error')
-    setAuthBusy(true)
-    try {
-      const response = await api.post<{ needs_mfa: boolean }>('/garmin/login', { email, password })
-      if (response.needs_mfa) {
-        setMfaCode('')
-        setMfaOpen(true)
-      } else {
-        await refreshStatus()
-        notify('Authenticated successfully!', 'success')
-      }
-    } catch (error) {
-      notify((error as Error).message, 'error', 8000)
-    } finally {
-      setAuthBusy(false)
-    }
+  const select = (key: Platform) => {
+    setPlatform(key)
+    router.setParams({ source: key })
   }
 
-  const submitMfa = async () => {
-    if (!mfaCode.trim()) return
-    setMfaOpen(false)
-    try {
-      await api.post('/garmin/mfa', { code: mfaCode })
-      await refreshStatus()
-      notify('MFA complete — tokens saved!', 'success')
-    } catch (error) {
-      notify((error as Error).message, 'error', 8000)
-    }
+  const status = (key: Platform): { ok: boolean; text: string } | null => {
+    if (key === 'garmin' && garmin) return { ok: garmin.authenticated, text: garmin.authenticated ? 'Connected' : 'Not connected' }
+    if (key === 'apple' && appleToken !== undefined) return { ok: !!appleToken, text: appleToken ? 'Token active' : 'Not set up' }
+    return null
   }
 
-  const logout = async () => {
-    await api.post('/garmin/logout')
-    await refreshStatus()
-    notify('Logged out — tokens removed', 'info')
-  }
-
-  const sync = async () => {
-    if (syncing) return
-    if (!status?.authenticated && (!email.trim() || !password)) {
-      return notify('No cached tokens — authenticate first or enter credentials', 'error')
-    }
-    const sinceIso = parseDateInput(since)
-    const untilIso = until.trim() ? parseDateInput(until) : null
-    if (!sinceIso || (until.trim() && !untilIso)) return notify('Invalid date — use dd-mm-yyyy', 'error')
-
-    setSyncing(true)
-    setProgress([])
-    setResult(null)
-    try {
-      await postStream(
-        '/garmin/sync',
-        {
-          since: sinceIso.slice(0, 10),
-          until: untilIso?.slice(0, 10) ?? null,
-          email: status?.authenticated ? '' : email,
-          password: status?.authenticated ? '' : password,
-        },
-        (message) => {
-          // Keep the last 50 lines to avoid unbounded growth
-          if (message.type === 'progress') setProgress((p) => [...p, String(message.message)].slice(-50))
-          else if (message.type === 'result') setResult(message as unknown as SyncResult)
-          else if (message.type === 'error') notify(String(message.message), 'error', 8000)
-        },
-      )
-      await refreshStatus()
-    } catch (error) {
-      notify((error as Error).message, 'error', 8000)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  if (!status) return <Loading />
   return (
     <Screen>
-      <PageHeader kicker="Import" title="Garmin Sync" subtitle="Connect your Garmin account and pull in new activities." />
+      <PageHeader kicker="Import" title="Sync" subtitle="Bring in activities from Garmin Connect, Apple Watch and Strava." />
 
-      <Card>
-        <CardTitle
-          right={
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <Icon name={status.authenticated ? 'check_circle' : 'error_outline'} size={16} color={status.authenticated ? c.positive : c.muted} />
-              <T style={{ fontSize: 12, color: status.authenticated ? c.positive : c.muted }}>{status.authenticated ? 'Connected' : 'Not connected'}</T>
-            </View>
-          }
-        >
-          Garmin Connect
-        </CardTitle>
-        <Caption>
-          {status.authenticated ? (status.email ? `Logged in as ${status.email}` : 'Garmin tokens cached — ready to sync') : 'Enter your credentials to connect'}
-        </Caption>
-        <Field label="Garmin email" autoCapitalize="none" autoCorrect={false} keyboardType="email-address" value={email} onChangeText={setEmail} />
-        <Field label="Password (not stored)" secureTextEntry value={password} onChangeText={setPassword} />
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <View style={{ flex: 1 }}>
-            <Button title="Authenticate" icon="login" variant="outlined" onPress={authenticate} busy={authBusy} />
-          </View>
-          {status.authenticated && (
-            <View style={{ flex: 1 }}>
-              <Button title="Log out" icon="logout" variant="text" color={c.negative} onPress={logout} />
-            </View>
-          )}
-        </View>
-      </Card>
-
-      <Card>
-        <CardTitle>Sync activities</CardTitle>
-        <Caption>Activities already imported are skipped.</Caption>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <Field label="Since (dd-mm-yyyy)" value={since} onChangeText={setSince} style={{ flex: 1 }} />
-          <Field label="Until (optional)" value={until} onChangeText={setUntil} style={{ flex: 1 }} />
-        </View>
-        <Button title={syncing ? 'Syncing…' : 'Sync now'} icon="sync" onPress={sync} busy={syncing} />
-        {progress.length > 0 && (
-          <View style={{ backgroundColor: '#0f172a', borderRadius: 8, padding: 10, gap: 2 }}>
-            {progress.map((line, i) => (
-              <T key={i} style={{ color: '#e2e8f0', fontFamily: 'monospace', fontSize: 11 }}>
-                {line}
+      <View style={{ flexDirection: 'row', gap: 8 }} accessibilityRole="tablist">
+        {PLATFORMS.map((p) => {
+          const selected = p.key === platform
+          const s = status(p.key)
+          return (
+            <Pressable
+              key={p.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${p.name}${s ? `, ${s.text}` : ''}`}
+              onPress={() => select(p.key)}
+              style={({ pressed }) => ({
+                flex: 1,
+                alignItems: 'center',
+                gap: 4,
+                paddingVertical: 10,
+                paddingHorizontal: 4,
+                borderRadius: 12,
+                borderWidth: selected ? 2 : 1,
+                borderColor: selected ? c.primary : c.cardBorder,
+                backgroundColor: selected ? c.primarySoft : c.card,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View>
+                <Icon name={p.icon} size={24} color={selected ? c.primary : c.text} />
+                {s && (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      right: -4,
+                      top: -2,
+                      width: 9,
+                      height: 9,
+                      borderRadius: 5,
+                      borderWidth: 1.5,
+                      borderColor: c.card,
+                      backgroundColor: s.ok ? c.positive : c.muted,
+                    }}
+                  />
+                )}
+              </View>
+              <T numberOfLines={1} style={{ fontSize: 13, fontWeight: '600', color: selected ? c.primary : c.text }}>
+                {p.name}
               </T>
-            ))}
-          </View>
-        )}
-        {result && (
-          <>
-            <T style={{ fontWeight: '700' }}>Sync complete</T>
-            <StatGrid>
-              <Stat label="Imported" value={result.imported} color={c.positive} />
-              <Stat label="Skipped" value={result.skipped} />
-              <Stat label="Errors" value={result.errors.length} color={result.errors.length ? c.negative : undefined} />
-            </StatGrid>
-            {result.errors.map((err, i) => (
-              <T key={i} style={{ color: c.negative, fontSize: 12 }}>
-                • {err}
+              <T muted numberOfLines={1} style={{ fontSize: 11 }}>
+                {s ? s.text : p.method}
               </T>
-            ))}
-          </>
-        )}
-      </Card>
+            </Pressable>
+          )
+        })}
+      </View>
 
-      <FormSheet visible={mfaOpen} title="Two-factor code" onClose={() => setMfaOpen(false)} onSave={submitMfa} saveLabel="Submit">
-        <Caption>Enter the 6-digit code from your authenticator app or the code sent via email/SMS.</Caption>
-        <Field label="MFA code" placeholder="123456" keyboardType="number-pad" maxLength={8} autoFocus value={mfaCode} onChangeText={setMfaCode} />
-      </FormSheet>
+      {platform === 'garmin' && (garmin ? <GarminSection status={garmin} refreshStatus={refreshGarmin} /> : <Loading />)}
+      {platform === 'apple' && <AppleSection onChange={setAppleToken} />}
+      {platform === 'strava' && <StravaSection />}
     </Screen>
   )
 }

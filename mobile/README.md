@@ -2,7 +2,9 @@
 
 Expo (React Native) app with all the pages of the web app: Activities (with adding, editing,
 deleting and .fit uploads), activity details, Map, Graphs, Training, Best Efforts, Races,
-Friends and Garmin Sync.
+Friends and Sync. Sync has a tab per platform: Garmin Connect (sign in and sync), Apple Watch
+(the Health Auto Export token; the Health export.zip is imported on the website) and Strava
+(import the archive zip, or many loose .fit/.gpx/.tcx files).
 
 It shares everything except the UI with the web app through `packages/shared` (see its
 README): data types, the API client, calculations, chart builders, route colouring, form
@@ -41,6 +43,12 @@ Vercel proxy (which adds the origin secret). It sends `Origin: <EXPO_PUBLIC_KINE
 because the backend only accepts state-changing requests from that origin, and the session
 cookie is kept by the phone's native cookie store. The Garmin sync and training analysis stream
 their progress; the app reads those streams with XMLHttpRequest, as React Native's fetch cannot.
+
+The Strava archive can be gigabytes (photos), so `src/lib/stravaExport.ts` never loads it whole:
+`expo-file-system` reads only the zip directory and each activity file's bytes, `fflate`
+inflates them (Hermes has no `DecompressionStream`), and each file is written to the cache and
+uploaded by uri. The zip directory and `activities.csv` logic is shared with the web app
+(`packages/shared/src/zip.ts`, `stravaImport.ts`).
 
 A local backend on `http://localhost:5173` is not reachable from a phone, and the backend
 accepts plain HTTP only for localhost origins. For testing, point `EXPO_PUBLIC_KINETIC_URL` at a
