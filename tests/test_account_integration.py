@@ -16,6 +16,12 @@ class AccountIntegrationTests(unittest.TestCase):
     def test_account_deletion(self):
         self._run_scenario("account_deletion_scenario.py")
 
+    def test_route_shapes_streams_cache_and_paging(self):
+        self._run_scenario("performance_scenario.py")
+
+    def test_deleting_activities_removes_unused_files(self):
+        self._run_scenario("file_cleanup_scenario.py")
+
     def _run_scenario(self, script: str):
         root = Path(__file__).resolve().parent.parent
         env = os.environ.copy()

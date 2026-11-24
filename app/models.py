@@ -110,6 +110,10 @@ class Activity(SQLModel, table=True):
     fit_file_path: Optional[str] = None
     # GPS route stored as JSON string: [[lat, lon], ...]
     route_json: Optional[str] = None
+    # Derived from route_json when it is saved (app/route_shapes.py): whether there is a
+    # route, and a light version of it for the all-activities map
+    has_route: bool = False
+    map_route_json: Optional[str] = None
     # Parent activity id for multi-sport children (e.g. triathlon sub-sports)
     parent_id: Optional[int] = Field(default=None, foreign_key="activity.id", nullable=True)
     # Garmin Connect activity ID for deduplication during sync
@@ -226,3 +230,8 @@ class RaceResultSplit(SQLModel, table=True):
     rank: Optional[int] = None
 
     race_result: Optional[RaceResult] = Relationship(back_populates="splits")
+
+
+# Keeps Activity.has_route and map_route_json in step with route_json (registered here so it
+# applies wherever activities are saved)
+import app.route_shapes  # noqa: E402, F401

@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse
 from loguru import logger
 
@@ -20,6 +21,23 @@ from app.database import create_db_and_tables, lock_down_postgres_tables
 from app.friends import router as friends_router
 from app.repair import repair_single_leg_events
 from app.token_crypto import warn_if_unconfigured
+
+# Endpoints that stream progress as JSON lines while they work
+STREAMING_PATHS = {"/api/garmin/sync", "/api/training/analyse"}
+
+
+class NoCompression:
+    """Hides Accept-Encoding from the compression middleware for the given paths."""
+
+    def __init__(self, app, paths: set[str]):
+        self.app = app
+        self.paths = paths
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and scope["path"] in self.paths:
+            headers = [(k, v) for k, v in scope["headers"] if k != b"accept-encoding"]
+            scope = {**scope, "headers": headers}
+        await self.app(scope, receive, send)
 
 
 @asynccontextmanager
@@ -38,6 +56,10 @@ async def lifespan(_app: FastAPI):
 fastapi_app = FastAPI(title="Kinetic API", lifespan=lifespan, docs_url="/api/docs",
                       openapi_url="/api/openapi.json")
 fastapi_app.add_middleware(AuthGuard)
+# Compress JSON (the map and lists shrink several times), except the progress streams, which
+# must reach the browser line by line
+fastapi_app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=6)
+fastapi_app.add_middleware(NoCompression, paths=STREAMING_PATHS)
 fastapi_app.include_router(auth_router)
 fastapi_app.include_router(account_router)
 fastapi_app.include_router(router, prefix="/api")

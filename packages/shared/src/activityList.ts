@@ -1,4 +1,5 @@
 // Totals and month groups for the activity list, shared by the web and mobile apps.
+import { qs } from './api'
 import type { ActivityRow } from './types'
 
 export interface Totals {
@@ -47,4 +48,37 @@ export function byMonth(activities: ActivityRow[]): [string, ActivityRow[]][] {
 export function monthSummary(group: ActivityRow[]): string {
   const t = totals(group)
   return `${t.count} ${t.count === 1 ? 'activity' : 'activities'} · ${km(t.meters)} · ${hours(t.seconds)}`
+}
+
+// ── Paged lists ──────────────────────────────────────────────────────────────
+
+/** Activities per page of a paged list. */
+export const ACTIVITY_PAGE_SIZE = 50
+
+export interface ActivityFilters {
+  sport?: string | null
+  year?: number | null
+  friend?: number | null
+}
+
+/** The API path of one page of activities, newest first; `before` continues after a page. */
+export function activityPagePath(filters: ActivityFilters, before: string | null = null, limit = ACTIVITY_PAGE_SIZE): string {
+  return `/activities${qs({ sport: filters.sport || null, year: filters.year, friend: filters.friend, limit, before })}`
+}
+
+/** The API path of the totals of every activity the filters list (`GET` returns `Totals`). */
+export function activityTotalsPath(filters: ActivityFilters): string {
+  return `/activities/totals${qs({ sport: filters.sport || null, year: filters.year, friend: filters.friend })}`
+}
+
+/** Where the next page starts ("<date>,<id>" of the last row), or null after the last page. */
+export function nextPageCursor(page: ActivityRow[], limit = ACTIVITY_PAGE_SIZE): string | null {
+  const last = page[page.length - 1]
+  return page.length >= limit && last ? `${last.date},${last.id}` : null
+}
+
+/** The rows so far with a new page added, skipping any already listed. */
+export function appendPage(rows: ActivityRow[], page: ActivityRow[]): ActivityRow[] {
+  const seen = new Set(rows.map((r) => r.id))
+  return [...rows, ...page.filter((r) => !seen.has(r.id))]
 }

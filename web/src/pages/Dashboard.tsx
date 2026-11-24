@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { api } from '../lib/api'
+import { api, qs } from '../lib/api'
 import { km } from '@kinetic/shared/activityList'
 import type { Totals } from '@kinetic/shared/activityList'
-import { change, dashboardSummary, greeting, latestRecords } from '@kinetic/shared/dashboard'
+import { change, dashboardSince, dashboardSummary, greeting, latestRecords } from '@kinetic/shared/dashboard'
 import type { Period } from '@kinetic/shared/dashboard'
 import { distanceLabel, distanceSlug, filteredUrl, formatDate, formatDuration, sportLabel } from '@kinetic/shared/format'
 import { formBand } from '@kinetic/shared/training'
@@ -159,7 +159,8 @@ export function DashboardPage() {
   const { dataVersion } = useBackgroundJobs()
 
   useEffect(() => {
-    latestActivities(api.get<ActivityRow[]>('/activities'), setActivities)
+    // Only the activities the weekly and year-on-year numbers need, not the whole history
+    latestActivities(api.get<ActivityRow[]>(`/activities${qs({ since: dashboardSince() })}`), setActivities)
     latestTraining(api.get<TrainingOverview>('/training'), setTraining)
     latestEfforts(api.get<BestEffortRow[]>('/best-efforts'), setEfforts)
   }, [latestActivities, latestTraining, latestEfforts, dataVersion])

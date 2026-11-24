@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { byMonth, hours, km, monthSummary, monthTitle, totals } from '../src/activityList'
+import { activityPagePath, activityTotalsPath, appendPage, byMonth, hours, km, monthSummary, monthTitle, nextPageCursor, totals } from '../src/activityList'
+import { dashboardSince } from '../src/dashboard'
 import { activity } from './factories'
 
 describe('activity list', () => {
@@ -24,5 +25,38 @@ describe('activity list', () => {
     expect(monthTitle('2026-03')).toBe('March 2026')
     expect(km(1234567)).toBe('1,235 km')
     expect(hours(1800)).toBe('1 h')
+  })
+})
+
+describe('paged activity lists', () => {
+  const rows = (...ids: number[]) => ids.map((id) => activity({ id, date: `2026-01-${String(30 - id).padStart(2, '0')}T08:00:00` }))
+
+  it('builds page and totals paths from the filters', () => {
+    expect(activityPagePath({})).toBe('/activities?limit=50')
+    expect(activityPagePath({ sport: 'running', year: 2026 }, '2026-01-05T08:00:00,12', 20)).toBe(
+      '/activities?sport=running&year=2026&limit=20&before=2026-01-05T08%3A00%3A00%2C12',
+    )
+    expect(activityPagePath({ sport: '', year: null, friend: 3 })).toBe('/activities?friend=3&limit=50')
+    expect(activityTotalsPath({ sport: 'cycling' })).toBe('/activities/totals?sport=cycling')
+    expect(activityTotalsPath({})).toBe('/activities/totals')
+  })
+
+  it('continues after the last row of a full page, and stops after a short one', () => {
+    const page = rows(1, 2, 3)
+    expect(nextPageCursor(page, 3)).toBe(`${page[2].date},3`)
+    expect(nextPageCursor(page, 4)).toBeNull()
+    expect(nextPageCursor([], 3)).toBeNull()
+  })
+
+  it('appends pages without listing an activity twice', () => {
+    const merged = appendPage(rows(1, 2, 3), rows(3, 4))
+    expect(merged.map((r) => r.id)).toEqual([1, 2, 3, 4])
+  })
+})
+
+describe('dashboard window', () => {
+  it('starts on 1 January of last year', () => {
+    expect(dashboardSince(new Date(2026, 10, 24))).toBe('2025-01-01')
+    expect(dashboardSince(new Date(2026, 0, 1))).toBe('2025-01-01')
   })
 })

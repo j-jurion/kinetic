@@ -1,34 +1,30 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Button } from '@mui/material'
-import { api, qs } from '../lib/api'
-import { hours, km, totals } from '@kinetic/shared/activityList'
-import type { Activity, ActivityRow } from '@kinetic/shared/types'
-import { useLatestRequest } from '../lib/useLatestRequest'
+import { hours, km } from '@kinetic/shared/activityList'
+import type { Activity } from '@kinetic/shared/types'
+import { usePagedActivities } from '../lib/usePagedActivities'
 import { useBackgroundJobs } from '../lib/backgroundJobs'
 import { ActivityEditDialog, ConfirmDeleteDialog, UploadDialog } from '../components/ActivityDialogs'
 import { EmptyCard, SportSelect, Stat, YearSelect } from '../components/fields'
 import { Icon } from '../components/icons'
 import { ActivityMonths } from '../components/ActivityMonths'
+import { LoadMore } from '../components/LoadMore'
 import { PageHeader } from '../components/PageHeader'
 
 export function ActivitiesPage() {
-  const latest = useLatestRequest()
   const [sport, setSport] = useState('')
   const [year, setYear] = useState<number | null>(null)
-  const [activities, setActivities] = useState<ActivityRow[] | null>(null)
   const [editing, setEditing] = useState<Activity | null | undefined>(undefined)
   const [deleting, setDeleting] = useState<Activity | null>(null)
   const [uploading, setUploading] = useState(false)
   // Reload when a background sync or upload brings in activities
   const { dataVersion } = useBackgroundJobs()
 
-  const refresh = useCallback(() => {
-    latest(api.get<ActivityRow[]>(`/activities${qs({ sport, year })}`), setActivities)
-  }, [sport, year, latest])
-
-  useEffect(refresh, [refresh, dataVersion])
-
-  const summary = useMemo(() => (activities ? totals(activities) : null), [activities])
+  // A page at a time, with the totals of every activity the filters list
+  const { activities, totals: summary, hasMore, loadingMore, loadMore, reload: refresh } = usePagedActivities(
+    { sport, year },
+    dataVersion,
+  )
 
   return (
     <>
@@ -57,6 +53,7 @@ export function ActivitiesPage() {
       )}
 
       <ActivityMonths activities={activities} onEdit={setEditing} onDelete={setDeleting} />
+      <LoadMore hasMore={hasMore} loading={loadingMore} onLoad={loadMore} />
 
       <ActivityEditDialog
         open={editing !== undefined}

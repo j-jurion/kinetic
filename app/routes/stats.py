@@ -30,9 +30,20 @@ def graph_stats(sport: Optional[str] = None) -> dict:
 
     The page aggregates these in the browser (weekly/monthly/yearly volume, breakdowns,
     year-over-year progress, pace trend), so changing the year filter needs no new request.
+    It needs every activity of the sport, so it is not paged; only these columns are read.
     """
     with Session(engine) as session:
-        stmt = select(Activity)
+        stmt = select(
+            Activity.id,
+            Activity.name,
+            Activity.date,
+            Activity.sport,
+            Activity.kind,
+            Activity.distance_meters,
+            Activity.duration_seconds,
+            Activity.elevation_gain_meters,
+            Activity.avg_heart_rate,
+        )
         sport_types = sport_filter(sport)
         if sport_types:
             stmt = stmt.where(col(Activity.sport).in_(sport_types))
@@ -58,20 +69,6 @@ def graph_stats(sport: Optional[str] = None) -> dict:
 
 # ── Map ───────────────────────────────────────────────────────────────────────
 
-_MAX_POINTS_PER_ROUTE = 250
-
-
-def _simplify(coords: list[list[float]]) -> list[list[float]]:
-    """Evenly decimate a route so the combined map stays responsive."""
-    if len(coords) <= _MAX_POINTS_PER_ROUTE:
-        simplified = coords
-    else:
-        step = len(coords) / _MAX_POINTS_PER_ROUTE
-        simplified = [coords[int(i * step)] for i in range(_MAX_POINTS_PER_ROUTE)]
-        simplified.append(coords[-1])
-    return [[round(float(c[0]), 5), round(float(c[1]), 5)] for c in simplified]
-
-
 @router.get("/map")
 def map_routes(sports: Optional[str] = None) -> dict:
     """Every activity with GPS data, for the all-activities map.
@@ -84,7 +81,7 @@ def map_routes(sports: Optional[str] = None) -> dict:
         present = {
             s.value
             for s in session.exec(
-                select(Activity.sport).where(col(Activity.route_json).is_not(None)).distinct()
+                select(Activity.sport).where(col(Activity.has_route)).distinct()
             ).all()
         }
         available = [s for s in SPORTS if s in present]
@@ -98,6 +95,8 @@ def map_routes(sports: Optional[str] = None) -> dict:
                 select(Activity)
                 .where(col(Activity.sport).in_([SportType(s) for s in wanted]))
                 .order_by(col(Activity.date).desc())
+                # The light version of each route, stored when the route was saved
+                .execution_options(activity_columns=("map_route_json",))
             ).all()
             if wanted
             else []
@@ -107,17 +106,10 @@ def map_routes(sports: Optional[str] = None) -> dict:
     candidates = [a for a in candidates if a.parent_id not in ids]
     routes = []
     for activity in candidates:
-        if not activity.route_json:
-            continue
-        try:
-            raw = json.loads(activity.route_json)
-        except (ValueError, TypeError):
-            continue
-        coords = [c for c in raw if c and len(c) >= 2 and c[0] is not None and c[1] is not None]
-        if len(coords) < 2:
+        if not activity.map_route_json:
             continue
         data = activity_dump(activity)
-        data["coords"] = _simplify(coords)
+        data["coords"] = json.loads(activity.map_route_json)
         routes.append(data)
 
     return {
@@ -126,6 +118,6 @@ def map_routes(sports: Optional[str] = None) -> dict:
         "counts": {
             "drawn": len(routes),
             "total": len(candidates),
-            "without_gps": sum(1 for a in candidates if not a.route_json),
+            "without_gps": sum(1 for a in candidates if not a.has_route),
         },
     }
