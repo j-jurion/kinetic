@@ -324,8 +324,6 @@ export interface GraphStats {
 
 export interface MapRoute extends Activity {
   coords: [number, number][]
-  /** For a multisport event: the route of each leg with its sport, in order. */
-  legs?: { sport: string; coords: [number, number][] }[]
 }
 
 export interface MapData {

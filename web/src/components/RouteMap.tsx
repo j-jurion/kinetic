@@ -3,7 +3,8 @@ import L from 'leaflet'
 import { api } from '../lib/api'
 import type { HoverBus } from '@kinetic/shared/hoverBus'
 import type { RouteLeg } from '@kinetic/shared/performance'
-import { PLAIN_ROUTE_COLOR, legendHtml, routeDrawing, routePositions } from '@kinetic/shared/routeMap'
+import { PLAIN_ROUTE_COLOR, legendHtml, routeDrawing, routePositions, storedLegsDrawing } from '@kinetic/shared/routeMap'
+import type { LatLng, RouteDrawing } from '@kinetic/shared/routeMap'
 import type { ActivityStreams } from '@kinetic/shared/types'
 
 // OpenStreetMap's standard tiles — free and keyless
@@ -85,9 +86,7 @@ export function RouteMap({ activityId, sport, streams, hoverBus, legs }: Props) 
       marker('#ef4444', 'stop', 'Finish', coords[coords.length - 1]).addTo(layers)
     }
 
-    const positions = routePositions(streams)
-    const drawing = routeDrawing(streams, sport, legs)
-    if (drawing) {
+    const draw = (drawing: RouteDrawing) => {
       // A soft outline under the coloured route keeps it readable on any map background
       L.polyline(drawing.located, { color: '#ffffff', weight: 7, opacity: 0.6, interactive: false }).addTo(layers)
       for (const { from, to, color } of drawing.segments) {
@@ -97,13 +96,34 @@ export function RouteMap({ activityId, sport, streams, hoverBus, legs }: Props) 
       key.addTo(map)
       controls.push(key)
       finish(drawing.located)
+    }
+
+    const positions = routePositions(streams)
+    const drawing = routeDrawing(streams, sport, legs)
+    if (drawing) {
+      draw(drawing)
     } else {
-      // No per-second data: the stored route, in one colour
-      api.get<{ coords: [number, number][] }>(`/activities/${activityId}/route`).then(({ coords }) => {
-        if (cancelled || coords.length < 2) return
-        L.polyline(coords, { color: PLAIN_ROUTE_COLOR, weight: 3, opacity: 0.85 }).addTo(layers)
-        finish(coords)
-      })
+      // No per-second data: a multisport event's legs from their stored routes, each in its
+      // leg's colour; otherwise the stored route in one colour
+      const plain = () =>
+        api.get<{ coords: [number, number][] }>(`/activities/${activityId}/route`).then(({ coords }) => {
+          if (cancelled || coords.length < 2) return
+          L.polyline(coords, { color: PLAIN_ROUTE_COLOR, weight: 3, opacity: 0.85 }).addTo(layers)
+          finish(coords)
+        })
+      const legIds = legs && legs.length >= 2 && legs.every((leg) => leg.id !== undefined) ? legs.map((leg) => leg.id!) : null
+      if (!legIds) {
+        plain()
+      } else {
+        Promise.all(legIds.map((id) => api.get<{ coords: LatLng[] }>(`/activities/${id}/route`)))
+          .then((routes) => storedLegsDrawing(routes.map(({ coords }, i) => ({ leg: legs![i], coords }))))
+          .catch(() => null)
+          .then((stored) => {
+            if (cancelled) return
+            if (stored) draw(stored)
+            else plain()
+          })
+      }
     }
 
     // Where the point hovered in the charts was; nearby points fill in short GPS gaps

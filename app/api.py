@@ -808,26 +808,13 @@ def _simplify(coords: list[list[float]]) -> list[list[float]]:
     return [[round(float(c[0]), 5), round(float(c[1]), 5)] for c in simplified]
 
 
-def _route_coords(activity: Activity) -> Optional[list[list[float]]]:
-    """The stored GPS route of an activity, or None when it has fewer than two points."""
-    if not activity.route_json:
-        return None
-    try:
-        raw = json.loads(activity.route_json)
-    except (ValueError, TypeError):
-        return None
-    coords = [c for c in raw if c and len(c) >= 2 and c[0] is not None and c[1] is not None]
-    return coords if len(coords) >= 2 else None
-
-
 @router.get("/map")
 def map_routes(sports: Optional[str] = None) -> dict:
     """Every activity with GPS data, for the all-activities map.
 
     ``sports`` is an optional comma-separated list of sports; by default every sport that has
     a route is drawn. A multisport leg is dropped when its parent is drawn as well, since
-    both share the same GPS track; the parent then lists its legs (``legs``: sport and
-    route of each), so the map can colour every leg by its own sport.
+    both share the same GPS track.
     """
     with Session(engine) as session:
         present = {
@@ -854,32 +841,19 @@ def map_routes(sports: Optional[str] = None) -> dict:
 
     ids = {a.id for a in candidates}
     candidates = [a for a in candidates if a.parent_id not in ids]
-    # The legs of the multisport events that are drawn, so each leg gets its sport's colour
-    parent_ids = [a.id for a in candidates if a.route_json and a.parent_id is None]
-    legs_by_parent: dict[int, list[Activity]] = {}
-    if parent_ids:
-        with Session(engine) as session:
-            for leg in session.exec(
-                select(Activity)
-                .where(col(Activity.parent_id).in_(parent_ids))
-                .order_by(col(Activity.date))
-            ).all():
-                legs_by_parent.setdefault(leg.parent_id, []).append(leg)
-
     routes = []
     for activity in candidates:
-        coords = _route_coords(activity)
-        if coords is None:
+        if not activity.route_json:
+            continue
+        try:
+            raw = json.loads(activity.route_json)
+        except (ValueError, TypeError):
+            continue
+        coords = [c for c in raw if c and len(c) >= 2 and c[0] is not None and c[1] is not None]
+        if len(coords) < 2:
             continue
         data = _activity_dump(activity)
         data["coords"] = _simplify(coords)
-        legs = [
-            {"sport": leg.sport.value, "coords": _simplify(leg_coords)}
-            for leg in legs_by_parent.get(activity.id, [])
-            if (leg_coords := _route_coords(leg)) is not None
-        ]
-        if len(legs) >= 2:
-            data["legs"] = legs
         routes.append(data)
 
     return {

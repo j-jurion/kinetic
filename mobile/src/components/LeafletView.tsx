@@ -92,12 +92,10 @@ const HTML = `<!doctype html>
       }
       return false
     })
-    // Lines sharing an id (the legs of one multisport event) are highlighted together
-    var ids = hits.map(function (t) { return t.id }).filter(function (id, i, all) { return all.indexOf(id) === i })
     highlighted.forEach(function (t) { t.line.setStyle({ weight: t.weight }) })
-    highlighted = tappable.filter(function (t) { return ids.indexOf(t.id) >= 0 })
-    highlighted.forEach(function (t) { t.line.setStyle({ weight: 7 }); t.line.bringToFront() })
-    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'tap', ids: ids }))
+    highlighted = hits
+    hits.forEach(function (t) { t.line.setStyle({ weight: 7 }); t.line.bringToFront() })
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'tap', ids: hits.map(function (t) { return t.id }) }))
   })
 
   window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ready' }))

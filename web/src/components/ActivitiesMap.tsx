@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
 import { formatDate, formatDistance, formatDuration, formatPace, sportColor } from '@kinetic/shared/format'
-import { mapRouteLines } from '@kinetic/shared/routeMap'
 import type { MapRoute } from '@kinetic/shared/types'
 import { baseMap } from './RouteMap'
 import '../styles/map.css'
@@ -39,8 +38,7 @@ function statRows(a: MapRoute): [string, string][] {
 interface Item {
   r: MapRoute
   color: string
-  /** One line, or one per leg of a multisport event. */
-  lines: L.Polyline[]
+  line: L.Polyline
   pts: L.Point[]
   bb: [number, number, number, number]
 }
@@ -59,10 +57,8 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
 
     const items: Item[] = routes.map((r) => {
       const color = sportColor(r.sport, '#6b7280')
-      const lines = mapRouteLines(r).map((part) =>
-        L.polyline(part.coords, { color: part.color, weight: 3, opacity: 0.75, interactive: false }).addTo(map),
-      )
-      return { r, color, lines, pts: [], bb: [0, 0, 0, 0] }
+      const line = L.polyline(r.coords, { color, weight: 3, opacity: 0.75, interactive: false }).addTo(map)
+      return { r, color, line, pts: [], bb: [0, 0, 0, 0] }
     })
     if (items.length) {
       const bounds = L.latLngBounds(routes.flatMap((r) => r.coords))
@@ -118,13 +114,11 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
 
     let highlighted: Item[] = []
     const highlight = (list: Item[]) => {
-      highlighted.forEach((it) => it.lines.forEach((line) => line.setStyle({ weight: 3, opacity: 0.75 })))
+      highlighted.forEach((it) => it.line.setStyle({ weight: 3, opacity: 0.75 }))
       highlighted = list
       highlighted.forEach((it) => {
-        it.lines.forEach((line) => {
-          line.setStyle({ weight: 7, opacity: 1 })
-          line.bringToFront()
-        })
+        it.line.setStyle({ weight: 7, opacity: 1 })
+        it.line.bringToFront()
       })
     }
 

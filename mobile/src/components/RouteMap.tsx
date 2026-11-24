@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { RouteLeg } from '@kinetic/shared/performance'
-import { PLAIN_ROUTE_COLOR, legendHtml, routeDrawing } from '@kinetic/shared/routeMap'
-import type { LatLng } from '@kinetic/shared/routeMap'
+import { PLAIN_ROUTE_COLOR, legendHtml, routeDrawing, storedLegsDrawing } from '@kinetic/shared/routeMap'
+import type { LatLng, RouteDrawing } from '@kinetic/shared/routeMap'
 import type { ActivityStreams } from '@kinetic/shared/types'
 import { api } from '../lib/api'
 import { LeafletView } from './LeafletView'
@@ -21,18 +21,37 @@ export function RouteMap({ activityId, sport, streams, legs }: {
   streams: ActivityStreams | null
   legs?: RouteLeg[]
 }) {
-  const drawing = useMemo(() => routeDrawing(streams, sport, legs), [streams, sport, legs])
+  const fromStreams = useMemo(() => routeDrawing(streams, sport, legs), [streams, sport, legs])
+  const [stored, setStored] = useState<RouteDrawing | null>(null)
   const [plain, setPlain] = useState<LatLng[] | null>(null)
+  const drawing = fromStreams ?? stored
 
-  // No per-second data: the stored route, in one colour
+  // No per-second data: a multisport event's legs from their stored routes, each in its leg's
+  // colour; otherwise the stored route in one colour
   useEffect(() => {
-    if (streams === null || drawing) return
+    setStored(null)
+    setPlain(null)
+    if (streams === null || fromStreams) return
     let cancelled = false
-    api.get<{ coords: LatLng[] }>(`/activities/${activityId}/route`).then(({ coords }) => !cancelled && setPlain(coords))
+    const loadPlain = () =>
+      api.get<{ coords: LatLng[] }>(`/activities/${activityId}/route`).then(({ coords }) => !cancelled && setPlain(coords))
+    const legIds = legs && legs.length >= 2 && legs.every((leg) => leg.id !== undefined) ? legs.map((leg) => leg.id!) : null
+    if (!legIds) {
+      loadPlain()
+    } else {
+      Promise.all(legIds.map((id) => api.get<{ coords: LatLng[] }>(`/activities/${id}/route`)))
+        .then((routes) => storedLegsDrawing(routes.map(({ coords }, i) => ({ leg: legs![i], coords }))))
+        .catch(() => null)
+        .then((result) => {
+          if (cancelled) return
+          if (result) setStored(result)
+          else loadPlain()
+        })
+    }
     return () => {
       cancelled = true
     }
-  }, [streams, drawing, activityId])
+  }, [streams, fromStreams, activityId, legs])
 
   const spec = useMemo((): MapSpec | null => {
     const ends = (coords: LatLng[]) => [

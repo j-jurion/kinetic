@@ -3,7 +3,6 @@ import { router } from 'expo-router'
 import { Pressable, View } from 'react-native'
 import { qs } from '@kinetic/shared/api'
 import { formatDate, formatDistance, formatDuration, sportColor, sportLabel } from '@kinetic/shared/format'
-import { mapRouteLines } from '@kinetic/shared/routeMap'
 import type { MapData, MapRoute } from '@kinetic/shared/types'
 import { Icon, SportIcon } from '../../components/Icon'
 import { LeafletView } from '../../components/LeafletView'
@@ -41,10 +40,7 @@ export default function MapScreen() {
 
   const spec = useMemo(
     (): MapSpec => ({
-      // A multisport event is drawn as its legs, each in its sport's colour, all with the event's id
-      lines: (selected.length ? data?.routes ?? [] : []).flatMap((r) =>
-        mapRouteLines(r).map((part) => ({ coords: part.coords, color: part.color, weight: 3, opacity: 0.75, id: r.id })),
-      ),
+      lines: (selected.length ? data?.routes ?? [] : []).map((r) => ({ coords: r.coords, color: sportColor(r.sport, '#6b7280'), weight: 3, opacity: 0.75, id: r.id })),
     }),
     [data, selected],
   )
@@ -85,7 +81,7 @@ export default function MapScreen() {
         <Caption>Select at least one activity type to show routes.</Caption>
       ) : (
         <View style={{ flex: 1 }}>
-          <LeafletView spec={spec} height="100%" onTap={(ids) => setTapped([...new Set(ids)].map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
+          <LeafletView spec={spec} height="100%" onTap={(ids) => setTapped(ids.map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
         </View>
       )}
       <Caption>{summary} · tap a route for its activities</Caption>
