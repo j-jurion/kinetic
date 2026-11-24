@@ -23,6 +23,7 @@ from loguru import logger
 from app import apple_health
 from app.apple_health import RoutePoint, Workout
 from app.database import engine
+from app.errors import UserError
 from app.fit_parser import resolve_sport
 from app.models import Activity, SportType
 from app.ownership import UserSession as Session
@@ -59,7 +60,7 @@ _STRAVA_TYPE_CODES = {"1": "ride", "4": "hike", "9": "run", "10": "walk", "16": 
 _TCX_SPORTS = {"running": "run", "biking": "ride"}
 
 
-class StravaFileError(ValueError):
+class StravaFileError(UserError):
     """A file that cannot be imported."""
 
 
@@ -88,7 +89,7 @@ def decompress(filename: str, content: bytes) -> tuple[str, bytes]:
         try:
             content = inflater.decompress(content, MAX_FILE_BYTES + 1)
         except zlib.error as exc:
-            raise StravaFileError(f"Corrupt gzip file: {exc}") from None
+            raise StravaFileError("Corrupt gzip file") from exc
         if len(content) > MAX_FILE_BYTES or inflater.unconsumed_tail:
             raise StravaFileError("File is too large")
     for extension in EXTENSIONS:
@@ -148,7 +149,7 @@ def _parse_xml(content: bytes) -> ElementTree.Element:
     try:
         return ElementTree.fromstring(content)
     except ElementTree.ParseError as exc:
-        raise StravaFileError(f"Invalid XML: {exc}") from None
+        raise StravaFileError("Invalid XML") from exc
 
 
 def _workout(
@@ -282,7 +283,7 @@ def _fit_start_and_sport(content: bytes) -> tuple[Optional[datetime], SportType]
             sport = resolve_sport(values.get("sport"), values.get("sub_sport"))
             return (start if isinstance(start, datetime) else None), sport
     except Exception as exc:
-        raise StravaFileError(f"Could not read FIT file: {exc}") from None
+        raise StravaFileError("Could not read FIT file") from exc
     return None, SportType.other
 
 

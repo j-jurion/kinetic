@@ -13,6 +13,9 @@ class AccountIntegrationTests(unittest.TestCase):
     def test_friend_requests(self):
         self._run_scenario("friends_scenario.py")
 
+    def test_account_deletion(self):
+        self._run_scenario("account_deletion_scenario.py")
+
     def _run_scenario(self, script: str):
         root = Path(__file__).resolve().parent.parent
         env = os.environ.copy()

@@ -10,12 +10,14 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
+from app.account import router as account_router
 from app.api import router
 from app.auth import create_auth_tables, public_origin
 from app.auth import router as auth_router
 from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
 from app.friends import router as friends_router
+from app.token_crypto import warn_if_unconfigured
 
 
 @asynccontextmanager
@@ -23,6 +25,7 @@ async def lifespan(_app: FastAPI):
     create_db_and_tables()
     create_auth_tables()
     lock_down_postgres_tables()
+    warn_if_unconfigured()
     yield
 
 
@@ -30,6 +33,7 @@ fastapi_app = FastAPI(title="Kinetic API", lifespan=lifespan, docs_url="/api/doc
                       openapi_url="/api/openapi.json")
 fastapi_app.add_middleware(AuthGuard)
 fastapi_app.include_router(auth_router)
+fastapi_app.include_router(account_router)
 fastapi_app.include_router(router, prefix="/api")
 fastapi_app.include_router(friends_router, prefix="/api")
 

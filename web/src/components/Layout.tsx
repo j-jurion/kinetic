@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Badge, Button, IconButton, Tooltip } from '@mui/material'
+import { Badge, IconButton, ListItemIcon, Menu, MenuItem, Tooltip } from '@mui/material'
 import { NAV_SECTIONS, pageTitle } from '@kinetic/shared/navigation'
 import { api } from '../lib/api'
 import { useIncomingFriendRequests } from '../lib/friendRequests'
 import { jobStatuses, useBackgroundJobs } from '../lib/backgroundJobs'
 import { useDarkMode } from '../theme'
+import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 import { SyncStatus } from './SyncStatus'
@@ -17,6 +18,8 @@ export function Layout() {
   const navigate = useNavigate()
   const notify = useNotify()
   const [drawerOpen, setDrawerOpen] = useState(false)
+  const [accountMenu, setAccountMenu] = useState<HTMLElement | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const title = pageTitle(location.pathname)
   const friendRequests = useIncomingFriendRequests()
   const syncing = jobStatuses(useBackgroundJobs()).some((s) => s.state === 'running')
@@ -28,6 +31,7 @@ export function Layout() {
   }, [title])
 
   const signOut = async () => {
+    setAccountMenu(null)
     try {
       await api.post('/auth/logout')
       navigate('/login')
@@ -72,11 +76,51 @@ export function Layout() {
           <IconButton size="small" onClick={toggle} aria-label={dark ? 'Light mode' : 'Dark mode'} color="inherit">
             <Icon name={dark ? 'light_mode' : 'dark_mode'} size={20} />
           </IconButton>
-          <Button color="inherit" size="small" startIcon={<Icon name="logout" size={18} />} onClick={signOut}>
-            Sign out
-          </Button>
+          <Tooltip title="Account">
+            <IconButton
+              size="small"
+              color="inherit"
+              aria-label="Account"
+              aria-haspopup="menu"
+              aria-expanded={Boolean(accountMenu)}
+              onClick={(e) => setAccountMenu(e.currentTarget)}
+            >
+              <Icon name="account_circle" size={22} />
+            </IconButton>
+          </Tooltip>
+          <Menu
+            anchorEl={accountMenu}
+            open={Boolean(accountMenu)}
+            onClose={() => setAccountMenu(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            <MenuItem onClick={signOut}>
+              <ListItemIcon>
+                <Icon name="logout" size={20} />
+              </ListItemIcon>
+              Sign out
+            </MenuItem>
+            <MenuItem
+              onClick={() => {
+                setAccountMenu(null)
+                setDeleting(true)
+              }}
+              sx={{ color: 'error.main' }}
+            >
+              <ListItemIcon sx={{ color: 'inherit' }}>
+                <Icon name="delete_forever" size={20} />
+              </ListItemIcon>
+              Delete account…
+            </MenuItem>
+          </Menu>
         </div>
       </header>
+      <DeleteAccountDialog
+        open={deleting}
+        onClose={() => setDeleting(false)}
+        onDeleted={() => window.location.assign('/login')}
+      />
 
       <nav className={`app-drawer ${drawerOpen ? 'open' : ''}`} aria-label="Main navigation">
         {NAV_SECTIONS.map(([section, items]) => (

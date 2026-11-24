@@ -1,7 +1,8 @@
 """Garmin Connect sync: auth helpers and activity download/import logic.
 
-Garmin tokens and the Garmin email are stored per Kinetic account, and all database access
-goes through the account-scoped session, so accounts never share Garmin data.
+Garmin tokens and the Garmin email are stored per Kinetic account, encrypted (see
+``app/token_crypto.py``), and all database access goes through the account-scoped session, so
+accounts never share Garmin data.
 """
 
 import io
@@ -10,7 +11,8 @@ import threading
 import time
 import uuid
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -20,17 +22,22 @@ from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from app.database import engine, require_id
+from app.errors import UserError, public_message
 from app.fit_parser import parse_fit_file
 from app.formatting import format_date
 from app.models import Activity
 from app.ownership import UserSession as Session
 from app.ownership import current_owner
+from app.token_crypto import TokenKeyError, cipher, read_encrypted, write_encrypted
 
 # Where imported FIT files are kept; the activity charts read them back from here
 UPLOAD_DIR = Path(os.environ.get("KINETIC_UPLOAD_DIR", "uploads"))
 TOKEN_ROOT = Path(os.environ.get("KINETIC_GARMIN_TOKEN_DIR", "garmin_tokens"))
-_TOKEN_FILE = "garmin_tokens.json"
-_EMAIL_FILE = "garmin_email"
+_TOKEN_FILE = "garmin_tokens.enc"
+_EMAIL_FILE = "garmin_email.enc"
+# Unencrypted files written by earlier versions; encrypted and removed when first read
+_LEGACY_TOKEN_FILE = "garmin_tokens.json"
+_LEGACY_EMAIL_FILE = "garmin_email"
 
 # Pause between downloads so a large sync does not trip Garmin's rate limit
 DOWNLOAD_PAUSE_SECONDS = 1.0
@@ -39,6 +46,10 @@ RATE_LIMIT_WAIT_SECONDS = 60.0
 
 _running_syncs: set[str] = set()
 _running_lock = threading.Lock()
+
+
+class GarminError(UserError):
+    """A Garmin sync or login problem, worded for the user."""
 
 
 def _owner_id() -> str:
@@ -54,23 +65,81 @@ def _token_dir() -> Path:
     return path
 
 
+def _migrate_legacy(directory: Path) -> None:
+    """Encrypt the plain-text token and email files of earlier versions, then delete them."""
+    for legacy, current in ((_LEGACY_TOKEN_FILE, _TOKEN_FILE), (_LEGACY_EMAIL_FILE, _EMAIL_FILE)):
+        old = directory / legacy
+        if old.exists():
+            if not (directory / current).exists():
+                try:
+                    write_encrypted(
+                        directory / current, TOKEN_ROOT, old.read_text(encoding="utf-8")
+                    )
+                except TokenKeyError:
+                    logger.warning("Plain-text Garmin {} kept: no encryption key is set", legacy)
+                    continue
+            old.unlink()
+            logger.info("Encrypted the stored Garmin {}", "tokens" if current == _TOKEN_FILE
+                        else "email")
+
+
+def _account_dir() -> Path:
+    directory = _token_dir()
+    _migrate_legacy(directory)
+    return directory
+
+
 def tokens_exist() -> bool:
     """Return True if the current account has cached Garmin tokens."""
-    return (_token_dir() / _TOKEN_FILE).exists()
+    directory = _token_dir()
+    if (directory / _LEGACY_TOKEN_FILE).exists():
+        _migrate_legacy(directory)
+    return (directory / _TOKEN_FILE).exists() or (directory / _LEGACY_TOKEN_FILE).exists()
+
+
+def load_tokens() -> str:
+    """The current account's Garmin tokens as JSON (raises when there are none)."""
+    cipher(TOKEN_ROOT)  # without a key, keep any plain-text tokens rather than drop them
+    tokens = read_encrypted(_account_dir() / _TOKEN_FILE, TOKEN_ROOT)
+    if not tokens:
+        logger.warning("Stored Garmin tokens could not be decrypted; asking to sign in again")
+        logout()
+        raise GarminError("Garmin login expired, please sign in again")
+    return tokens
+
+
+def save_tokens(client) -> None:
+    """Store the tokens of a signed-in Garmin client for the current account."""
+    write_encrypted(_account_dir() / _TOKEN_FILE, TOKEN_ROOT, client.client.dumps())
 
 
 def saved_email() -> str:
-    path = _token_dir() / _EMAIL_FILE
-    return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+    directory = _token_dir()
+    if (directory / _LEGACY_EMAIL_FILE).exists():
+        _migrate_legacy(directory)
+    try:
+        return (read_encrypted(directory / _EMAIL_FILE, TOKEN_ROOT) or "").strip()
+    except TokenKeyError:
+        return ""
 
 
 def save_email(email: str) -> None:
-    (_token_dir() / _EMAIL_FILE).write_text(email.strip(), encoding="utf-8")
+    write_encrypted(_account_dir() / _EMAIL_FILE, TOKEN_ROOT, email.strip())
 
 
 def logout() -> None:
     """Remove the current account's cached Garmin tokens."""
-    (_token_dir() / _TOKEN_FILE).unlink(missing_ok=True)
+    directory = _token_dir()
+    for name in (_TOKEN_FILE, _LEGACY_TOKEN_FILE):
+        (directory / name).unlink(missing_ok=True)
+
+
+def forget_account(owner_id: str) -> None:
+    """Delete every Garmin file of an account (its tokens and email)."""
+    import shutil
+
+    directory = TOKEN_ROOT / str(uuid.UUID(owner_id))
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 def _existing_garmin_ids() -> set[int]:
@@ -156,19 +225,18 @@ def attempt_login(email: str, password: str) -> dict[str, Any]:
     """
     from garminconnect import Garmin
 
-    token_store = str(_token_dir())
     client = Garmin(email=email, password=password, return_on_mfa=True)
-    status, client_state = client.login(token_store)
+    status, client_state = client.login()
     if status == "needs_mfa":
         return {"needs_mfa": True, "_client": client, "_state": client_state}
-    client.client.dump(token_store)
+    save_tokens(client)
     return {"ok": True}
 
 
 def complete_mfa(client_obj, client_state, mfa_code: str) -> None:
     """Finish a login that required MFA and persist the tokens."""
     client_obj.resume_login(client_state, mfa_code)
-    client_obj.client.dump(str(_token_dir()))
+    save_tokens(client_obj)
 
 
 def login_with_tokens() -> Any:
@@ -176,7 +244,7 @@ def login_with_tokens() -> Any:
     from garminconnect import Garmin
 
     client = Garmin()
-    client.login(str(_token_dir()))
+    client.login(load_tokens())  # inline JSON: the tokens never touch the disk unencrypted
     return client
 
 
@@ -185,11 +253,26 @@ def login_with_credentials(email: str, password: str) -> Any:
     from garminconnect import Garmin
 
     client = Garmin(email=email, password=password)
-    client.login(str(_token_dir()))
+    client.login()
+    save_tokens(client)
     return client
 
 
 # ── Main sync ─────────────────────────────────────────────────────────────────
+
+
+@contextmanager
+def no_sync_running(owner_id: str) -> Iterator[None]:
+    """Hold off syncs of an account while the block runs; raises if one is already running."""
+    with _running_lock:
+        if owner_id in _running_syncs:
+            raise GarminError("A Garmin sync is running for this account; wait until it ends")
+        _running_syncs.add(owner_id)
+    try:
+        yield
+    finally:
+        with _running_lock:
+            _running_syncs.discard(owner_id)
 
 
 def sync_garmin_activities(
@@ -207,7 +290,7 @@ def sync_garmin_activities(
     owner_id = _owner_id()
     with _running_lock:
         if owner_id in _running_syncs:
-            raise RuntimeError("A sync is already running for this account")
+            raise GarminError("A sync is already running for this account")
         _running_syncs.add(owner_id)
     try:
         return _sync(since, until, email, password, progress_cb)
@@ -234,10 +317,11 @@ def _sync(
         if progress_cb:
             progress_cb(msg)
 
-    def _expired(exc: Exception) -> RuntimeError:
+    def _expired(exc: Exception) -> GarminError:
         # Drop tokens Garmin no longer accepts, so the page asks the user to sign in again
+        logger.warning("Garmin rejected the stored tokens: {}", exc)
         logout()
-        return RuntimeError(f"Garmin login expired, please sign in again ({exc})")
+        return GarminError("Garmin login expired, please sign in again")
 
     # Authenticate
     using_tokens = tokens_exist()
@@ -247,15 +331,17 @@ def _sync(
             garmin = login_with_tokens()
         else:
             if not email or not password:
-                raise RuntimeError("No cached tokens. Provide email and password to authenticate.")
+                raise GarminError("No cached tokens. Provide email and password to authenticate.")
             _cb("Logging in to Garmin Connect…")
             garmin = login_with_credentials(email, password)
     except GarminConnectAuthenticationError as exc:
         if using_tokens:
             raise _expired(exc) from exc
-        raise RuntimeError(f"Garmin authentication failed: {exc}") from exc
+        logger.warning("Garmin authentication failed: {}", exc)
+        raise GarminError("Garmin authentication failed; check your email and password") from exc
     except GarminConnectConnectionError as exc:
-        raise RuntimeError(f"Garmin connection error: {exc}") from exc
+        logger.warning("Garmin connection error: {}", exc)
+        raise GarminError("Could not reach Garmin Connect; try again later") from exc
 
     until_date = until or date.today()
     _cb(f"Fetching activity list {format_date(since)} → {format_date(until_date)}…")
@@ -265,7 +351,8 @@ def _sync(
     except GarminConnectAuthenticationError as exc:
         raise _expired(exc) from exc
     except Exception as exc:
-        raise RuntimeError(f"Failed to fetch activity list: {exc}") from exc
+        logger.warning("Fetching the Garmin activity list failed: {}", exc)
+        raise GarminError("Could not fetch the activity list from Garmin Connect") from exc
 
     total = len(activities)
     _cb(f"Found {total} activities on Garmin Connect.")
@@ -315,8 +402,10 @@ def _sync(
         except GarminConnectAuthenticationError as exc:
             raise _expired(exc) from exc
         except Exception as exc:
-            logger.warning("Failed to download garmin activity {}: {}", garmin_id, exc)
-            errors.append(f"{act_name}: {exc}")
+            message = public_message(
+                exc, "download failed", f"Failed to download garmin activity {garmin_id}"
+            )
+            errors.append(f"{act_name}: {message}")
             continue
 
         try:
@@ -337,10 +426,18 @@ def _sync(
                 skipped += 1
             else:
                 logger.warning("Failed to import garmin activity {}: {}", garmin_id, exc)
-                errors.append(f"{act_name}: {exc}")
+                errors.append(f"{act_name}: could not be stored")
         except Exception as exc:
-            logger.warning("Failed to import garmin activity {}: {}", garmin_id, exc)
-            errors.append(f"{act_name}: {exc}")
+            message = public_message(
+                exc, "could not be imported", f"Failed to import garmin activity {garmin_id}"
+            )
+            errors.append(f"{act_name}: {message}")
+
+    # Garmin may have refreshed the tokens during the sync; keep the latest ones
+    try:
+        save_tokens(garmin)
+    except Exception as exc:
+        logger.warning("Could not store the refreshed Garmin tokens: {}", exc)
 
     _cb(f"Done. Imported {imported}, skipped {skipped}, errors {len(errors)}.")
     return {"imported": imported, "skipped": skipped, "errors": errors}
