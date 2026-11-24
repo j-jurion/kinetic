@@ -13,14 +13,14 @@ from contextvars import copy_context
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlmodel import col, select
 
-from app import apple_health, auth, garmin_sync, metrics, streams
+from app import apple_health, auth, garmin_sync, metrics, strava, streams
 from app.database import engine, require_id
 from app.formatting import SPORTS, resolve_sports
 from app.friends import friend_rows
@@ -282,6 +282,34 @@ async def upload_fit(file: UploadFile) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Could not import file: {exc}") from None
     return get_activity(activity_id)
+
+
+@router.post("/activities/import-file")
+async def import_activity_file(
+    file: UploadFile,
+    name: Optional[str] = Form(None),
+    activity_type: Optional[str] = Form(None),
+    description: Optional[str] = Form(None),
+) -> dict:
+    """One activity file from a Strava export (or any .fit/.gpx/.tcx, optionally gzipped).
+
+    The name, type and description come from the export's activities.csv. Returns
+    ``{"status": "imported", "activity": {...}}`` or ``{"status": "skipped"}`` when an
+    activity of the same sport already starts within a minute of it.
+    """
+    filename = file.filename or ""
+    content = await file.read(strava.MAX_FILE_BYTES + 1)
+    if len(content) > strava.MAX_FILE_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large")
+    try:
+        result = await _run_in_thread(
+            strava.import_file, filename, content, name, activity_type, description
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Could not import file: {exc}") from None
+    if result["status"] == "skipped":
+        return {"status": "skipped"}
+    return {"status": "imported", "activity": get_activity(result["id"])}
 
 
 async def _run_in_thread(fn, *args):

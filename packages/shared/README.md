@@ -20,6 +20,8 @@ npm package or workspace: each app maps the name to `packages/shared/src` itself
 | `forms` | Form values and request payloads for activities and race results |
 | `routeMap` | How a route is coloured (by speed or per multisport leg) and its legend |
 | `streamIndex` | Finding the stream point at a distance |
+| `zip` | Reading a ZIP directory through a byte-range reader each app supplies |
+| `stravaImport` | Strava export: which files to send, `activities.csv` details and the upload runner |
 | `charts/theme` | Plotly light/dark styling applied by both apps before drawing |
 | `charts/graphsPage` | The Graphs page as a registry of charts with their controls |
 | `charts/activity`, `charts/training`, `charts/power`, `charts/races`, `charts/records` | The Plotly chart builders of the other pages |

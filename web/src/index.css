@@ -517,7 +517,7 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 
 /* ── Status pills and consoles ─────────────────────────────────────────── */
 .status-pill {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex; flex: none; white-space: nowrap; align-items: center; gap: 6px;
   padding: 4px 10px 4px 8px; border-radius: 999px;
   font-size: .78rem; font-weight: 600;
 }
@@ -571,6 +571,31 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 .card-heading-icon {
   flex: none; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px;
   color: var(--primary); background: var(--primary-soft);
+}
+
+/* ── Sync platform tabs ────────────────────────────────────────────────── */
+.platform-tabs {
+  display: grid; width: 100%; gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.platform-tab {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding: 12px 14px;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--card-border); border-radius: 14px;
+  box-shadow: var(--card-shadow); transition: border-color .15s ease, box-shadow .15s ease;
+}
+.platform-tab:hover { box-shadow: var(--card-shadow-hover); }
+.platform-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.platform-tab--selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), var(--card-shadow); }
+.platform-tab-name { font-weight: 600; font-size: 15px; }
+.status-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: rgba(127, 127, 127, .45); }
+.status-dot--ok { background: #22c55e; }
+@media (max-width: 640px) {
+  .platform-tabs { gap: 8px; }
+  .platform-tab { position: relative; flex-direction: column; gap: 6px; padding: 12px 6px 10px; text-align: center; }
+  .platform-tab > .column { align-items: center; width: 100%; }
+  .platform-tab-name { font-size: 13px; }
+  .platform-tab .status-dot { position: absolute; top: 10px; right: 10px; }
 }
 
 /* ── Apple Health setup ────────────────────────────────────────────────── */
