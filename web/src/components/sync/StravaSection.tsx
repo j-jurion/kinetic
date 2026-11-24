@@ -1,19 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button, CircularProgress, LinearProgress } from '@mui/material'
-import {
-  activitiesFromFiles,
-  activitiesFromZip,
-  importStravaActivities,
-  type StravaProgress,
-  type StravaSummary,
-} from '../../lib/stravaExport'
+import { useBackgroundJobs, type StravaSource } from '../../lib/backgroundJobs'
 import { Stat } from '../fields'
 import { Icon } from '../icons'
-import { useNotify } from '../Notify'
 
-type Source = { kind: 'zip'; file: File } | { kind: 'files'; files: File[] }
-
-function describe(source: Source | null): string {
+function describe(source: StravaSource | null): string {
   if (!source) return 'No file chosen'
   if (source.kind === 'zip') return `${source.file.name} (${(source.file.size / 1024 / 1024).toFixed(0)} MB)`
   const count = source.files.length
@@ -22,47 +13,20 @@ function describe(source: Source | null): string {
 
 /** Strava: how to get the archive, and the bulk import of it (or of loose activity files). */
 export function StravaSection() {
-  const notify = useNotify()
-  const [source, setSource] = useState<Source | null>(null)
-  const [progress, setProgress] = useState<StravaProgress | null>(null)
-  const [summary, setSummary] = useState<StravaSummary | null>(null)
-  const abort = useRef<AbortController | null>(null)
+  const [source, setSource] = useState<StravaSource | null>(null)
+  // The import runs in the background: it carries on when you leave this page
+  const { strava, startStravaImport, cancelStravaImport } = useBackgroundJobs()
+  const { progress, summary } = strava
   const zipInput = useRef<HTMLInputElement>(null)
   const filesInput = useRef<HTMLInputElement>(null)
 
-  useEffect(() => () => abort.current?.abort(), [])
-
-  const choose = (next: Source | null) => {
-    setSource(next)
-    setSummary(null)
-  }
-
-  const runImport = async () => {
+  const runImport = () => {
     if (!source) return
-    const controller = new AbortController()
-    abort.current = controller
-    setSummary(null)
-    setProgress({ fraction: 0, message: 'Reading export…' })
-    try {
-      const activities =
-        source.kind === 'zip' ? await activitiesFromZip(source.file) : activitiesFromFiles(source.files)
-      if (!activities.length) throw new Error('No .fit, .gpx or .tcx files chosen')
-      const result = await importStravaActivities(activities, {
-        onProgress: setProgress,
-        signal: controller.signal,
-      })
-      setSummary(result)
-      notify(`Strava import complete: ${result.imported} imported`, 'success')
-    } catch (error) {
-      if ((error as Error).name === 'AbortError') notify('Import cancelled', 'info')
-      else notify((error as Error).message, 'error', 8000)
-    } finally {
-      abort.current = null
-      setProgress(null)
-    }
+    startStravaImport(source)
+    setSource(null)
   }
 
-  const importing = progress !== null
+  const importing = strava.running
 
   return (
     <div className="sync-grid">
@@ -101,7 +65,8 @@ export function StravaSection() {
           <div className="column gap-0 flex-1 min-w-0">
             <span className="card-title">Import activities</span>
             <span className="text-caption text-grey-6">
-              Read in this browser; only the activity files are sent, not your photos.
+              Read in this browser; only the activity files are sent, not your photos. The import keeps running
+              when you leave this page.
             </span>
           </div>
         </div>
@@ -113,7 +78,7 @@ export function StravaSection() {
           hidden
           onChange={(e) => {
             const file = e.target.files?.[0]
-            choose(file ? { kind: 'zip', file } : null)
+            setSource(file ? { kind: 'zip', file } : null)
             e.target.value = ''
           }}
         />
@@ -125,7 +90,7 @@ export function StravaSection() {
           hidden
           onChange={(e) => {
             const files = Array.from(e.target.files ?? [])
-            choose(files.length ? { kind: 'files', files } : null)
+            setSource(files.length ? { kind: 'files', files } : null)
             e.target.value = ''
           }}
         />
@@ -147,7 +112,9 @@ export function StravaSection() {
             Or choose files
           </Button>
         </div>
-        <span className="text-caption text-grey-6 ellipsis w-full">{describe(source)}</span>
+        <span className="text-caption text-grey-6 ellipsis w-full">
+          {importing && !source ? `Importing ${strava.label}` : describe(source)}
+        </span>
         <span className="text-caption text-grey-6">.fit, .gpx and .tcx files, gzipped or not.</span>
         <div className="row items-center gap-3 w-full">
           <Button
@@ -158,7 +125,7 @@ export function StravaSection() {
           >
             {importing ? 'Importing…' : 'Import activities'}
           </Button>
-          {importing && <Button onClick={() => abort.current?.abort()}>Cancel</Button>}
+          {importing && <Button onClick={cancelStravaImport}>Cancel</Button>}
         </div>
 
         {progress && (

@@ -19,7 +19,7 @@ function StatusIcon({ status }: { status: JobStatus }) {
   return <Icon name={status.state === 'done' ? 'check_circle' : 'error'} size={18} />
 }
 
-/** The syncs and uploads running in the background, in the header; click to open the sync page. */
+/** The syncs and uploads running in the background, in the header; click to open the page that shows it. */
 export function SyncStatus() {
   const jobs = useBackgroundJobs()
   const navigate = useNavigate()
@@ -53,7 +53,7 @@ export function SyncStatus() {
             {statuses.map((s) => (
               <span key={s.key}>{s.detail}</span>
             ))}
-            <span style={{ opacity: 0.75 }}>Click to open Sync</span>
+            <span style={{ opacity: 0.75 }}>Click to open</span>
           </div>
         }
       >
@@ -62,7 +62,7 @@ export function SyncStatus() {
           className="sync-status-button"
           onClick={() => {
             dismiss()
-            navigate('/sync')
+            navigate(lead.href)
           }}
         >
           <StatusIcon status={lead} />

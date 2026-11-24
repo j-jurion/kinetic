@@ -36,6 +36,12 @@ export function SyncPage() {
   const platform: Platform = isPlatform(requested) ? requested : 'garmin'
   const [garmin, setGarmin] = useState<GarminStatus | null>(null)
   const [appleToken, setAppleToken] = useState<AppleTokenInfo | null | undefined>(undefined)
+  const jobs = useBackgroundJobs()
+  const running: Record<Platform, string | null> = {
+    garmin: jobs.garmin.running ? 'Syncing…' : null,
+    apple: jobs.apple.running ? 'Importing…' : null,
+    strava: jobs.strava.running ? 'Importing…' : null,
+  }
 
   const refreshGarmin = useCallback(async () => {
     const status = await api.get<GarminStatus>('/garmin/status')
@@ -92,7 +98,9 @@ export function SyncPage() {
               </span>
               <span className="column gap-0 flex-1 min-w-0">
                 <span className="platform-tab-name">{p.name}</span>
-                <span className="text-caption text-grey-6 ellipsis">{status ? status.text : p.method}</span>
+                <span className={`text-caption ellipsis ${running[p.key] ? 'text-primary' : 'text-grey-6'}`}>
+                  {running[p.key] ?? status?.text ?? p.method}
+                </span>
               </span>
               {status && <span className={`status-dot ${status.ok ? 'status-dot--ok' : ''}`} aria-hidden />}
             </button>
