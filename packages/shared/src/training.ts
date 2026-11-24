@@ -3,6 +3,7 @@
 
 import { parseDate, stepsPerMinute } from './format'
 import { weekStart } from './graphs'
+import { monthsBefore } from './performance'
 import type { TrainingActivity } from './types'
 
 /** Days over which fitness (chronic training load) is averaged. */
@@ -60,9 +61,7 @@ export function discipline(sport: string): Discipline {
 /** First day shown for a range, or null for all history. */
 export function rangeStart(range: Range, today = new Date()): Date | null {
   if (range === 'all') return null
-  const d = startOfDay(today)
-  d.setMonth(d.getMonth() - (range === '3m' ? 3 : 12))
-  return d
+  return monthsBefore(startOfDay(today), range === '3m' ? 3 : 12)
 }
 
 /** Whether an activity (or any dated item) falls on or after the range start. */
