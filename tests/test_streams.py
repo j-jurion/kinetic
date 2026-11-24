@@ -1,4 +1,3 @@
-import shutil
 import tempfile
 import unittest
 from datetime import datetime, timedelta
@@ -6,8 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import streams
-
-SAMPLE = Path(__file__).resolve().parent.parent / "data" / "2025-03-18-17-53-59.fit"
+from tests.fit_samples import write_sample_run
 
 
 class StreamTests(unittest.TestCase):
@@ -16,8 +14,8 @@ class StreamTests(unittest.TestCase):
         self.addCleanup(workdir.cleanup)
         self.uploads = Path(workdir.name) / "uploads"
         self.uploads.mkdir()
-        self.fit = self.uploads / "sample.fit"
-        shutil.copy(SAMPLE, self.fit)
+        self.fit = write_sample_run(self.uploads / "sample.fit")
+        self.outside = write_sample_run(Path(workdir.name) / "outside.fit")
         patcher = patch.object(streams, "UPLOAD_DIR", self.uploads)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -30,7 +28,7 @@ class StreamTests(unittest.TestCase):
         self.assertEqual(streams.fit_path_for("/old/server/uploads/sample.fit"), found)
         self.assertIsNone(streams.fit_path_for(None))
         self.assertIsNone(streams.fit_path_for("uploads/missing.fit"))
-        self.assertIsNone(streams.fit_path_for(str(SAMPLE)))  # not in the uploads folder
+        self.assertIsNone(streams.fit_path_for(str(self.outside)))  # not in the uploads folder
         self.assertIsNone(streams.fit_path_for("uploads/.."))
 
     def test_streams_are_downsampled_and_aligned(self):

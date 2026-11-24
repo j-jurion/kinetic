@@ -1,4 +1,3 @@
-import shutil
 import tempfile
 import unittest
 import uuid
@@ -12,8 +11,8 @@ from sqlmodel import SQLModel, create_engine
 from app import metrics, streams
 from app.models import Activity, ActivityMetrics, SportType
 from app.ownership import UserSession, current_owner
+from tests.fit_samples import write_sample_run
 
-SAMPLE = Path(__file__).resolve().parent.parent / "data" / "2025-03-18-17-53-59.fit"
 ALICE, BOB = str(uuid.uuid4()), str(uuid.uuid4())
 
 
@@ -28,7 +27,7 @@ class MetricsTests(unittest.TestCase):
         self.addCleanup(workdir.cleanup)
         uploads = Path(workdir.name) / "uploads"
         uploads.mkdir()
-        shutil.copy(SAMPLE, uploads / "run.fit")
+        write_sample_run(uploads / "run.fit")
         for patcher in (
             patch.object(metrics, "engine", self.engine),
             patch.object(streams, "UPLOAD_DIR", uploads),
@@ -40,7 +39,7 @@ class MetricsTests(unittest.TestCase):
         token = current_owner.set(owner_id)
         self.addCleanup(current_owner.reset, token)
 
-    def add_activity(self, name, fit="uploads/run.fit", avg_hr=None):
+    def add_activity(self, name, fit="uploads/run.fit", avg_hr=None, max_hr=None):
         with UserSession(self.engine) as session:
             activity = Activity(
                 name=name,
@@ -49,6 +48,7 @@ class MetricsTests(unittest.TestCase):
                 duration_seconds=1800,
                 distance_meters=5000,
                 avg_heart_rate=avg_hr,
+                max_heart_rate=max_hr,
                 fit_file_path=fit,
             )
             session.add(activity)
@@ -58,7 +58,8 @@ class MetricsTests(unittest.TestCase):
 
     def test_backfill_stores_metrics_and_overview_uses_them(self):
         self.as_owner(ALICE)
-        with_file = self.add_activity("With file")
+        # The synthetic file has no watch settings: zones come from the highest heart rate
+        with_file = self.add_activity("With file", max_hr=185)
         manual = self.add_activity("Manual", fit=None, avg_hr=150)
         self.assertEqual(sorted(metrics.pending_ids()), sorted([with_file, manual]))
 
