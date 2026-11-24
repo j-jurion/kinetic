@@ -1,8 +1,13 @@
+import json
+import tempfile
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from app.api import _leg_segments
+from app.fit_parser import parse_fit_file
 from app.models import Activity, SportType
+from tests.fit_samples import write_sessions_fit
 
 START = datetime(2026, 7, 25, 14, 0, 0)
 
@@ -44,9 +49,39 @@ class LegSegmentTests(unittest.TestCase):
                 leg(SportType.running, 3700, 1500),
             ]
         )
+        self.assertEqual([s["label"] for s in segments], ["Run 1", "Bike", "T1", "Run 2"])
+
+
+def triathlon_fit(path: Path) -> Path:
+    """A triathlon whose swim timer ran for only 74 s of its 1200 s (watch auto-pause)."""
+    # sport, start offset, elapsed seconds, timer seconds
+    return write_sessions_fit(
+        path,
+        [
+            ("swimming", 0, 1200, 74),
+            ("transition", 1200, 60, 60),
+            ("cycling", 1260, 1800, 1800),
+            ("transition", 3060, 60, 60),
+            ("running", 3120, 1200, 1200),
+        ],
+        multisport_profile=True,
+    )
+
+
+class MultisportImportTests(unittest.TestCase):
+    def test_legs_use_elapsed_time_like_single_activities(self):
+        with tempfile.TemporaryDirectory() as folder:
+            fit = triathlon_fit(Path(folder) / "tri.fit")
+            parent, _, _, children = parse_fit_file(fit)
+        self.assertEqual(parent.sport, SportType.triathlon)
+        self.assertEqual(parent.duration_seconds, 4320)
+        legs = [(c.sport, c.duration_seconds, len(json.loads(c.route_json))) for c, *_ in children]
         self.assertEqual(
-            [s["label"] for s in segments], ["Run 1", "Bike", "T1", "Run 2"]
+            [(sport, seconds) for sport, seconds, _ in legs],
+            [(SportType.swimming, 1200), (SportType.cycling, 1800), (SportType.running, 1200)],
         )
+        # The swim's route covers the whole swim, not just the 74 s the timer ran
+        self.assertGreaterEqual(legs[0][2], 120)
 
 
 if __name__ == "__main__":

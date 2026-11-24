@@ -323,6 +323,8 @@ export interface RouteLeg {
   color: string
   start: number
   end: number
+  /** The leg's own activity, when known: its stored route is drawn without per-second data. */
+  id?: number
 }
 
 /** The leg label a sport gets in a breakdown: Swim, Bike, Run or the sport's own name. */
@@ -340,7 +342,7 @@ function legLabel(sport: string, fallback: string): string {
  */
 export function routeLegs(
   eventDate: string,
-  legs: { sport: string; date: string; duration_seconds: number | null }[],
+  legs: { id?: number; sport: string; date: string; duration_seconds: number | null }[],
   nameOf: (sport: string) => string,
 ): RouteLeg[] {
   const start = parseDate(eventDate)?.getTime()
@@ -360,7 +362,9 @@ export function routeLegs(
   const colors = segmentColors(labels)
   return ordered.map(({ leg, at }, i) => {
     const from = (at - start) / 1000
-    return { label: labels[i], color: colors[i], start: from, end: from + (leg.duration_seconds ?? 0) }
+    const routeLeg: RouteLeg = { label: labels[i], color: colors[i], start: from, end: from + (leg.duration_seconds ?? 0) }
+    if (leg.id !== undefined) routeLeg.id = leg.id
+    return routeLeg
   })
 }
 

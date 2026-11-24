@@ -85,6 +85,36 @@ export function routeDrawing(streams: ActivityStreams | null, sport: string, leg
   }
 }
 
+/** Points kept per leg when drawing stored routes, so the map stays light. */
+export const MAX_STORED_LEG_POINTS = 300
+
+/** Every n-th point (and the last), so a route keeps at most `max` points. */
+function thin(coords: LatLng[], max: number): LatLng[] {
+  if (coords.length <= max) return coords
+  const step = (coords.length - 1) / (max - 1)
+  return Array.from({ length: max }, (_, i) => coords[Math.round(i * step)])
+}
+
+/**
+ * A multisport event without per-second data (its FIT file is not on the server), drawn from
+ * the stored route of each leg in the leg's colour. Null without at least two legs with a route.
+ */
+export function storedLegsDrawing(routes: { leg: RouteLeg; coords: LatLng[] }[]): RouteDrawing | null {
+  const drawn = routes
+    .map(({ leg, coords }) => ({ leg, coords: thin(coords.filter((c) => c && c.length >= 2), MAX_STORED_LEG_POINTS) }))
+    .filter(({ coords }) => coords.length >= 2)
+  if (drawn.length < 2) return null
+  const segments: RouteSegment[] = []
+  for (const { leg, coords } of drawn) {
+    for (let i = 1; i < coords.length; i++) segments.push({ from: coords[i - 1], to: coords[i], color: leg.color })
+  }
+  return {
+    located: drawn.flatMap(({ coords }) => coords),
+    segments,
+    legend: { kind: 'legs', items: drawn.map(({ leg }) => [leg.label, leg.color]) },
+  }
+}
+
 const escapeHtml = (text: string) =>
   text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!)
 

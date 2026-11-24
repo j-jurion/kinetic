@@ -12,8 +12,12 @@ DURATION_SECONDS = 1800
 ORIGIN_LAT, ORIGIN_LON = 50.123456, 3.654321
 
 
-def sample_run_bytes() -> bytes:
-    """A 30-minute run at ~3 m/s with heart rate, cadence and a 40 m climb in the middle."""
+def sample_run_bytes(multisport_profile: bool = False) -> bytes:
+    """A 30-minute run at ~3 m/s with heart rate, cadence and a 40 m climb in the middle.
+
+    With ``multisport_profile`` the file is tagged ``auto_multi_sport``, as a watch does for a
+    run started from a multisport activity profile, though it holds this one run only.
+    """
     writer = fit_writer.FitWriter()
     sport, sub_sport = fit_writer.sport_codes("running")
     writer.write("file_id", type=4, manufacturer=255, product=0, serial_number=1,
@@ -73,10 +77,40 @@ def sample_run_bytes() -> bytes:
         **common,
     )
     writer.write("activity", timestamp=end, total_timer_time=DURATION_SECONDS, num_sessions=1,
-                 type=0, event=26, event_type=1)
+                 type=1 if multisport_profile else 0, event=26, event_type=1)
     return writer.to_bytes()
 
 
-def write_sample_run(path: Path) -> Path:
-    path.write_bytes(sample_run_bytes())
+def write_sample_run(path: Path, multisport_profile: bool = False) -> Path:
+    path.write_bytes(sample_run_bytes(multisport_profile))
+    return path
+
+
+def write_sessions_fit(
+    path: Path,
+    sessions: list[tuple[str, float, float, float]],
+    multisport_profile: bool = False,
+) -> Path:
+    """A file with a GPS point every 10 s and one session per (sport, start offset, elapsed
+    seconds, timer seconds); sport "transition" is a transition session."""
+    start = datetime(2026, 5, 10, 11, 0, tzinfo=timezone.utc)
+    end = max(offset + elapsed for _, offset, elapsed, _ in sessions)
+    writer = fit_writer.FitWriter()
+    writer.write("file_id", type=4, manufacturer=255, product=0, serial_number=1,
+                 time_created=start)
+    for t in range(0, int(end), 10):  # moving east
+        writer.write("record", timestamp=start + timedelta(seconds=t),
+                     position_lat=51.0 * fit_writer.DEG_TO_SEMICIRCLES,
+                     position_long=(4.0 + t / 100000) * fit_writer.DEG_TO_SEMICIRCLES,
+                     distance=t * 5.0)
+    for index, (sport, offset, elapsed, timer) in enumerate(sessions):
+        code = 3 if sport == "transition" else fit_writer.sport_codes(sport)[0]  # 3: transition
+        writer.write("session", timestamp=start + timedelta(seconds=offset + elapsed),
+                     message_index=index, event=9, event_type=1,
+                     start_time=start + timedelta(seconds=offset), sport=code, sub_sport=0,
+                     total_elapsed_time=elapsed, total_timer_time=timer, total_distance=elapsed * 3)
+    writer.write("activity", timestamp=start + timedelta(seconds=end), total_timer_time=end,
+                 num_sessions=len(sessions), type=1 if multisport_profile else 0, event=26,
+                 event_type=1)
+    path.write_bytes(writer.to_bytes())
     return path
