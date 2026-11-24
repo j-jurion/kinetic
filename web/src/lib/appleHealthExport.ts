@@ -82,6 +82,17 @@ class Samples {
   }
 }
 
+/** One part of a multisport workout (a <WorkoutActivity>): a swim, ride, run or transition. */
+interface RawLeg {
+  type: string
+  start: string
+  end: string
+  distance: { qty: number; units: string } | null
+  indoor: boolean
+  swimLocation: string | null
+  lapLengthM: number | null
+}
+
 interface RawWorkout {
   type: string
   source: number
@@ -98,7 +109,58 @@ interface RawWorkout {
   swimLocation: string | null
   ascentM: number | null
   lapLengthM: number | null
-  routeFile: string | null
+  routeFiles: string[]
+  /** The legs of a multisport workout; empty for a workout of one sport. */
+  legs: RawLeg[]
+}
+
+// What a leg is, from the distance it counts, for exports whose <WorkoutActivity> has no type
+const LEG_BY_DISTANCE: Record<string, string> = {
+  HKQuantityTypeIdentifierDistanceSwimming: 'Swimming',
+  HKQuantityTypeIdentifierDistanceCycling: 'Cycling',
+  HKQuantityTypeIdentifierDistanceWalkingRunning: 'Running',
+}
+
+function metadataOf(block: string): Record<string, string> {
+  const metadata: Record<string, string> = {}
+  for (const match of block.matchAll(/<MetadataEntry ([^>]*?)\/?>/g)) {
+    const entry = attributes(match[1])
+    if (entry.key && !(entry.key in metadata)) metadata[entry.key] = entry.value ?? ''
+  }
+  return metadata
+}
+
+/** The legs of a workout block; a workout of one sport has at most one and gets none. */
+function legsOf(block: string): RawLeg[] {
+  const legs: RawLeg[] = []
+  for (const match of block.matchAll(/<WorkoutActivity ([^>]*?)(\/>|>([\s\S]*?)<\/WorkoutActivity>)/g)) {
+    const attrs = attributes(match[1])
+    const inner = match[3] ?? ''
+    if (!attrs.startDate || !attrs.endDate) continue
+    let type = (attrs.workoutActivityType ?? '').replace('HKWorkoutActivityType', '')
+    let distance: RawLeg['distance'] = null
+    for (const stat of inner.matchAll(/<WorkoutStatistics ([^>]*?)\/?>/g)) {
+      const values = attributes(stat[1])
+      const sum = number(values.sum)
+      const kind = values.type ? LEG_BY_DISTANCE[values.type] : undefined
+      if (kind && sum !== null) {
+        distance = { qty: sum, units: values.unit ?? 'km' }
+        type ||= kind
+      }
+    }
+    const metadata = metadataOf(inner)
+    legs.push({
+      // Without a type or a distance it is the time between two legs
+      type: type || 'Transition',
+      start: attrs.startDate,
+      end: attrs.endDate,
+      distance,
+      indoor: metadata.HKIndoorWorkout === '1',
+      swimLocation: metadata.HKSwimmingLocationType ?? null,
+      lapLengthM: lengthMetres(metadata.HKLapLength),
+    })
+  }
+  return legs.filter((leg) => leg.type !== 'Transition').length >= 2 ? legs : []
 }
 
 const ATTRIBUTE = /([\w:]+)="([^"]*)"/g
@@ -188,20 +250,23 @@ class ExportParser {
     const endMs = appleDateMs(attrs.endDate ?? '')
     if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) return
 
-    const metadata: Record<string, string> = {}
-    for (const match of block.matchAll(/<MetadataEntry ([^>]*?)\/?>/g)) {
-      const entry = attributes(match[1])
-      if (entry.key && !(entry.key in metadata)) metadata[entry.key] = entry.value ?? ''
-    }
+    // The workout's own statistics and metadata, not those of its legs (<WorkoutActivity>),
+    // which would otherwise overwrite them; older exports only have the workout's own
+    const own = block.replace(/<WorkoutActivity [^>]*?(\/>|>[\s\S]*?<\/WorkoutActivity>)/g, '')
+    const metadata = { ...metadataOf(block), ...metadataOf(own) }
     let distance: RawWorkout['distance'] = null
     let energy: RawWorkout['energy'] = null
     let avgHr: number | null = null
     let maxHr: number | null = null
-    for (const match of block.matchAll(/<WorkoutStatistics ([^>]*?)\/?>/g)) {
+    const statistics = /<WorkoutStatistics /.test(own) ? own : block
+    for (const match of statistics.matchAll(/<WorkoutStatistics ([^>]*?)\/?>/g)) {
       const stat = attributes(match[1])
       const sum = number(stat.sum)
       if (stat.type?.startsWith('HKQuantityTypeIdentifierDistance') && sum !== null) {
-        distance = { qty: sum, units: stat.unit ?? 'km' }
+        // A multisport workout has a total per kind (swim, ride, run): add them up
+        distance = distance && distance.units === (stat.unit ?? 'km')
+          ? { qty: distance.qty + sum, units: distance.units }
+          : { qty: sum, units: stat.unit ?? 'km' }
       } else if (stat.type === 'HKQuantityTypeIdentifierActiveEnergyBurned' && sum !== null) {
         energy = { qty: sum, units: stat.unit ?? 'kcal' }
       } else if (stat.type === 'HKQuantityTypeIdentifierHeartRate') {
@@ -216,7 +281,10 @@ class ExportParser {
     if (!energy && number(attrs.totalEnergyBurned)) {
       energy = { qty: Number(attrs.totalEnergyBurned), units: attrs.totalEnergyBurnedUnit ?? 'kcal' }
     }
-    const route = /<FileReference path="([^"]+)"/.exec(block)
+    // A multisport workout can have a route per leg
+    const routeFiles = [...block.matchAll(/<FileReference path="([^"]+)"/g)]
+      .map((match) => match[1].split('/').pop() ?? '')
+      .filter(Boolean)
     const durationUnit = attrs.durationUnit ?? 'min'
     const rawDuration = number(attrs.duration)
     const duration = rawDuration === null ? null
@@ -238,7 +306,8 @@ class ExportParser {
       swimLocation: metadata.HKSwimmingLocationType ?? null,
       ascentM: lengthMetres(metadata.HKElevationAscended),
       lapLengthM: lengthMetres(metadata.HKLapLength),
-      routeFile: route ? route[1].split('/').pop() ?? null : null,
+      routeFiles,
+      legs: legsOf(block),
     })
   }
 
@@ -268,7 +337,7 @@ class ExportParser {
 }
 
 /** The display name Apple's Fitness app would use, e.g. "Outdoor Run". */
-function workoutName(w: RawWorkout): string {
+function workoutName(w: Pick<RawWorkout, 'type' | 'indoor' | 'swimLocation'>): string {
   const place = w.indoor ? 'Indoor' : 'Outdoor'
   switch (w.type) {
     case 'Running': return `${place} Run`
@@ -418,14 +487,29 @@ export async function importAppleHealthExport(
           : series
       }
     }
-    const routeEntry = w.routeFile ? gpx.get(w.routeFile) : undefined
-    if (routeEntry) {
+    if (w.legs.length) {
+      // The server makes it an event with a leg per part, like a watch's triathlon
+      payload.legs = w.legs.map((leg) => ({
+        name: workoutName(leg),
+        start: leg.start,
+        end: leg.end,
+        distance: leg.distance,
+        isIndoor: leg.indoor,
+        location: leg.type === 'Swimming' ? (leg.swimLocation === '2' ? 'Open Water' : 'Pool') : leg.indoor ? 'Indoor' : 'Outdoor',
+        lapLength: leg.lapLengthM === null ? null : { qty: leg.lapLengthM, units: 'm' },
+      }))
+    }
+    const route = []
+    for (const name of w.routeFiles) {
+      const routeEntry = gpx.get(name)
+      if (!routeEntry) continue
       try {
-        payload.route = parseGpx(await readEntryText(file, routeEntry))
+        route.push(...parseGpx(await readEntryText(file, routeEntry)))
       } catch {
         // A damaged route file still leaves the rest of the workout
       }
     }
+    if (route.length) payload.route = route.sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp))
     const json = JSON.stringify(payload)
     if (batch.length && (batchBytes + json.length > BATCH_BYTES || batch.length >= BATCH_WORKOUTS)) {
       await flush()

@@ -49,6 +49,19 @@ class RoutePoint:
 
 
 @dataclass
+class Leg:
+    """One part of a multisport workout: a swim, ride or run, or a transition."""
+
+    name: str
+    start: datetime
+    end: datetime
+    sport: str = "generic"
+    sub_sport: str = "generic"
+    distance: Optional[float] = None
+    lap_length: Optional[float] = None
+
+
+@dataclass
 class Workout:
     name: str
     start: datetime
@@ -69,6 +82,8 @@ class Workout:
     distance_samples: list[tuple[datetime, float]] = field(default_factory=list)
     power: list[tuple[datetime, float]] = field(default_factory=list)
     cadence: list[tuple[datetime, float]] = field(default_factory=list)
+    # The legs of a multisport workout (Apple's "Swim Bike Run"), in order; empty otherwise
+    legs: list[Leg] = field(default_factory=list)
 
     @property
     def sport_type(self) -> SportType:
@@ -208,6 +223,42 @@ def classify(name: str, location: str = "", is_indoor: bool = False) -> tuple[st
     return "generic", "generic"
 
 
+def _legs(items: Any, start: datetime, end: datetime) -> list[Leg]:
+    """The legs of a multisport workout, sorted; none unless there are two sport legs."""
+    legs = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            leg_start, leg_end = parse_date(item.get("start")), parse_date(item.get("end"))
+        except WorkoutError:
+            continue
+        leg_start, leg_end = max(leg_start, start), min(leg_end, end)
+        if leg_end <= leg_start:
+            continue
+        name = str(item.get("name") or "").strip()[:60]
+        if "transition" in name.lower():
+            sport, sub_sport = "transition", "generic"
+        else:
+            sport, sub_sport = classify(
+                name, str(item.get("location") or ""), item.get("isIndoor") is True
+            )
+        legs.append(
+            Leg(
+                name=name or sport.capitalize(),
+                start=leg_start,
+                end=leg_end,
+                sport=sport,
+                sub_sport=sub_sport,
+                distance=_length(item.get("distance")),
+                lap_length=_length(item.get("lapLength")),
+            )
+        )
+    legs.sort(key=lambda leg: leg.start)
+    sports = [leg for leg in legs if leg.sport not in ("transition", "generic")]
+    return legs if len(sports) >= 2 else []
+
+
 def parse_workout(data: Any) -> Workout:
     """A Health Auto Export workout (version 2; version 1 fields are accepted too)."""
     if not isinstance(data, dict):
@@ -249,11 +300,25 @@ def parse_workout(data: Any) -> Workout:
         power=_samples(data.get("cyclingPower") or data.get("runningPower")),
         cadence=_samples(data.get("cyclingCadence")),
     )
-    for key in ("walkingAndRunningDistance", "cyclingDistance", "swimDistance"):
-        samples = _samples(data.get(key), units=_LENGTH_UNITS)
-        if samples:
-            workout.distance_samples = samples
-            break
+    workout.legs = _legs(data.get("legs"), start, end)
+    distance_keys = ("walkingAndRunningDistance", "cyclingDistance", "swimDistance")
+    if workout.legs:
+        # Each leg counts its distance as its own kind; together they are the event's
+        workout.sport, workout.sub_sport = "multisport", "generic"
+        workout.distance_samples = sorted(
+            sample
+            for key in distance_keys
+            for sample in _samples(data.get(key), units=_LENGTH_UNITS)
+        )
+        leg_distances = [leg.distance for leg in workout.legs if leg.distance]
+        if leg_distances:
+            workout.distance = sum(leg_distances)
+    else:
+        for key in distance_keys:
+            samples = _samples(data.get(key), units=_LENGTH_UNITS)
+            if samples:
+                workout.distance_samples = samples
+                break
     if workout.duration is None or workout.duration <= 0:
         workout.duration = (end - start).total_seconds()
     return workout
@@ -465,6 +530,10 @@ def to_fit(workout: Workout) -> bytes:
         )
     writer.write("event", timestamp=end, event=0, event_type=4)
 
+    if workout.legs:
+        _write_legs(writer, workout, records, timer)
+        return writer.to_bytes()
+
     laps = _laps(workout, records)
     for index, (first, last) in enumerate(laps):
         chunk = records[first : last + 1]
@@ -538,6 +607,82 @@ def to_fit(workout: Workout) -> bytes:
     return writer.to_bytes()
 
 
+def _segments(workout: Workout) -> list[Leg]:
+    """The legs, with a transition filling every gap between two of them."""
+    segments: list[Leg] = []
+    for leg in workout.legs:
+        previous_end = segments[-1].end if segments else workout.start
+        if (leg.start - previous_end).total_seconds() >= 1:
+            segments.append(Leg("Transition", previous_end, leg.start, "transition"))
+        segments.append(leg)
+    return segments
+
+
+def _write_legs(
+    writer: fit_writer.FitWriter, workout: Workout, records: list[dict], timer: float
+) -> None:
+    """One lap and one session per leg and transition, tagged as a multisport activity, so
+    the parser turns it into an event with its legs, like a watch's triathlon."""
+    start = workout.start
+    segments = _segments(workout)
+    sport_seconds = sum(
+        (leg.end - leg.start).total_seconds() for leg in segments if leg.sport != "transition"
+    )
+    for index, leg in enumerate(segments):
+        first = (leg.start - start).total_seconds()
+        last = (leg.end - start).total_seconds()
+        chunk = [r for r in records if first <= r["t"] <= last]
+        seconds = last - first
+        distance = leg.distance
+        known = [r["distance"] for r in chunk if r["distance"] is not None]
+        if distance is None and len(known) > 1:
+            distance = known[-1] - known[0]
+        if leg.sport == "transition":
+            distance = None
+        # Apple keeps the energy of the whole workout; share it out over the legs by time
+        calories = None
+        if workout.calories and sport_seconds > 0 and leg.sport != "transition":
+            calories = workout.calories * seconds / sport_seconds
+        sport, sub_sport = fit_writer.sport_codes(leg.sport, leg.sub_sport)
+        heart = [r["heart_rate"] for r in chunk]
+        common = dict(
+            timestamp=leg.end,
+            message_index=index,
+            start_time=leg.start,
+            total_elapsed_time=seconds,
+            total_timer_time=seconds,
+            total_distance=distance,
+            avg_speed=distance / seconds if distance and seconds > 0 else None,
+            avg_heart_rate=_average(heart),
+            max_heart_rate=_max(heart),
+            total_ascent=_ascent([r["altitude"] for r in chunk]),
+            sport=sport,
+        )
+        writer.write("lap", event=9, event_type=1, **common)
+        writer.write(
+            "session",
+            event=8,
+            event_type=1,
+            sub_sport=sub_sport,
+            total_calories=calories,
+            max_speed=_max([r["speed"] for r in chunk]),
+            avg_power=_average([r["power"] for r in chunk]),
+            first_lap_index=index,
+            num_laps=1,
+            pool_length=leg.lap_length if leg.sub_sport == "lap_swimming" else None,
+            **common,
+        )
+    writer.write(
+        "activity",
+        timestamp=workout.end,
+        total_timer_time=timer,
+        num_sessions=len(segments),
+        type=1,  # auto_multi_sport
+        event=26,
+        event_type=1,
+    )
+
+
 # ── Import ────────────────────────────────────────────────────────────────────
 
 
@@ -545,8 +690,13 @@ def _family(sport: SportType) -> SportType:
     return _FAMILIES.get(sport, sport)
 
 
+MULTISPORT = (SportType.triathlon, SportType.duathlon, SportType.multisport)
+
+
 def is_duplicate(workout: Workout) -> bool:
     """Whether an activity of the same sport already starts within a minute of the workout."""
+    if workout.legs:
+        return any(activity_exists_near(workout.start, sport) for sport in MULTISPORT)
     return activity_exists_near(workout.start, workout.sport_type)
 
 
