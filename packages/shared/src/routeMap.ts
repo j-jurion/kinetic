@@ -1,9 +1,10 @@
 // How an activity's route is coloured, shared by the web and mobile maps: per leg for a
 // multisport event, otherwise by speed when the per-second data has it.
+import { sportColor } from './format'
 import { KIND_COLORS } from './performance'
 import type { RouteLeg } from './performance'
 import { SPEED_GRADIENT, formatSpeed, speedColor, speedScale } from './speed'
-import type { ActivityStreams } from './types'
+import type { ActivityStreams, MapRoute } from './types'
 
 export type LatLng = [number, number]
 
@@ -112,4 +113,18 @@ export function legendHtml(legend: RouteLegend): string {
       .join('') +
     '</div>'
   )
+}
+
+/** The colour of routes whose sport has none. */
+export const UNKNOWN_SPORT_COLOR = '#6b7280'
+
+/**
+ * The lines that draw one route on the all-activities map: a multisport event as its legs,
+ * each in its own sport's colour, and any other activity as one line in its sport's colour.
+ */
+export function mapRouteLines(route: MapRoute): { coords: LatLng[]; color: string }[] {
+  if (route.legs && route.legs.length >= 2) {
+    return route.legs.map((leg) => ({ coords: leg.coords, color: sportColor(leg.sport, UNKNOWN_SPORT_COLOR) }))
+  }
+  return [{ coords: route.coords, color: sportColor(route.sport, UNKNOWN_SPORT_COLOR) }]
 }

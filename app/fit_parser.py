@@ -254,8 +254,10 @@ def _build_multisport(
         SportType.multisport: "Multisport",
     }[parent_sport]
 
+    # Elapsed time, like single activities: a leg's timer stops when the watch auto-pauses
+    # (an open-water swim can show a minute of timer time), but the race clock does not.
     total_time = sum(
-        float(s.get("total_timer_time") or s.get("total_elapsed_time") or 0) for s in sessions
+        float(s.get("total_elapsed_time") or s.get("total_timer_time") or 0) for s in sessions
     )
     total_dist = sum(float(s.get("total_distance") or 0) for s in sport_sessions)
     total_elev = sum(float(s.get("total_ascent") or 0) for s in sessions)
@@ -285,7 +287,7 @@ def _build_multisport(
         if isinstance(start_time, str):
             start_time = datetime.fromisoformat(start_time)
 
-        duration = float(session.get("total_timer_time") or session.get("total_elapsed_time") or 0)
+        duration = float(session.get("total_elapsed_time") or session.get("total_timer_time") or 0)
         sub_label = session.get("unknown_110") or sport.value.capitalize()
         child_name = f"{sub_label} {date_str}"
 
