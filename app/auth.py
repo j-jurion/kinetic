@@ -16,6 +16,7 @@ from sqlalchemy import Boolean, DateTime, ForeignKey, String, delete, inspect, s
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
+from app import rate_limit
 from app.database import engine
 
 COOKIE_NAME = "kinetic_auth"
@@ -133,6 +134,7 @@ router = APIRouter(prefix="/api/auth")
 
 @router.post("/register", status_code=201)
 def register(credentials: Credentials, request: Request, response: Response):
+    rate_limit.check_registration_allowed(rate_limit.client_ip(request))
     username = normalize_username(credentials.username)
     if not USERNAME_PATTERN.fullmatch(username):
         raise HTTPException(status_code=400, detail=USERNAME_RULES)
@@ -153,18 +155,22 @@ def register(credentials: Credentials, request: Request, response: Response):
 
 @router.post("/login", status_code=204)
 def login(credentials: Credentials, request: Request, response: Response) -> None:
+    username = normalize_username(credentials.username)
+    ip = rate_limit.client_ip(request)
+    rate_limit.check_login_allowed(ip, username)
     with Session(engine) as session:
-        user = session.scalar(
-            select(User).where(User.username == normalize_username(credentials.username))
-        )
+        user = session.scalar(select(User).where(User.username == username))
         if user is None:
             password_hash.verify(credentials.password, _DUMMY_HASH)
+            rate_limit.record_failed_login(ip, username)
             raise HTTPException(status_code=400, detail=INVALID_LOGIN)
         valid, updated_hash = password_hash.verify_and_update(
             credentials.password, user.hashed_password
         )
         if not valid or not user.is_active:
+            rate_limit.record_failed_login(ip, username)
             raise HTTPException(status_code=400, detail=INVALID_LOGIN)
+        rate_limit.record_successful_login(username)
         if updated_hash:
             user.hashed_password = updated_hash
         _start_session(session, user.id, request, response)

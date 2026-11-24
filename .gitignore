@@ -31,3 +31,8 @@ web/dist/
 # Deployment scratch
 uploads.tgz
 packages/shared/node_modules/
+
+# Personal activity recordings (GPS); never commit these
+data/
+*.fit
+*.fit.gz

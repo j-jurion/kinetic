@@ -60,4 +60,5 @@ npm run typecheck   # type-checks the tests
 directly. Tests run in the `Europe/Brussels` time zone (set in `vitest.config.ts`), because API
 dates are read as local time and a zone with daylight saving time catches 23- and 25-hour-day
 bugs. `test/factories.ts` builds API objects with neutral defaults, so a test only names the
-fields it is about. CI runs them on every pull request (`.github/workflows/shared-tests.yml`).
+fields it is about. CI runs them on every pull request and before every deploy
+(`.github/workflows/ci.yml`).
