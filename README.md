@@ -134,9 +134,12 @@ Activities, friends and related data are private to the account that created the
 unassigned records are not visible to any account. Friend records are labels, not yet
 connections between accounts; activity sharing is not implemented.
 
-Each account connects its own Garmin account on the **Sync** page. Garmin tokens are stored
-per account under `garmin_tokens/<account id>/` in the working directory (keep it private and
-out of the repository), and synced activities are imported only into that account. Tokens
+Each account connects its own Garmin account on the **Sync** page. Garmin tokens and the
+Garmin email are stored per account under `garmin_tokens/<account id>/` in the working
+directory, encrypted with the key in `KINETIC_GARMIN_TOKEN_KEY` (generate one with
+`uv run python -m app.token_crypto`; see `DEPLOYMENT.md` for rotation). Without that key Garmin
+sync is refused, except in local development (`KINETIC_ALLOW_INSECURE_HTTP=1`), where a key is
+generated next to the tokens. Synced activities are imported only into that account. Tokens
 from earlier versions in `~/.garminconnect` are not reused; authenticate again once.
 
 Anyone can create an account on the **Register** page with a username and a password of at
@@ -165,8 +168,17 @@ uv run python -m app.bootstrap_test_account --source kinetic.db --backup-dir /se
 The backup directory must exist. The source remains unchanged and the command refuses to
 overwrite a nonempty destination. Keep the printed password and backups secure.
 
-Account export and deletion, production rate limits and public-deployment security review
-are not implemented yet. Do not expose this test configuration publicly.
+Anyone signed in can delete their account from the account menu (web) or the **More** tab
+(mobile), after entering their password again. This removes the account with its activities,
+FIT files, race results, friends, friend requests, sessions, Apple Health token and Garmin
+tokens; other accounts keep their own friend record for it, unlinked. It is refused while a
+Garmin sync of the account is running.
+
+Errors shown to users carry only messages written for them; unexpected errors (parsers,
+database, Garmin) are logged and replaced by a generic message (`app/errors.py`).
+
+Account export, production rate limits and public-deployment security review are not
+implemented yet. Do not expose this test configuration publicly.
 Every state-changing API request must carry an `Origin` header equal to
 `KINETIC_PUBLIC_ORIGIN`; this protects the session cookie against cross-site requests.
 

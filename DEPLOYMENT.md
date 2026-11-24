@@ -21,6 +21,7 @@ Configuration the code reads:
 | `DATABASE_URL` | Fly secret | Supabase **session pooler** connection string |
 | `KINETIC_PUBLIC_ORIGIN` | Fly secret | Exact Vercel origin, e.g. `https://kinetic.vercel.app` |
 | `KINETIC_ORIGIN_SECRET` | Fly secret **and** Vercel env var | Same long random string on both |
+| `KINETIC_GARMIN_TOKEN_KEY` | Fly secret | Key that encrypts the stored Garmin tokens and email (see below) |
 | `KINETIC_UPLOAD_DIR`, `KINETIC_GARMIN_TOKEN_DIR` | `fly.toml` | `/data/uploads`, `/data/garmin_tokens` |
 
 Generate the origin secret once (PowerShell):
@@ -28,6 +29,13 @@ Generate the origin secret once (PowerShell):
 ```powershell
 -join ((1..48) | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) })
 ```
+
+Generate the Garmin token key once with `uv run python -m app.token_crypto` (it prints a
+Fernet key). Without it, Garmin sync is refused and the API logs a warning at startup. Keep a
+copy somewhere safe: if it is lost, every account has to sign in to Garmin again (nothing else
+is lost). To rotate it, set `KINETIC_GARMIN_TOKEN_KEY="<new key>,<old key>"`; tokens are
+re-encrypted with the new key at each sync, so the old key can be removed after a while.
+Plain-text tokens left by earlier versions are encrypted the first time they are read.
 
 ## 1. Supabase (database)
 
@@ -75,7 +83,7 @@ Install `flyctl` and sign in (`fly auth login`). From the repository root:
    already know the project name, or update it later):
 
    ```powershell
-   fly secrets set DATABASE_URL="<session pooler URI>" KINETIC_PUBLIC_ORIGIN="https://<your-project>.vercel.app" KINETIC_ORIGIN_SECRET="<random string>" --stage
+   fly secrets set DATABASE_URL="<session pooler URI>" KINETIC_PUBLIC_ORIGIN="https://<your-project>.vercel.app" KINETIC_ORIGIN_SECRET="<random string>" KINETIC_GARMIN_TOKEN_KEY="<generated key>" --stage
    ```
 
 4. Deploy one machine (the app keeps Garmin MFA state in memory and the volume belongs to one
