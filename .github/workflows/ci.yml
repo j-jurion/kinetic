@@ -60,3 +60,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      # The mobile app's tappable elements all have a role and label (needs only TypeScript)
+      - run: node ../../mobile/scripts/a11y-audit.js ../../mobile/src

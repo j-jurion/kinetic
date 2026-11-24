@@ -56,9 +56,11 @@ export function FriendPicker({ friends, selected, onToggle, onCreated, hideSelec
             <Pressable
               key={f.id}
               onPress={() => onToggle(f)}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: on }}
               style={{ borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderColor: on ? c.primary : c.border, backgroundColor: on ? c.primarySoft : c.card }}
             >
-              <T style={{ color: on ? c.primary : c.text }}>{f.name}</T>
+              <T style={{ color: on ? c.primaryText : c.text }}>{f.name}</T>
             </Pressable>
           )
         })}
@@ -66,10 +68,12 @@ export function FriendPicker({ friends, selected, onToggle, onCreated, hideSelec
           <Pressable
             onPress={create}
             disabled={creating}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: creating, busy: creating }}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderStyle: 'dashed', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderColor: c.primary, opacity: creating ? 0.5 : 1 }}
           >
-            <Icon name="person_add" size={16} color={c.primary} />
-            <T style={{ color: c.primary }}>Add “{query.trim()}” as a new friend</T>
+            <Icon name="person_add" size={16} color={c.primaryText} />
+            <T style={{ color: c.primaryText }}>Add “{query.trim()}” as a new friend</T>
           </Pressable>
         )}
       </View>

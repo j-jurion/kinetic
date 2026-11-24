@@ -103,7 +103,16 @@ const HTML = `<!doctype html>
 </body>
 </html>`
 
-export function LeafletView({ spec, height, onTap }: { spec: MapSpec; height: number | `${number}%`; onTap?: (ids: number[]) => void }) {
+/**
+ * A Leaflet map in a web view. Screen readers cannot explore the map, so it is one element
+ * read as `label`; say where the same information can be found without the map.
+ */
+export function LeafletView({ spec, height, onTap, label }: {
+  spec: MapSpec
+  height: number | `${number}%`
+  onTap?: (ids: number[]) => void
+  label: string
+}) {
   const web = useRef<WebView<object>>(null)
   const [ready, setReady] = useState(false)
 
@@ -118,7 +127,7 @@ export function LeafletView({ spec, height, onTap }: { spec: MapSpec; height: nu
   }
 
   return (
-    <View style={{ height, borderRadius: 12, overflow: 'hidden' }}>
+    <View style={{ height, borderRadius: 12, overflow: 'hidden' }} accessible accessibilityRole="image" accessibilityLabel={label}>
       <WebView<object>
         ref={web}
         originWhitelist={['*']}

@@ -61,3 +61,15 @@ deployed instance (e.g. a Vercel preview), or use an Android emulator or USB pho
 npx tsc --noEmit
 npx expo export --platform android
 ```
+
+## Accessibility
+
+Screen readers (VoiceOver, TalkBack) can use every control: tappable elements have a role and
+a label (`IconButton` requires `label`), state such as selected, checked, disabled or busy is
+reported, titles are headings, icons are hidden unless they carry meaning (`<Icon label>`),
+stat tiles read as one item, toasts are announced, and charts and maps are described.
+
+Text colours reach WCAG's 4.5:1 in light and dark mode: use `c.primaryText` and
+`c.positiveText` for text, `c.primary` only for fills and icons, and `useTextColor()` for data
+colours (sports, metrics) used as text. CI runs `node mobile/scripts/a11y-audit.js`, which fails
+on a `Pressable` without a role or an `IconButton` without a label.

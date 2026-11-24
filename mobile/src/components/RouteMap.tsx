@@ -73,5 +73,14 @@ export function RouteMap({ activityId, sport, streams, legs }: {
   }, [drawing, plain])
 
   if (!spec) return null
-  return <LeafletView spec={spec} height={320} />
+  return <LeafletView spec={spec} height={320} label={routeMapLabel(drawing)} />
+}
+
+/** What the route map shows, for screen readers. */
+function routeMapLabel(drawing: RouteDrawing | null): string {
+  if (drawing?.legend.kind === 'legs') {
+    return `Route map, coloured per leg: ${drawing.legend.items.map(([label]) => label).join(', ')}`
+  }
+  if (drawing?.legend.kind === 'speed') return `Route map, coloured by speed from ${drawing.legend.slow} to ${drawing.legend.fast}`
+  return 'Route map'
 }

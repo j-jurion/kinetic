@@ -434,7 +434,7 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 .kind-chip[data-kind="race"] { color: #0f766e; background: rgba(20, 184, 166, .13); }
 .kind-chip[data-kind="long_run"] { color: #6d28d9; background: rgba(139, 92, 246, .13); }
 .kind-chip[data-kind="tempo"], .kind-chip[data-kind="interval"] { color: #c2410c; background: rgba(249, 115, 22, .13); }
-.kind-chip[data-kind="easy"], .kind-chip[data-kind="recovery"] { color: #15803d; background: rgba(34, 197, 94, .13); }
+.kind-chip[data-kind="easy"], .kind-chip[data-kind="recovery"] { color: #166534; background: rgba(34, 197, 94, .13); }
 .kind-chip[data-kind="social"] { color: #be185d; background: rgba(236, 72, 153, .12); }
 .body--dark .kind-chip[data-kind="race"] { color: #5eead4; }
 .body--dark .kind-chip[data-kind="long_run"] { color: #c4b5fd; }

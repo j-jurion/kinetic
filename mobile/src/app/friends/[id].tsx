@@ -71,8 +71,8 @@ export default function FriendScreen() {
           </View>
           {friend.email && <T muted style={{ fontSize: 12 }}>{friend.email}</T>}
         </View>
-        <IconButton icon="edit" onPress={() => setEditing(true)} />
-        <IconButton icon="delete" color={c.negative} onPress={remove} />
+        <IconButton icon="edit" onPress={() => setEditing(true)} label={`Edit ${friend.name}`} />
+        <IconButton icon="delete" color={c.negative} onPress={remove} label={`Remove ${friend.name}`} />
       </Card>
       {!friend.username && !invited && <Button title="Link to Kinetic account" icon="link" variant="outlined" onPress={() => setLinking(true)} />}
 

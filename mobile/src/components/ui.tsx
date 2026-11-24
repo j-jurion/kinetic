@@ -17,7 +17,8 @@ import {
 import type { StyleProp, TextInputProps, TextStyle, ViewStyle } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { kindLabel, sportFilterOptions, yearOptions } from '@kinetic/shared/format'
-import { kindChipColors, useColors } from '../lib/theme'
+import { kindChipColors, useColors, useTextColor } from '../lib/theme'
+import { readableColor } from '@kinetic/shared/color'
 import { Icon } from './Icon'
 
 export { useColors }
@@ -45,12 +46,28 @@ export function Loading() {
   )
 }
 
-export function Card({ children, style, onPress }: { children: ReactNode; style?: StyleProp<ViewStyle>; onPress?: () => void }) {
+/**
+ * A card; with `onPress` it is one button for screen readers, read as its `label` (or, by
+ * default, all of its text).
+ */
+export function Card({ children, style, onPress, label, hint }: {
+  children: ReactNode
+  style?: StyleProp<ViewStyle>
+  onPress?: () => void
+  label?: string
+  hint?: string
+}) {
   const c = useColors()
   const cardStyle = [styles.card, { backgroundColor: c.card, borderColor: c.cardBorder }, style]
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [cardStyle, pressed && { opacity: 0.7 }]}>
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        accessibilityHint={hint}
+        style={({ pressed }) => [cardStyle, pressed && { opacity: 0.7 }]}
+      >
         {children}
       </Pressable>
     )
@@ -68,9 +85,10 @@ export function T({ children, style, muted, numberOfLines }: { children: ReactNo
 }
 
 export function CardTitle({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  const c = useColors()
   return (
     <View style={styles.rowBetween}>
-      <T style={styles.cardTitle}>{children}</T>
+      <Text accessibilityRole="header" style={[styles.cardTitle, { color: c.text }]}>{children}</Text>
       {right}
     </View>
   )
@@ -86,7 +104,7 @@ export function SectionHeading({ icon, title, caption, right }: { icon: string; 
           <View style={[styles.headingIcon, { backgroundColor: c.primarySoft }]}>
             <Icon name={icon} size={16} color={c.primary} />
           </View>
-          <T style={{ fontSize: 17, fontWeight: '700' }}>{title}</T>
+          <Text accessibilityRole="header" style={{ fontSize: 17, fontWeight: '700', color: c.text }}>{title}</Text>
         </View>
         {right}
       </View>
@@ -100,8 +118,8 @@ export function PageHeader({ kicker, title, subtitle, children }: { kicker?: str
   const c = useColors()
   return (
     <View style={{ gap: 2 }}>
-      {kicker && <Text style={[styles.kicker, { color: c.primary }]}>{kicker.toUpperCase()}</Text>}
-      <T style={styles.pageTitle}>{title}</T>
+      {kicker && <Text style={[styles.kicker, { color: c.primaryText }]}>{kicker.toUpperCase()}</Text>}
+      <Text accessibilityRole="header" style={[styles.pageTitle, { color: c.text }]}>{title}</Text>
       {subtitle && <T muted>{subtitle}</T>}
       {children && <View style={{ gap: 10, marginTop: 10 }}>{children}</View>}
     </View>
@@ -115,10 +133,13 @@ export function Caption({ children }: { children: ReactNode }) {
 /** A labelled number in a soft tile; wrap several in a StatGrid. */
 export function Stat({ label, value, color, hint }: { label: string; value: ReactNode; color?: string; hint?: string }) {
   const c = useColors()
+  const textColor = useTextColor()
+  // Read as one item, "Distance, 12.3 km", instead of two separate texts
+  const spoken = typeof value === 'string' || typeof value === 'number' ? `${label}, ${value}` : undefined
   return (
-    <View style={[styles.stat, { backgroundColor: c.soft }]}>
+    <View style={[styles.stat, { backgroundColor: c.soft }]} accessible={spoken !== undefined} accessibilityLabel={spoken} accessibilityHint={hint}>
       <T muted style={styles.statLabel}>{label}</T>
-      <T style={[styles.statValue, color ? { color } : null]}>{value}</T>
+      <T style={[styles.statValue, color ? { color: textColor(color) } : null]}>{value}</T>
       {hint && <T muted style={{ fontSize: 11 }}>{hint}</T>}
     </View>
   )
@@ -159,8 +180,14 @@ export function Toggle<V extends string>({ value, options, onChange }: { value: 
       {options.map(([key, text]) => {
         const selected = key === value
         return (
-          <Pressable key={key} onPress={() => onChange(key)} style={[styles.toggleItem, selected && { backgroundColor: c.primarySoft }]}>
-            <Text style={{ color: selected ? c.primary : c.text, fontSize: 13, fontWeight: selected ? '600' : '400' }}>{text}</Text>
+          <Pressable
+            key={key}
+            onPress={() => onChange(key)}
+            accessibilityRole="button"
+            accessibilityState={{ selected }}
+            style={[styles.toggleItem, selected && { backgroundColor: c.primarySoft }]}
+          >
+            <Text style={{ color: selected ? c.primaryText : c.text, fontSize: 13, fontWeight: selected ? '600' : '400' }}>{text}</Text>
           </Pressable>
         )
       })}
@@ -182,7 +209,13 @@ export function Select<V extends string>({ label, value, options, onChange, styl
   const current = options.find(([v]) => v === value)?.[1] ?? ''
   return (
     <>
-      <Pressable onPress={() => setOpen(true)} style={[styles.field, { borderColor: c.border, backgroundColor: c.card }, style]}>
+      <Pressable
+        onPress={() => setOpen(true)}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${current}`}
+        accessibilityHint="Opens a list to choose from"
+        style={[styles.field, { borderColor: c.border, backgroundColor: c.card }, style]}
+      >
         <T muted style={styles.fieldLabel}>{label}</T>
         <View style={styles.rowBetween}>
           <T style={{ fontSize: 15, flexShrink: 1 }} numberOfLines={1}>{current}</T>
@@ -190,9 +223,9 @@ export function Select<V extends string>({ label, value, options, onChange, styl
         </View>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
-        <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
-          <View style={[styles.sheet, { backgroundColor: c.card, paddingBottom: insets.bottom + 8 }]}>
-            <T style={[styles.cardTitle, { padding: 16, paddingBottom: 8 }]}>{label}</T>
+        <Pressable style={styles.backdrop} onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Close">
+          <View style={[styles.sheet, { backgroundColor: c.card, paddingBottom: insets.bottom + 8 }]} accessibilityViewIsModal>
+            <Text accessibilityRole="header" style={[styles.cardTitle, { padding: 16, paddingBottom: 8, color: c.text }]}>{label}</Text>
             <FlatList
               data={options}
               keyExtractor={([v]) => v || '__all'}
@@ -202,10 +235,12 @@ export function Select<V extends string>({ label, value, options, onChange, styl
                     setOpen(false)
                     onChange(v)
                   }}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: v === value }}
                   style={({ pressed }) => [styles.option, pressed && { backgroundColor: c.soft }]}
                 >
-                  <T style={{ fontSize: 15, color: v === value ? c.primary : c.text, fontWeight: v === value ? '600' : '400' }}>{text}</T>
-                  {v === value && <Icon name="check" size={18} color={c.primary} />}
+                  <T style={{ fontSize: 15, color: v === value ? c.primaryText : c.text, fontWeight: v === value ? '600' : '400' }}>{text}</T>
+                  {v === value && <Icon name="check" size={18} color={c.primaryText} />}
                 </Pressable>
               )}
             />
@@ -255,13 +290,19 @@ export function Button({ title, onPress, icon, variant = 'contained', color, dis
   busy?: boolean
 }) {
   const c = useColors()
-  const tint = color ?? c.primary
+  const textColor = useTextColor()
   const contained = variant === 'contained'
+  // Contained: white text on a fill dark enough for it; otherwise text readable on the page
+  const fill = readableColor(color ?? c.primaryStrong, '#ffffff')
+  const tint = contained ? fill : (textColor(color ?? c.primaryText) ?? c.primaryText)
   const fg = contained ? '#ffffff' : tint
   return (
     <Pressable
       onPress={onPress}
       disabled={disabled || busy}
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!(disabled || busy), busy: !!busy }}
       style={({ pressed }) => [
         styles.button,
         contained && { backgroundColor: tint },
@@ -275,10 +316,17 @@ export function Button({ title, onPress, icon, variant = 'contained', color, dis
   )
 }
 
-export function IconButton({ icon, onPress, color, size = 22 }: { icon: string; onPress: () => void; color?: string; size?: number }) {
+/** A button showing only an icon; `label` is what screen readers say for it. */
+export function IconButton({ icon, onPress, color, size = 22, label }: { icon: string; onPress: () => void; color?: string; size?: number; label: string }) {
   const c = useColors()
   return (
-    <Pressable onPress={onPress} hitSlop={8} style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: c.soft }]}>
+    <Pressable
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={({ pressed }) => [styles.iconButton, pressed && { backgroundColor: c.soft }]}
+    >
       <Icon name={icon} size={size} color={color ?? c.muted} />
     </Pressable>
   )
@@ -292,6 +340,8 @@ export function Field({ label, error, style, ...input }: TextInputProps & { labe
       <T muted style={styles.fieldLabel}>{label}</T>
       <TextInput
         placeholderTextColor={c.muted}
+        accessibilityLabel={label}
+        accessibilityHint={error || undefined}
         {...input}
         style={[styles.input, { color: c.text, borderColor: error ? c.negative : c.border, backgroundColor: c.card }, input.multiline && { minHeight: 70, textAlignVertical: 'top' }]}
       />
@@ -317,7 +367,7 @@ export function FormSheet({ visible, title, onClose, onSave, saveLabel = 'Save',
       <View style={{ flex: 1, backgroundColor: c.background }}>
         <View style={[styles.sheetHeader, { borderColor: c.cardBorder }]}>
           <Button title="Cancel" variant="text" onPress={onClose} />
-          <T style={styles.cardTitle}>{title}</T>
+          <Text accessibilityRole="header" style={[styles.cardTitle, { color: c.text }]}>{title}</Text>
           {onSave ? <Button title={saveLabel} variant="text" onPress={onSave} busy={busy} /> : <View style={{ width: 70 }} />}
         </View>
         <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 32 }]} keyboardShouldPersistTaps="handled">

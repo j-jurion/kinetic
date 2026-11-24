@@ -21,7 +21,7 @@ export function NavList({ items, badges = {} }: { items: NavItem[]; /** Counts s
           </View>
           <T style={{ fontSize: 16, flex: 1 }}>{label}</T>
           {!!badges[path] && (
-            <View style={{ minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: c.primaryStrong, alignItems: 'center', justifyContent: 'center' }}>
               <T style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{badges[path]}</T>
             </View>
           )}

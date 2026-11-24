@@ -38,6 +38,9 @@ export function Table<R>({ columns, rows, rowKey, onRowPress }: {
             key={rowKey(row)}
             disabled={!onRowPress}
             onPress={() => onRowPress?.(row)}
+            // A whole row is one button when it opens something; otherwise its cells are read
+            accessibilityRole={onRowPress ? 'button' : 'none'}
+            accessible={!!onRowPress}
             style={({ pressed }) => [styles.row, { borderColor: c.cardBorder }, pressed && { backgroundColor: c.soft }]}
           >
             {columns.map((col) => cell(col, col.render(row)))}

@@ -29,6 +29,7 @@ import { RaceResultSheet } from '../../components/RaceResultSheet'
 import { RouteMap } from '../../components/RouteMap'
 import { Table } from '../../components/Table'
 import { Button, Caption, Card, CardTitle, Empty, IconButton, KindChip, Loading, Screen, Stat, StatGrid, T, useColors } from '../../components/ui'
+import { useTextColor } from '../../lib/theme'
 import { api } from '../../lib/api'
 import { useApi } from '../../lib/useApi'
 
@@ -40,8 +41,8 @@ function RaceResultCard({ result, onEdit, onDelete }: { result: RaceResult | nul
         right={
           result ? (
             <View style={{ flexDirection: 'row' }}>
-              <IconButton icon="edit" onPress={onEdit} />
-              <IconButton icon="delete" color={c.negative} onPress={onDelete} />
+              <IconButton icon="edit" onPress={onEdit} label="Edit race result" />
+              <IconButton icon="delete" color={c.negative} onPress={onDelete} label="Delete race result" />
             </View>
           ) : (
             <Button title="Add result" icon="add" variant="text" onPress={onEdit} />
@@ -118,21 +119,22 @@ function FriendsCard({ activityId, current, onChange }: { activityId: number; cu
 
   return (
     <Card>
-      <CardTitle right={<IconButton icon={adding ? 'expand_less' : 'person_add'} color={c.primary} onPress={() => setAdding((a) => !a)} />}>
+      <CardTitle right={<IconButton icon={adding ? 'expand_less' : 'person_add'} color={c.primaryText} onPress={() => setAdding((a) => !a)} label={adding ? 'Stop adding friends' : 'Add a friend'} />}>
         Friends
       </CardTitle>
       {current.map((f) => (
         <Pressable
           key={f.id}
           onPress={() => router.push(`/friends/${f.id}`)}
+          accessibilityRole="link"
           style={({ pressed }) => [styles.friend, { borderColor: c.cardBorder, backgroundColor: pressed ? c.soft : c.card }]}
         >
           <FriendAvatar name={f.name} size={32} />
           <View style={{ flex: 1 }}>
             <T style={{ fontWeight: '600' }} numberOfLines={1}>{f.name}</T>
-            <T style={{ fontSize: 12, color: f.username ? c.primary : c.muted }} numberOfLines={1}>{accountLabel(f)}</T>
+            <T style={{ fontSize: 12, color: f.username ? c.primaryText : c.muted }} numberOfLines={1}>{accountLabel(f)}</T>
           </View>
-          <IconButton icon="close" size={18} onPress={() => remove(f)} />
+          <IconButton icon="close" size={18} onPress={() => remove(f)} label={`Remove ${f.name}`} />
         </Pressable>
       ))}
       {current.length === 0 && !adding && <Caption>Who did you do this with? Tap + to tag a friend.</Caption>}
@@ -154,6 +156,7 @@ function FriendsCard({ activityId, current, onChange }: { activityId: number; cu
 
 export default function ActivityScreen() {
   const c = useColors()
+  const textColor = useTextColor()
   const notify = useNotify()
   const activityId = Number(useLocalSearchParams<{ id: string }>().id)
   const [editing, setEditing] = useState(false)
@@ -200,8 +203,8 @@ export default function ActivityScreen() {
           title: a.name,
           headerRight: () => (
             <View style={{ flexDirection: 'row' }}>
-              <IconButton icon="edit" color={c.primary} onPress={() => setEditing(true)} />
-              <IconButton icon="delete" color={c.negative} onPress={() => remove(a)} />
+              <IconButton icon="edit" color={c.primaryText} onPress={() => setEditing(true)} label="Edit activity" />
+              <IconButton icon="delete" color={c.negative} onPress={() => remove(a)} label="Delete activity" />
             </View>
           ),
         }}
@@ -244,9 +247,14 @@ export default function ActivityScreen() {
             if (child.distance_meters) parts.push(formatDistance(child.distance_meters, child.sport))
             if (child.duration_seconds) parts.push(formatDuration(child.duration_seconds))
             return (
-              <Pressable key={child.id} onPress={() => router.push(`/activity/${child.id}`)} style={[styles.child, { borderColor: color }]}>
+              <Pressable
+                key={child.id}
+                onPress={() => router.push(`/activity/${child.id}`)}
+                accessibilityRole="link"
+                style={[styles.child, { borderColor: color }]}
+              >
                 <SportIcon sport={child.sport} size={20} color={color} />
-                <T style={{ color, fontWeight: '600', flex: 1 }}>{parts.join(' · ')}</T>
+                <T style={{ color: textColor(color), fontWeight: '600', flex: 1 }}>{parts.join(' · ')}</T>
               </Pressable>
             )
           })}
