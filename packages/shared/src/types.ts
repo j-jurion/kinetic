@@ -168,7 +168,7 @@ export interface ActivityStreams {
     power: (number | null)[]
     lat: (number | null)[]
     lon: (number | null)[]
-    /** °C, from the watch (reads warm from body heat). */
+    /** °C, from the watch (reads warm from body heat), or the weather for Apple Health workouts. */
     temperature: (number | null)[]
     /** Metres. */
     step_length: (number | null)[]
