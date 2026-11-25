@@ -286,3 +286,25 @@ are open.
 
 The mobile app is the native Expo app in `mobile/` (see its README), not an installable web
 app as an earlier plan suggested.
+
+## Maintenance commands
+
+One-off clean-ups of existing data, for every account. Each first lists what it would change;
+add `--apply` to make the changes. Running one again is harmless.
+
+```powershell
+# Multisport events imported before legs used elapsed time: update the event's duration and
+# its legs' durations, routes and best efforts from the FIT file (names, kinds, notes, friends
+# and race results stay)
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-multisport"
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-multisport --apply"
+
+# FIT files no activity uses (left by activities deleted before deleting removed the file),
+# cached streams of missing files and unfinished temporary files; files changed in the last
+# hour are left alone, as an import may be saving them
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance clean-uploads"
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance clean-uploads --apply"
+```
+
+Events whose FIT file is not on the server, or whose legs no longer match the file (a leg was
+deleted), are listed as skipped and left as they are.
