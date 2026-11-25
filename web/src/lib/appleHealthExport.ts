@@ -2,7 +2,7 @@
 // Health Auto Export JSON format, so the server has one importer for both sources.
 //
 // export.xml can be gigabytes, so it is streamed and only the samples a workout chart needs
-// are kept (heart rate, distance, power, cadence). Samples come before the workouts in the
+// are kept (heart rate, distance, power, cadence, steps, running dynamics). Samples come before the workouts in the
 // file, so they are collected first and cut into per-workout slices at the end.
 
 import { inDateRange, type DateRange } from '@kinetic/shared/format'
@@ -36,13 +36,28 @@ const SAMPLE_TYPES: Record<string, number> = {
   HKQuantityTypeIdentifierRunningPower: 4,
   HKQuantityTypeIdentifierCyclingPower: 5,
   HKQuantityTypeIdentifierCyclingCadence: 6,
+  HKQuantityTypeIdentifierStepCount: 7,
+  HKQuantityTypeIdentifierRunningStrideLength: 8,
+  HKQuantityTypeIdentifierRunningGroundContactTime: 9,
+  HKQuantityTypeIdentifierRunningVerticalOscillation: 10,
 }
 const HEART_RATE = 0
-const KIND_COUNT = 7
+const STEPS = 7
+const STRIDE_LENGTH = 8
+const GROUND_CONTACT = 9
+const VERTICAL_OSCILLATION = 10
+const KIND_COUNT = 11
 // The JSON key each sample kind is sent under (heart rate is special-cased)
 const SERIES_KEYS = ['heartRateData', 'walkingAndRunningDistance', 'cyclingDistance', 'swimDistance',
-  'runningPower', 'cyclingPower', 'cyclingCadence']
+  'runningPower', 'cyclingPower', 'cyclingCadence', 'stepCadenceData', 'runningStrideLength',
+  'runningGroundContactTime', 'runningVerticalOscillation']
 const DISTANCE_KINDS = [1, 2, 3]
+// Recorded by the watch, not by the app that started the workout (e.g. Nike Run Club): taken
+// from the one source with the most samples when the workout's own source has none
+const WATCH_KINDS = [STEPS, STRIDE_LENGTH, GROUND_CONTACT, VERTICAL_OSCILLATION]
+// Step counts are only kept as cadence for samples this short; longer ones (the phone's
+// all-day totals) say nothing about the pace of a workout
+const MAX_STEP_SAMPLE_MS = 10 * 60 * 1000
 const LENGTH_TO_METRES: Record<string, number> = { m: 1, km: 1000, mi: 1609.344, ft: 0.3048, yd: 0.9144, cm: 0.01 }
 const BATCH_BYTES = 3 * 1024 * 1024
 const BATCH_WORKOUTS = 50
@@ -110,6 +125,8 @@ interface RawWorkout {
   swimLocation: string | null
   ascentM: number | null
   lapLengthM: number | null
+  /** The weather during an outdoor workout, °C. */
+  temperatureC: number | null
   routeFiles: string[]
   /** The legs of a multisport workout; empty for a workout of one sport. */
   legs: RawLeg[]
@@ -202,6 +219,15 @@ function lengthMetres(text: string | undefined): number | null {
   return factor ? Number(match[1]) * factor : null
 }
 
+/** "59 degF" or "15 degC" as °C. */
+function celsius(text: string | undefined): number | null {
+  const match = /^\s*(-?[\d.]+)\s*deg([CF])\s*$/i.exec(text ?? '')
+  if (!match) return null
+  const value = Number(match[1])
+  if (!Number.isFinite(value)) return null
+  return match[2].toUpperCase() === 'F' ? ((value - 32) * 5) / 9 : value
+}
+
 function number(text: string | undefined): number | null {
   if (text === undefined || text === '') return null
   const value = Number(text)
@@ -233,13 +259,27 @@ class ExportParser {
     const attrs = attributes(tag)
     let value = number(attrs.value)
     if (value === null) return
-    if (DISTANCE_KINDS.includes(kind)) {
-      const factor = LENGTH_TO_METRES[(attrs.unit ?? 'm').toLowerCase()]
-      if (!factor) return
-      value *= factor
+    const unit = (attrs.unit ?? '').toLowerCase()
+    let time: number
+    if (kind === STEPS) {
+      // Steps over the sample's span, as steps per minute at its middle
+      const start = appleDateMs(attrs.startDate)
+      const end = appleDateMs(attrs.endDate)
+      if (!(end > start) || end - start > MAX_STEP_SAMPLE_MS) return
+      value /= (end - start) / 60000
+      time = (start + end) / 2
+    } else {
+      if (DISTANCE_KINDS.includes(kind) || kind === STRIDE_LENGTH || kind === VERTICAL_OSCILLATION) {
+        const factor = LENGTH_TO_METRES[unit || 'm']
+        if (!factor) return
+        // Vertical oscillation is sent in centimetres, the other lengths in metres
+        value *= kind === VERTICAL_OSCILLATION ? factor * 100 : factor
+      } else if (kind === GROUND_CONTACT && unit === 's') {
+        value *= 1000
+      }
+      // Distance is cumulative at the end of the sample; the rest are instants
+      time = appleDateMs(DISTANCE_KINDS.includes(kind) ? attrs.endDate : attrs.startDate)
     }
-    // Distance is cumulative at the end of the sample; the rest are instants
-    const time = appleDateMs(DISTANCE_KINDS.includes(kind) ? attrs.endDate : attrs.startDate)
     if (!Number.isFinite(time)) return
     this.samples.push(time, value, kind, this.sourceId(unescapeXml(attrs.sourceName ?? '')))
   }
@@ -307,6 +347,7 @@ class ExportParser {
       swimLocation: metadata.HKSwimmingLocationType ?? null,
       ascentM: lengthMetres(metadata.HKElevationAscended),
       lapLengthM: lengthMetres(metadata.HKLapLength),
+      temperatureC: celsius(metadata.HKWeatherTemperature),
       routeFiles,
       legs: legsOf(block),
     })
@@ -433,6 +474,37 @@ export async function importAppleHealthExport(
     return out
   }
 
+  /** Per source, how many samples of a kind fall within the workout. */
+  const sourceCounts = (kind: number, w: RawWorkout) => {
+    const list = order[kind]
+    const counts = new Map<number, number>()
+    for (let i = lowerBound(list, samples.time, w.startMs - 5000); i < list.length; i++) {
+      const s = list[i]
+      if (samples.time[s] > w.endMs + 5000) break
+      counts.set(samples.source[s], (counts.get(samples.source[s]) ?? 0) + 1)
+    }
+    return counts
+  }
+  const mostSamples = (counts: Map<number, number>) => {
+    let best = -1
+    for (const [source, count] of counts) if (best < 0 || count > counts.get(best)!) best = source
+    return best
+  }
+
+  /**
+   * Samples from one source, never a mix: the workout's own, or else the device that recorded
+   * the heart rate (the watch, when another app started the workout; a phone in a pocket counts
+   * steps too), or else the source with the most samples.
+   */
+  const sliceOneSource = (kind: number, w: RawWorkout) => {
+    const own = slice(kind, w, false)
+    if (own.length) return own
+    const counts = sourceCounts(kind, w)
+    const watch = mostSamples(sourceCounts(HEART_RATE, w))
+    const best = counts.has(watch) ? watch : mostSamples(counts)
+    return best < 0 ? [] : slice(kind, { ...w, source: best }, false)
+  }
+
   const summary: ImportSummary = { found: workouts.length, imported: 0, skipped: 0, errors: [] }
   let batch: string[] = []
   let batchBytes = 0
@@ -480,8 +552,9 @@ export async function importAppleHealthExport(
       // Heart rate from another source (a chest strap paired to the phone) is better than none
       heartRateData: (heart.length ? heart : slice(HEART_RATE, w, true)).map((s) => ({ date: s.date, Avg: s.qty })),
     }
+    if (w.temperatureC !== null && !w.indoor) payload.temperature = { qty: w.temperatureC, units: 'degC' }
     for (let kind = 1; kind < KIND_COUNT; kind++) {
-      const series = slice(kind, w, false)
+      const series = WATCH_KINDS.includes(kind) ? sliceOneSource(kind, w) : slice(kind, w, false)
       if (series.length) {
         payload[SERIES_KEYS[kind]] = DISTANCE_KINDS.includes(kind)
           ? series.map((s) => ({ ...s, units: 'm' }))

@@ -33,6 +33,7 @@ class _Type:
 
 
 ENUM = _Type(0x00, "B", 0xFF)
+SINT8 = _Type(0x01, "b", 0x7F)
 UINT8 = _Type(0x02, "B", 0xFF)
 UINT16 = _Type(0x84, "H", 0xFFFF)
 SINT32 = _Type(0x85, "i", 0x7FFFFFFF)
@@ -66,6 +67,11 @@ _MESSAGES: dict[str, tuple[int, list[_Field]]] = {
         ("power", 7, UINT16, 1, 0),
         ("enhanced_speed", 73, UINT32, 1000, 0),
         ("enhanced_altitude", 78, UINT32, 5, 500),
+        # Running dynamics and temperature, as Garmin watches record them
+        ("temperature", 13, SINT8, 1, 0),  # °C
+        ("vertical_oscillation", 39, UINT16, 10, 0),  # mm
+        ("stance_time", 41, UINT16, 10, 0),  # ms of ground contact
+        ("step_length", 85, UINT16, 10, 0),  # mm
     ]),
     "lap": (19, [
         _TIMESTAMP,
@@ -144,8 +150,8 @@ def _encode(value: Any, kind: _Type, scale: float, offset: float) -> int:
     if isinstance(value, datetime):
         value = fit_time(value)
     raw = round((float(value) + offset) * scale)
-    limit = {"B": 0xFE, "H": 0xFFFE, "I": 0xFFFFFFFE, "i": 0x7FFFFFFE}[kind.fmt]
-    low = -0x7FFFFFFF if kind.fmt == "i" else 0
+    limit = {"B": 0xFE, "b": 0x7E, "H": 0xFFFE, "I": 0xFFFFFFFE, "i": 0x7FFFFFFE}[kind.fmt]
+    low = {"i": -0x7FFFFFFF, "b": -0x7F}.get(kind.fmt, 0)
     if raw < low or raw > limit:
         return kind.invalid
     return raw
