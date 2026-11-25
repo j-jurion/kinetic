@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyseSummary } from '../src/trainingPage'
+import { analyseSummary } from '../src/analyse'
 
 describe('analyseSummary', () => {
   it('counts what was analysed and what could not be', () => {

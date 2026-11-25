@@ -12,7 +12,6 @@ import type { FormBand, Range } from '@kinetic/shared/training'
 import {
   DYNAMICS,
   TRAINING_CAPTIONS,
-  analyseSummary,
   dynamicsChart,
   intensityCaption,
   signed,
@@ -20,7 +19,9 @@ import {
   thresholdText,
   trainingView,
 } from '@kinetic/shared/trainingPage'
-import type { AnalyseFailure, AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
+import { analyseSummary } from '@kinetic/shared/analyse'
+import type { AnalyseFailure } from '@kinetic/shared/analyse'
+import type { AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
 import type { TrainingOverview } from '@kinetic/shared/types'
 import { Icon } from '../components/Icon'
 import { useNotify } from '../components/Notify'
