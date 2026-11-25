@@ -54,6 +54,12 @@ class ConversionTests(unittest.TestCase):
         self.assertAlmostEqual(rows[100]["lat"], 50.883, places=4)
         self.assertIsNotNone(rows[102]["heart_rate"])  # interpolated between 5 s samples
 
+    def test_paused_run_keeps_the_workout_time(self):
+        # Like a Nike Run Club run: 35:41 from start to end, 27:32 of workout time
+        data = {**outdoor_run(seconds=2141), "duration": 1652}
+        _, (activity, *_rest) = self.roundtrip(data)
+        self.assertEqual(activity.duration_seconds, 1652)
+
     def test_swim_bike_run_becomes_a_triathlon_with_its_legs(self):
         _, (event, _, _, children) = self.roundtrip(swim_bike_run())
         self.assertEqual(event.sport, SportType.triathlon)

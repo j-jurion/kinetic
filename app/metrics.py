@@ -19,7 +19,7 @@ from app.models import Activity, ActivityMetrics
 from app.ownership import UserSession as Session
 
 # Bump when the stored metrics change, so the backfill recomputes them
-METRICS_VERSION = 2
+METRICS_VERSION = 3
 # A recorded duration longer than this is a broken file (a watch left running for weeks)
 MAX_PLAUSIBLE_SECONDS = 24 * 3600
 # Without a threshold heart rate, assume it is this share of the maximum heart rate

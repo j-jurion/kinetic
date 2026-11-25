@@ -42,6 +42,9 @@ MAX_EFFORT_SPEED_MS: dict[SportType, float] = {
     SportType.cycling: 25.0,
     SportType.swimming: _MAX_SWIM_SPEED_MS,
 }
+# A timer time under this share of the elapsed time is a watch that paused by itself, not
+# the athlete pausing
+_MIN_TIMER_SHARE = 0.25
 # In files Kinetic writes itself (Apple Health and Strava imports), distance comes from raw
 # GPS or batched samples. Faster than this between two points is a jump in that data, not
 # movement: a GPS fix that lands far away, or distance that arrives in one batch after a
@@ -52,6 +55,41 @@ _MAX_STEP_SPEED_MS: dict[SportType, float] = {
     SportType.trail_running: 12.0,
     SportType.cycling: 35.0,
 }
+
+
+def moving_duration(summary: dict, sport: Optional[SportType] = None) -> float:
+    """The time of a session or lap without its pauses: the timer time, when it is usable.
+
+    Watches and apps stop the timer when the athlete pauses (or auto-pause kicks in), so the
+    timer time is what they show as the workout's time and base its pace on. The elapsed time
+    also counts the pauses. The elapsed time is used instead when the file has no timer time,
+    or when the timer time cannot be right: longer than the elapsed time, under a quarter of
+    it, or faster than a world record over the distance. A watch can auto-pause an open-water
+    swim for most of its length (the wrist under water), leaving a minute of timer time.
+    """
+    elapsed = float(summary.get("total_elapsed_time") or 0)
+    timer = float(summary.get("total_timer_time") or 0)
+    if timer <= 0 or elapsed <= 0:
+        return timer or elapsed
+    if timer > elapsed or timer < elapsed * _MIN_TIMER_SHARE:
+        return elapsed
+    distance = float(summary.get("total_distance") or 0)
+    limit = MAX_EFFORT_SPEED_MS.get(sport) if sport else None
+    if limit and distance / timer > limit:
+        return elapsed
+    return timer
+
+
+def activity_duration(summary: dict, sport: SportType, session: dict) -> float:
+    """The duration of a single-sport activity, or of one of its laps (``summary``).
+
+    Pace and duration leave out the pauses, as on the watch or app that recorded it. Not in
+    open water: there the watch pauses by itself whenever the wrist is under water.
+    """
+    if str(session.get("sub_sport", "")).lower() == "open_water":
+        return float(summary.get("total_elapsed_time") or summary.get("total_timer_time") or 0)
+    return moving_duration(summary, sport)
+
 
 # FIT sub_sport values that refine the recorded sport
 SUB_SPORT_MAP: dict[tuple[str, str], SportType] = {
@@ -170,9 +208,7 @@ def _build_single_activity(
     else:
         activity_name = f"{sport.value.capitalize()} {date_str}"
 
-    total_elapsed = (
-        session_data.get("total_elapsed_time") or session_data.get("total_timer_time") or 0
-    )
+    duration = activity_duration(session_data, sport, session_data)
     distance_m = session_data.get("total_distance")
     elevation = session_data.get("total_ascent")
     avg_hr = session_data.get("avg_heart_rate")
@@ -188,7 +224,7 @@ def _build_single_activity(
         sport=sport,
         kind=ActivityKind.training,
         date=activity_date,
-        duration_seconds=float(total_elapsed),
+        duration_seconds=duration,
         distance_meters=float(distance_m) if distance_m is not None else None,
         elevation_gain_meters=float(elevation) if elevation is not None else None,
         avg_heart_rate=int(avg_hr) if avg_hr is not None else None,
@@ -208,9 +244,7 @@ def _build_single_activity(
                 activity_id=0,  # filled after DB insert
                 lap_number=i + 1,
                 start_time=lr.get("start_time"),
-                duration_seconds=float(lr["total_elapsed_time"])
-                if lr.get("total_elapsed_time")
-                else None,
+                duration_seconds=activity_duration(lr, sport, session_data) or None,
                 distance_meters=float(lr["total_distance"]) if lr.get("total_distance") else None,
                 avg_speed_ms=float(lr["avg_speed"]) if lr.get("avg_speed") else None,
                 avg_heart_rate=int(lr["avg_heart_rate"]) if lr.get("avg_heart_rate") else None,
@@ -293,7 +327,7 @@ def _build_multisport(
         SportType.multisport: "Multisport",
     }[parent_sport]
 
-    # Elapsed time, like single activities: a leg's timer stops when the watch auto-pauses
+    # Elapsed time, unlike single activities: a leg's timer stops when the watch auto-pauses
     # (an open-water swim can show a minute of timer time), but the race clock does not.
     total_time = sum(
         float(s.get("total_elapsed_time") or s.get("total_timer_time") or 0) for s in sessions

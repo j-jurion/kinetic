@@ -12,8 +12,8 @@ Source: `Kinetic.pdf` (5 pages of notes with screenshots). Items are grouped by 
 
 ## Activities
 - [x] **Bug**: Multisport imports from Apple Health. A bike-run (Ronse) and a triathlon both come in as a single **swim** ("Swim Bike Run 14-11-2026": 10086 m, 1:45 /100m, swim icon). Only the first leg's route/data is kept, and the map shows a tiny segment. Import every leg, and show it as a multisport activity or as linked activities.
-- [ ] **Bug**: Pace is wrong for the 4 Nov run (Nike Run Club). Apple shows 0:27:32 workout time and 6'21"/km. Kinetic shows a duration of 35:41 (the *elapsed* time) and a pace of 8:13/km. Pace (and probably duration) should use moving/workout time and leave out pauses. The run had pauses/intervals.
-- [ ] **Bug**: On that same run, aerobic decoupling shows **-29.4%**. That's implausible and most likely caused by the pauses too.
+- [x] **Bug**: Pace is wrong for the 4 Nov run (Nike Run Club). Apple shows 0:27:32 workout time and 6'21"/km. Kinetic shows a duration of 35:41 (the *elapsed* time) and a pace of 8:13/km. Pace (and probably duration) should use moving/workout time and leave out pauses. The run had pauses/intervals.
+- [x] **Bug**: On that same run, aerobic decoupling shows **-29.4%**. That's implausible and most likely caused by the pauses too.
 
 ## Training
 - [ ] **Bug**: "Analyse now" fails with the message "Analysed 0 activities, 2 failed". Find out why, and show the user a useful error.
@@ -27,5 +27,5 @@ Source: `Kinetic.pdf` (5 pages of notes with screenshots). Items are grouped by 
 - [ ] **Feature**: Detect activities done together automatically, or suggest them for the user to confirm, based on the same location/route and start time.
 
 ## Sync / import
-- [ ] **Feature**: Let the import take a date **range**, not just a "from" date.
+- [x] **Feature**: Let the import take a date **range**, not just a "from" date.
 - [x] **UX**: Make the import result persistent: a confirmation or failure message that stays on screen. Right now the popup disappears too fast to read.

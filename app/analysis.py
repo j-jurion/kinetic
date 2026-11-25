@@ -11,6 +11,12 @@ from typing import Optional
 
 # Gaps between records longer than this are pauses
 MAX_GAP_SECONDS = 10
+# Decoupling is left out for activities stopped for more than this share of the time, or
+# whose one-minute output varies more than this (measured on runs and rides: steady ones stop
+# under 10% of the time and vary 3-24%; ones with long pauses or intervals stop 25-40%, or
+# vary over 25%)
+MAX_STOPPED_SHARE = 0.15
+MAX_STEADY_VARIATION = 0.25
 # Heart-rate zones as fractions of the maximum heart rate (Garmin's default "% of max")
 HR_ZONES = [
     ("Z1", 0.5, 0.6),
@@ -209,12 +215,53 @@ def average_grade_adjusted_speed(rows: list[dict]) -> Optional[float]:
     return average_moving(with_gap, "gap")
 
 
+def _minute_variation(rows: list[dict], field: str) -> Optional[float]:
+    """How much a field's one-minute averages over the moving time vary (coefficient of
+    variation): a few percent for a steady effort, far more for intervals."""
+    sums: dict[int, list[float]] = {}
+    for previous, current in zip(rows, rows[1:]):
+        gap = current["t"] - previous["t"]
+        value = previous.get(field)
+        speed = previous.get("speed")
+        if value is None or gap <= 0 or gap > MAX_GAP_SECONDS or (
+            speed is not None and speed < 0.5
+        ):
+            continue
+        bucket = sums.setdefault(int(previous["t"] // 60), [0.0, 0.0])
+        bucket[0] += value * gap
+        bucket[1] += gap
+    means = [total / weight for total, weight in sums.values() if weight >= 30]
+    if len(means) < 4:
+        return None
+    average = sum(means) / len(means)
+    if average <= 0:
+        return None
+    spread = (sum((m - average) ** 2 for m in means) / len(means)) ** 0.5
+    return spread / average
+
+
+def is_steady(rows: list[dict], output: str) -> bool:
+    """Whether the activity was one steady effort: not stopped for long, and the output not
+    going up and down as in intervals. Decoupling only means something for those."""
+    if len(rows) < 2:
+        return False
+    span = rows[-1]["t"] - rows[0]["t"]
+    if span <= 0 or 1 - moving_seconds(rows) / span > MAX_STOPPED_SHARE:
+        return False
+    variation = _minute_variation(rows, output)
+    return variation is None or variation <= MAX_STEADY_VARIATION
+
+
 def decoupling(rows: list[dict], use_power: bool) -> Optional[float]:
     """Aerobic decoupling (%): how much output per heartbeat drops from the first to the
-    second half. Under 5% is a sign of good endurance. Needs 20 minutes of data."""
+    second half. Under 5% is a sign of good endurance. Needs 20 minutes of one steady
+    effort: across pauses or intervals the halves are not comparable (an interval run with
+    pauses showed -29%)."""
     output = "power" if use_power else "speed"
     usable = [r for r in rows if r.get("heart_rate") and r.get(output) is not None]
     if len(usable) < 2 or usable[-1]["t"] - usable[0]["t"] < 20 * 60:
+        return None
+    if not is_steady(rows, output):
         return None
     middle = usable[0]["t"] + (usable[-1]["t"] - usable[0]["t"]) / 2
 
