@@ -20,6 +20,7 @@ from app.auth_guard import AuthGuard
 from app.database import create_db_and_tables, lock_down_postgres_tables
 from app.friends import router as friends_router
 from app.repair import repair_impossible_best_efforts, repair_single_leg_events
+from app.together import router as together_router
 from app.token_crypto import warn_if_unconfigured
 
 # Endpoints that stream progress as JSON lines while they work
@@ -67,6 +68,8 @@ fastapi_app.add_middleware(NoCompression, paths=STREAMING_PATHS)
 fastapi_app.include_router(auth_router)
 fastapi_app.include_router(account_router)
 fastapi_app.include_router(router, prefix="/api")
+# Before the friends router, whose /friends/{friend_id} would take /friends/together
+fastapi_app.include_router(together_router, prefix="/api")
 fastapi_app.include_router(friends_router, prefix="/api")
 
 

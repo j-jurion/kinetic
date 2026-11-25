@@ -31,10 +31,10 @@ class AccountDeletion(BaseModel):
 def delete_account_data(user_id: str) -> int:
     """Delete the account and all of its data in one transaction; returns the activity count.
 
-    Removes its activities with their laps, best efforts, metrics, race results and friend
-    tags; its friends and friend requests; its sessions and integration tokens; its uploaded
-    FIT files and its stored Garmin tokens. Other accounts that had this account as a linked
-    friend keep their friend record, as an unlinked one.
+    Removes its activities with their laps, best efforts, metrics, race results, friend tags
+    and dismissed together-suggestions; its friends and friend requests; its sessions and
+    integration tokens; its uploaded FIT files and its stored Garmin tokens. Other accounts
+    that had this account as a linked friend keep their friend record, as an unlinked one.
     """
     tables = SQLModel.metadata.tables
     activity, friend = tables["activity"], tables["friend"]
@@ -74,6 +74,8 @@ def delete_account_data(user_id: str) -> int:
             )
         )
         conn.execute(delete(activity).where(activity.c.owner_id == user_id))
+        dismissals = tables["togetherdismissal"]
+        conn.execute(delete(dismissals).where(dismissals.c.owner_id == user_id))
         conn.execute(delete(friend).where(friend.c.owner_id == user_id))
         conn.execute(update(friend).where(friend.c.user_id == user_id).values(user_id=None))
         requests = tables["friendrequest"]

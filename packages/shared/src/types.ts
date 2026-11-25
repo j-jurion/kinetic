@@ -83,6 +83,12 @@ export interface FriendRequests {
   outgoing: FriendRequest[]
 }
 
+/** One of your activities that was probably done with a linked friend who is not tagged on it. */
+export interface TogetherSuggestion {
+  activity: { id: number; name: string; date: string; sport: string }
+  friend: { id: number; name: string }
+}
+
 export type UserRelation = 'friend' | 'incoming' | 'outgoing' | 'none'
 
 export interface UserSearchResult {
