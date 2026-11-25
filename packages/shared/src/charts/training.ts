@@ -2,6 +2,7 @@
 // prepared data from ../training.ts.
 
 import type { Data, Layout, Shape } from 'plotly.js-dist-min'
+import { activityUrl, dayUrl, weekUrl, withLinks } from '../chartLinks'
 import { formatDate, sportColor, sportLabel } from '../format'
 import { rollingAverage } from '../graphs'
 import { formatClock, paceAxis } from '../speed'
@@ -50,6 +51,8 @@ export function fitnessChart(days: FitnessDay[]): Chart {
   if (!days.length) return [[], noDataLayout(title)]
   const x = days.map((d) => dayKey(d.date))
   const tsb = days.map((d) => d.tsb)
+  // A day with training opens its activities
+  const links = days.map((d) => (d.load > 0 ? dayUrl(d.date) : null))
   const lo = Math.min(-35, Math.floor(Math.min(...tsb) - 5))
   const hi = Math.max(15, Math.ceil(Math.max(...tsb) + 5))
   // Form bands, clipped to the axis range: fresh, productive and overreaching
@@ -68,7 +71,7 @@ export function fitnessChart(days: FitnessDay[]): Chart {
   })
   return [
     [
-      {
+      withLinks({
         type: 'scatter',
         mode: 'lines',
         x,
@@ -76,8 +79,8 @@ export function fitnessChart(days: FitnessDay[]): Chart {
         name: 'Fitness (CTL)',
         line: { color: FITNESS_COLOR, width: 2.5 },
         hovertemplate: 'Fitness: %{y:.0f}<extra></extra>',
-      },
-      {
+      }, links),
+      withLinks({
         type: 'scatter',
         mode: 'lines',
         x,
@@ -85,8 +88,8 @@ export function fitnessChart(days: FitnessDay[]): Chart {
         name: 'Fatigue (ATL)',
         line: { color: FATIGUE_COLOR, width: 1.5 },
         hovertemplate: 'Fatigue: %{y:.0f}<extra></extra>',
-      },
-      {
+      }, links),
+      withLinks({
         type: 'scatter',
         mode: 'lines',
         x,
@@ -97,7 +100,7 @@ export function fitnessChart(days: FitnessDay[]): Chart {
         line: { color: NEUTRAL, width: 1 },
         fillcolor: 'rgba(107,114,128,0.35)',
         hovertemplate: 'Form: %{y:+.0f}<extra></extra>',
-      },
+      }, links),
     ],
     {
       title: { text: title },
@@ -118,9 +121,10 @@ export function weeklyLoadChart(weeks: WeeklyLoad[]): Chart {
   if (!weeks.some((w) => w.load > 0)) return [[], noDataLayout(title)]
   const x = weeks.map((w) => dayKey(w.start))
   const steep = (w: WeeklyLoad) => (w.ramp ?? 0) > RAMP_WARNING_PCT
+  const links = weeks.map((w) => (w.load > 0 ? weekUrl(w.start) : null))
   return [
     [
-      {
+      withLinks({
         type: 'bar',
         x,
         y: weeks.map((w) => Math.round(w.load)),
@@ -128,7 +132,7 @@ export function weeklyLoadChart(weeks: WeeklyLoad[]): Chart {
         marker: { color: weeks.map((w) => (steep(w) ? WARNING_COLOR : LOAD_COLOR)) },
         opacity: 0.85,
         hovertemplate: 'Week of %{x|%d-%m-%Y}<br>Load: %{y}<extra></extra>',
-      },
+      }, links),
       {
         type: 'scatter',
         mode: 'lines',
@@ -180,9 +184,10 @@ export function zonesChart(weeks: Week<number[]>[], mode: 'hours' | 'pct'): Char
   if (!weeks.some((w) => w.value.some((s) => s > 0))) return [[], noDataLayout(title)]
   const x = weeks.map((w) => dayKey(w.start))
   const totals = weeks.map((w) => w.value.reduce((s, v) => s + v, 0))
+  const links = weeks.map((w, i) => (totals[i] > 0 ? weekUrl(w.start) : null))
   return [
     ZONE_COLORS.map(
-      (color, zone): Data => ({
+      (color, zone): Data => withLinks({
         type: 'bar',
         x,
         y: weeks.map((w, i) =>
@@ -194,7 +199,7 @@ export function zonesChart(weeks: Week<number[]>[], mode: 'hours' | 'pct'): Char
           mode === 'hours'
             ? `Z${zone + 1}: %{y:.1f} h<extra></extra>`
             : `Z${zone + 1}: %{y:.0f}%<extra></extra>`,
-      }),
+      } as Data, links),
     ),
     {
       title: { text: title },
@@ -213,16 +218,17 @@ export function balanceChart(weeks: Week<Record<Discipline, number>>[]): Chart {
   const title = 'Training balance (hours per week)'
   if (!weeks.some((w) => DISCIPLINES.some((d) => w.value[d] > 0))) return [[], noDataLayout(title)]
   const x = weeks.map((w) => dayKey(w.start))
+  const links = weeks.map((w) => (DISCIPLINES.some((d) => w.value[d] > 0) ? weekUrl(w.start) : null))
   return [
     DISCIPLINES.map(
-      (d): Data => ({
+      (d): Data => withLinks({
         type: 'bar',
         x,
         y: weeks.map((w) => w.value[d]),
         name: d,
         marker: { color: DISCIPLINE_COLORS[d] },
         hovertemplate: `${d}: %{y:.1f} h<extra></extra>`,
-      }),
+      } as Data, links),
     ),
     {
       title: { text: title },
@@ -272,9 +278,13 @@ export function calendarChart(grid: CalendarGrid): Chart {
       return v > 0 ? `${WEEKDAYS[weekday]} ${date}<br>Load ${Math.round(v)}` : `${WEEKDAYS[weekday]} ${date}<br>Rest`
     }),
   )
+  // A day with training opens its activities
+  const links = grid.z.map((row, weekday) =>
+    row.map((v, week) => (v ? dayUrl(new Date(`${grid.keys[weekday][week]}T12:00:00`)) : null)),
+  )
   return [
     [
-      {
+      withLinks({
         type: 'heatmap',
         x: grid.weeks.map(dayKey),
         y: WEEKDAYS,
@@ -293,7 +303,7 @@ export function calendarChart(grid: CalendarGrid): Chart {
           [1, '#c2410c'],
         ],
         hovertemplate: '%{text}<extra></extra>',
-      },
+      } as Data, links),
     ],
     {
       title: { text: 'Consistency' },
@@ -322,7 +332,7 @@ export function trendChart(points: RunValue[], from: Date | null, options: Trend
   const unit = options.unit ? ` ${options.unit}` : ''
   return [
     [
-      {
+      withLinks({
         type: 'scatter',
         mode: 'markers',
         x,
@@ -331,7 +341,7 @@ export function trendChart(points: RunValue[], from: Date | null, options: Trend
         marker: { color: options.color, size: 7, opacity: 0.5 },
         customdata: shown.map((p) => activityHover(p.activity)) as never,
         hovertemplate: `<b>%{customdata[0]}</b><br>%{customdata[1]}<br>%{y:${options.format}}${unit}<extra></extra>`,
-      },
+      } as Data, shown.map((p) => activityUrl(p.activity.id))),
       {
         type: 'scatter',
         mode: 'lines',
@@ -365,7 +375,7 @@ export function heatChart(points: HeatPoint[]): Chart {
   const lo = Math.min(...temps)
   const hi = Math.max(...temps)
   const data: Data[] = [
-    {
+    withLinks({
       type: 'scatter',
       mode: 'markers',
       x: temps,
@@ -374,7 +384,7 @@ export function heatChart(points: HeatPoint[]): Chart {
       marker: { color: points.map((p) => sportColor(p.activity.sport)), size: 7, opacity: 0.55 },
       customdata: points.map((p) => [...activityHover(p.activity), formatClock(p.pace)]) as never,
       hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]}<br>%{x:.0f} °C · %{customdata[2]} /km<extra></extra>',
-    },
+    } as Data, points.map((p) => activityUrl(p.activity.id))),
   ]
   if (fit && hi > lo) {
     data.push({
@@ -409,7 +419,7 @@ export function gradeAdjustedChart(runs: GradeAdjusted[]): Chart {
   if (!runs.length) return [[], noDataLayout(title)]
   return [
     [
-      {
+      withLinks({
         type: 'scatter',
         mode: 'markers',
         x: runs.map((r) => r.activity.date),
@@ -424,7 +434,7 @@ export function gradeAdjustedChart(runs: GradeAdjusted[]): Chart {
         hovertemplate:
           '<b>%{customdata[0]}</b><br>%{customdata[1]}<br>Pace %{customdata[2]} /km · GAP %{customdata[3]} /km' +
           '<br>Difference: %{y:+.0f} s/km<extra></extra>',
-      },
+      } as Data, runs.map((r) => activityUrl(r.activity.id))),
     ],
     {
       title: { text: title },
@@ -443,7 +453,8 @@ export function brickChart(bricks: BrickRun[]): Chart {
   if (!compared.length) return [[], noDataLayout(title)]
   const x = compared.map((b) => `${formatDate(b.activity.date)} · ${((b.activity.distance_meters ?? 0) / 1000).toFixed(1)} km`)
   const axis = paceAxis(compared.flatMap((b) => [b.pace, b.normalPace!]), true)
-  const bar = (name: string, values: number[], color: string): Data => ({
+  const links = compared.map((b) => activityUrl(b.activity.id))
+  const bar = (name: string, values: number[], color: string): Data => withLinks({
     type: 'bar',
     x,
     y: values,
@@ -453,7 +464,7 @@ export function brickChart(bricks: BrickRun[]): Chart {
     hovertemplate: `${name}: %{customdata} /km<extra></extra>`,
     // Bars grow up from the slow end of the reversed axis
     base: axis ? (values.map(() => axis.slow) as never) : undefined,
-  })
+  } as Data, links)
   return [
     [
       bar('Brick run', compared.map((b) => b.pace - (axis?.slow ?? 0)), sportColor('triathlon')),
@@ -481,7 +492,7 @@ export function decouplingChart(activities: TrainingActivity[]): Chart {
   return [
     sports.map((sport): Data => {
       const list = activities.filter((a) => a.sport === sport)
-      return {
+      return withLinks({
         type: 'scatter',
         mode: 'markers',
         x: list.map((a) => a.date),
@@ -490,7 +501,7 @@ export function decouplingChart(activities: TrainingActivity[]): Chart {
         marker: { color: sportColor(sport), size: 8, opacity: 0.65 },
         customdata: list.map((a) => [...activityHover(a), Math.round(a.moving_seconds / 60)]) as never,
         hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]} · %{customdata[2]} min<br>Decoupling: %{y:.1f}%<extra></extra>',
-      }
+      } as Data, list.map((a) => activityUrl(a.id)))
     }),
     {
       title: { text: title },

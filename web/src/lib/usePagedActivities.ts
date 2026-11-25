@@ -22,7 +22,7 @@ export interface PagedActivities {
  * that, or after a newer reload, is dropped.
  */
 export function usePagedActivities(filters: ActivityFilters, version = 0): PagedActivities {
-  const { sport, year, friend } = filters
+  const { sport, year, friend, since, until } = filters
   const [activities, setActivities] = useState<ActivityRow[] | null>(null)
   const [totals, setTotals] = useState<Totals | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
@@ -32,7 +32,7 @@ export function usePagedActivities(filters: ActivityFilters, version = 0): Paged
 
   useEffect(() => {
     const current = ++generation.current
-    const selection = { sport, year, friend }
+    const selection = { sport, year, friend, since, until }
     setActivities(null)
     setTotals(null)
     setCursor(null)
@@ -45,13 +45,13 @@ export function usePagedActivities(filters: ActivityFilters, version = 0): Paged
     api.get<Totals>(activityTotalsPath(selection)).then((result) => {
       if (current === generation.current) setTotals(result)
     })
-  }, [sport, year, friend, version, reloads])
+  }, [sport, year, friend, since, until, version, reloads])
 
   const loadMore = useCallback(() => {
     if (!cursor || loadingMore) return
     const current = generation.current
     setLoadingMore(true)
-    api.get<ActivityRow[]>(activityPagePath({ sport, year, friend }, cursor)).then(
+    api.get<ActivityRow[]>(activityPagePath({ sport, year, friend, since, until }, cursor)).then(
       (page) => {
         if (current !== generation.current) return
         setActivities((rows) => appendPage(rows ?? [], page))
@@ -60,7 +60,7 @@ export function usePagedActivities(filters: ActivityFilters, version = 0): Paged
       },
       () => current === generation.current && setLoadingMore(false),
     )
-  }, [cursor, loadingMore, sport, year, friend])
+  }, [cursor, loadingMore, sport, year, friend, since, until])
 
   const reload = useCallback(() => setReloads((n) => n + 1), [])
 

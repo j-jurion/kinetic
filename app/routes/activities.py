@@ -2,7 +2,7 @@
 imports, and an activity's laps, route, per-second streams, detail and friends."""
 
 import json
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Form, HTTPException, Query, UploadFile
@@ -88,10 +88,22 @@ class ActivityUpdate(BaseModel):
 # ── Activities ────────────────────────────────────────────────────────────────
 
 
-def _activities_query(sport: Optional[str], year: Optional[int], friend: Optional[int]):
+def _activities_query(
+    sport: Optional[str],
+    year: Optional[int],
+    friend: Optional[int],
+    since: Optional[date] = None,
+    until: Optional[date] = None,
+):
     """The activities a list shows: without a sport filter only top-level activities (a
-    multisport event stands for its legs); with one, the legs of that sport on their own."""
+    multisport event stands for its legs); with one, the legs of that sport on their own.
+    ``since`` and ``until`` keep the activities from and to those days, both included."""
     stmt = select(Activity)
+    if since is not None:
+        stmt = stmt.where(col(Activity.date) >= datetime.combine(since, time.min))
+    if until is not None:
+        end = datetime.combine(until + timedelta(days=1), time.min)
+        stmt = stmt.where(col(Activity.date) < end)
     if friend is not None:
         stmt = stmt.where(
             col(Activity.id).in_(
@@ -121,6 +133,7 @@ def list_activities(
     year: Optional[int] = None,
     friend: Optional[int] = None,
     since: Optional[date] = None,
+    until: Optional[date] = None,
     limit: Optional[int] = Query(default=None, ge=1, le=500),
     before: Optional[str] = None,
 ) -> list[dict]:
@@ -128,15 +141,14 @@ def list_activities(
 
     Without a sport filter only top-level activities are listed (a multisport event stands
     for its legs); with a filter, legs of that sport are listed on their own. ``friend``
-    keeps the activities that friend is tagged on, ``since`` those on or after a date.
+    keeps the activities that friend is tagged on, ``since`` and ``until`` those from and to
+    a day (both included).
 
     Without ``limit`` every activity is listed. With it, a page of at most ``limit``; the next
     page starts after the last one: pass its date and id as ``before="<date>,<id>"``.
     """
     with Session(engine) as session:
-        stmt = _activities_query(sport, year, friend)
-        if since is not None:
-            stmt = stmt.where(col(Activity.date) >= datetime.combine(since, time.min))
+        stmt = _activities_query(sport, year, friend, since, until)
         if before is not None:
             when, activity_id = _parse_cursor(before)
             stmt = stmt.where(
@@ -168,13 +180,17 @@ def list_activities(
 
 @router.get("/activities/totals")
 def activity_totals(
-    sport: Optional[str] = None, year: Optional[int] = None, friend: Optional[int] = None
+    sport: Optional[str] = None,
+    year: Optional[int] = None,
+    friend: Optional[int] = None,
+    since: Optional[date] = None,
+    until: Optional[date] = None,
 ) -> dict:
     """Count, distance, time and climbing of the activities ``/activities`` lists with the same
     filters, so a paged list can show the totals of all of them. A multisport leg counts only
     when its event is not listed as well."""
     with Session(engine) as session:
-        listed = _activities_query(sport, year, friend).subquery()
+        listed = _activities_query(sport, year, friend, since, until).subquery()
         row = session.exec(
             select(
                 func.count(listed.c.id),

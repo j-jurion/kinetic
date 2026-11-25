@@ -361,6 +361,8 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 }
 .section-heading-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
 .section-heading-line { flex: 1; height: 1px; background: var(--border); }
+/* A chart point that opens its activity or period (see Plot) */
+.plot-linked .nsewdrag, .plot-linked .draglayer * { cursor: pointer !important; }
 .card-title { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
 .card-label {
   font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted);
