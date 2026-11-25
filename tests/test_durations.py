@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from sqlmodel import Session, select
 
@@ -112,3 +113,24 @@ class RecalcDurationsTests(MaintenanceTestCase):
         with Session(self.engine) as session:
             durations = sorted(a.duration_seconds for a in session.exec(select(Activity)))
         self.assertEqual(durations, [1200, 1800, 1800, 3000])
+
+    def test_skips_files_when_the_stored_speed_shows_no_pauses(self):
+        # Reading a FIT file takes seconds on the server: only files that may hold pauses
+        steady = write_sessions_fit(self.uploads / "steady.fit", [("running", 0, 1800, 1800)])
+        paused = write_sessions_fit(self.uploads / "paused.fit", [("running", 0, 2141, 1652)])
+        steady_id = self.store_single(steady, 1800)
+        paused_id = self.store_single(paused, 2141)
+        with Session(self.engine) as session:
+            for activity_id, distance, speed in ((steady_id, 5400, 3.0), (paused_id, 6423, 3.89)):
+                activity = session.get(Activity, activity_id)
+                activity.distance_meters, activity.avg_speed_ms = distance, speed
+            session.commit()
+
+        read = []
+        real = maintenance._file_summaries
+        progress = []
+        with patch.object(maintenance, "_file_summaries", lambda p: read.append(p.name) or real(p)):
+            reports = maintenance.recalc_durations(progress=lambda *a: progress.append(a))
+        self.assertEqual(read, ["paused.fit"])
+        self.assertEqual([r.activity_id for r in reports], [paused_id])
+        self.assertEqual(progress, [(1, 1, 1)])
