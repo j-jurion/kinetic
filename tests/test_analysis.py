@@ -94,6 +94,30 @@ class EnduranceTests(unittest.TestCase):
         self.assertAlmostEqual(analysis.decoupling(rows, use_power=False), 10.0, delta=0.2)
         self.assertIsNone(analysis.decoupling(rows[:600], use_power=False))  # under 20 min
 
+    def test_no_decoupling_across_long_pauses(self):
+        # 40 minutes of running with 10 minutes of pauses in the middle (no records)
+        rows = rows_from(speed=[3.0] * 2400, heart_rate=[150.0] * 2400)
+        for row in rows[1200:]:
+            row["t"] += 600
+        self.assertFalse(analysis.is_steady(rows, "speed"))
+        self.assertIsNone(analysis.decoupling(rows, use_power=False))
+
+    def test_no_decoupling_for_intervals(self):
+        # Two minutes hard, two minutes jogging, for 40 minutes
+        speed = [4.5 if (t // 120) % 2 == 0 else 2.0 for t in range(2400)]
+        rows = rows_from(speed=speed, heart_rate=[160.0] * 2400)
+        self.assertFalse(analysis.is_steady(rows, "speed"))
+        self.assertIsNone(analysis.decoupling(rows, use_power=False))
+
+    def test_short_stops_and_small_changes_are_still_steady(self):
+        # Rolling pace (+/- 10%) and a minute at a traffic light
+        speed = [3.0 + 0.3 * ((t // 300) % 2) for t in range(2400)]
+        rows = rows_from(speed=speed, heart_rate=[150.0] * 2400)
+        for row in rows[1200:1260]:
+            row["speed"] = 0.0
+        self.assertTrue(analysis.is_steady(rows, "speed"))
+        self.assertIsNotNone(analysis.decoupling(rows, use_power=False))
+
 
 class SwimTests(unittest.TestCase):
     def test_lengths_and_swolf(self):
