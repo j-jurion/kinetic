@@ -195,7 +195,9 @@ export function DashboardPage() {
 
       {view && (
         <>
-          <SectionHeading icon="trending_up">Fitness &amp; form</SectionHeading>
+          <SectionHeading icon="trending_up" more={['Training', '/training']}>
+            Fitness &amp; form
+          </SectionHeading>
           <div className="w-full graphs-grid">
             <ChartCard caption={band ? FORM_ADVICE[band] : TRAINING_CAPTIONS.fitness}>
               {view.now && band && (
