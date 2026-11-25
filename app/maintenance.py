@@ -7,6 +7,11 @@
         imported before multisport files used elapsed time kept a swim the watch auto-paused
         at its timer time (a minute instead of twenty).
 
+    python -m app.maintenance recalc-durations [--apply]
+        Set the duration of single-sport activities to the time without pauses (the timer
+        time), as new imports do: before, it was the elapsed time, so a run with pauses showed
+        a slower pace than the watch or app. Durations changed by hand are left alone.
+
     python -m app.maintenance clean-uploads [--apply]
         Delete FIT files no activity refers to (left by activities deleted before deleting an
         activity removed its file), cached streams whose FIT file is gone, and unfinished
@@ -21,13 +26,14 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from sqlmodel import Session, col, select
 
-from app import streams
+from app import fit_parser, streams
 from app.database import engine
 from app.fit_parser import parse_fit_file
-from app.models import Activity, ActivityMetrics, BestEffort, SportType
+from app.models import Activity, ActivityMetrics, BestEffort, Lap, SportType
 from app.ownership import current_owner
 
 MULTISPORT = (SportType.triathlon, SportType.duathlon, SportType.multisport)
@@ -148,6 +154,94 @@ def recalc_multisport(apply: bool = False) -> list[EventReport]:
     return reports
 
 
+# ── Durations without pauses ─────────────────────────────────────────────────
+
+
+@dataclass
+class DurationReport:
+    activity_id: int
+    name: str
+    old: float = 0.0
+    new: float = 0.0
+    laps: int = 0
+    skipped: str = ""
+
+
+def _file_summaries(path: Path) -> tuple[list[dict], list[dict]]:
+    """The session and lap messages of a FIT file."""
+    import fitparse
+
+    sessions: list[dict] = []
+    laps: list[dict] = []
+    for message in fitparse.FitFile(str(path)).get_messages(["session", "lap"]):
+        values = {f.name: f.value for f in message.fields}
+        (sessions if message.name == "session" else laps).append(values)
+    return sessions, laps
+
+
+def _recalculate_duration(
+    session: Session, activity: Activity, apply: bool
+) -> Optional[DurationReport]:
+    """None when the activity already has the right duration."""
+    report = DurationReport(activity.id, activity.name, old=activity.duration_seconds)
+    path = streams.fit_path_for(activity.fit_file_path)
+    if path is None:
+        return None  # nothing to compare with; not worth listing
+    try:
+        sessions, lap_records = _file_summaries(path)
+    except Exception as exc:
+        report.skipped = f"its FIT file could not be read ({type(exc).__name__})"
+        return report
+    if not sessions or fit_parser._is_multisport(sessions):
+        return None
+    main = fit_parser._main_session(sessions)
+    sport = fit_parser.resolve_sport(str(main.get("sport", "other")).lower(), main.get("sub_sport"))
+    elapsed = float(main.get("total_elapsed_time") or main.get("total_timer_time") or 0)
+    report.new = fit_parser.activity_duration(main, sport, main)
+    if abs(report.new - report.old) <= _SAME_DURATION_SECONDS:
+        return None
+    if abs(report.old - elapsed) > _SAME_DURATION_SECONDS:
+        report.skipped = f"its duration {_clock(report.old)} was changed by hand"
+        return report
+
+    laps = session.exec(
+        select(Lap).where(Lap.activity_id == activity.id).order_by(col(Lap.lap_number))
+    ).all()
+    if len(laps) == len(lap_records):
+        for lap, record in zip(laps, lap_records):
+            new = fit_parser.activity_duration(record, sport, main) or None
+            if new is not None and lap.duration_seconds != new:
+                report.laps += 1
+                if apply:
+                    lap.duration_seconds = new
+    if apply:
+        activity.duration_seconds = report.new
+        session.commit()
+    return report
+
+
+def recalc_durations(apply: bool = False) -> list[DurationReport]:
+    """Compare every single-sport activity's duration with its FIT file; with ``apply``,
+    update it. Lists only the activities that change or are skipped."""
+    with Session(engine) as session:
+        ids = session.exec(
+            select(Activity.id).where(
+                col(Activity.parent_id).is_(None),
+                col(Activity.sport).not_in(MULTISPORT),
+                col(Activity.fit_file_path).is_not(None),
+            )
+        ).all()
+    reports = []
+    for activity_id in ids:
+        with Session(engine) as session:
+            activity = session.get(Activity, activity_id)
+            if activity is not None:
+                report = _recalculate_duration(session, activity, apply)
+                if report is not None:
+                    reports.append(report)
+    return reports
+
+
 def _clock(seconds: float) -> str:
     total = round(seconds)
     return f"{total // 3600}:{total % 3600 // 60:02d}:{total % 60:02d}"
@@ -217,6 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     for name, text in (
         ("recalc-multisport", "update multisport events from their FIT files"),
+        ("recalc-durations", "leave the pauses out of single-sport activities' durations"),
         ("clean-uploads", "delete files in the uploads folder that nothing uses"),
     ):
         command = sub.add_parser(name, help=text)
@@ -242,6 +337,16 @@ def main(argv: list[str] | None = None) -> int:
         unchanged = len(reports) - len(changed) - sum(1 for r in reports if r.skipped)
         print(f"{len(reports)} multisport events: {len(changed)} to update, {unchanged} already "
               f"right, {sum(1 for r in reports if r.skipped)} skipped")
+    elif args.command == "recalc-durations":
+        reports = recalc_durations(args.apply)
+        changed = [r for r in reports if not r.skipped]
+        for r in changed:
+            laps = f" ({r.laps} lap{'s' if r.laps != 1 else ''})" if r.laps else ""
+            print(f"{verb} #{r.activity_id} {r.name}: {_clock(r.old)} -> {_clock(r.new)}{laps}")
+        for r in reports:
+            if r.skipped:
+                print(f"Skipped #{r.activity_id} {r.name}: {r.skipped}")
+        print(f"{len(changed)} activities to update, {len(reports) - len(changed)} skipped")
     else:
         report = clean_uploads()  # sizes are listed before anything is deleted
         verb = "Deleted" if args.apply else "Would delete"

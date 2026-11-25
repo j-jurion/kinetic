@@ -299,6 +299,12 @@ add `--apply` to make the changes. Running one again is harmless.
 fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-multisport"
 fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-multisport --apply"
 
+# Single-sport activities imported before durations left out pauses: set the duration (and
+# the laps') to the timer time, as new imports do, so pace matches the watch or app. A
+# duration changed by hand is listed as skipped and kept
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-durations"
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance recalc-durations --apply"
+
 # FIT files no activity uses (left by activities deleted before deleting removed the file),
 # cached streams of missing files and unfinished temporary files; files changed in the last
 # hour are left alone, as an import may be saving them
