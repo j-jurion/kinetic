@@ -98,7 +98,6 @@ class MetricsTests(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 session.commit()
 
-
     def test_analysing_while_an_import_saves_the_same_metrics(self):
         # An import computes metrics of its new activities right away; "Analyse now" started
         # meanwhile finds the activity pending, and the import saves first
