@@ -26,11 +26,12 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
+from sqlalchemy.orm import defer
 from sqlmodel import Session, col, select
 
-from app import fit_parser, streams
+from app import fit_parser, fit_summary, streams
 from app.database import engine
 from app.fit_parser import parse_fit_file
 from app.models import Activity, ActivityMetrics, BestEffort, Lap, SportType
@@ -41,6 +42,8 @@ MULTISPORT = (SportType.triathlon, SportType.duathlon, SportType.multisport)
 _SAME_START_SECONDS = 5
 # Durations closer than this are the same (rounding)
 _SAME_DURATION_SECONDS = 1
+# Average speeds closer than this share are the same (rounding in the file)
+_SAME_SPEED_SHARE = 0.005
 # An import writes its FIT file just before it saves the activity: leave recent files alone
 RECENT_SECONDS = 60 * 60
 
@@ -137,8 +140,11 @@ def _store_metrics(owner_id: str | None, activity_ids: list[int]) -> None:
         current_owner.reset(token)
 
 
-def recalc_multisport(apply: bool = False) -> list[EventReport]:
-    """Compare every multisport event with its FIT file; with ``apply``, update it."""
+def recalc_multisport(
+    apply: bool = False, progress: Optional[Callable[[int, int, int], None]] = None
+) -> list[EventReport]:
+    """Compare every multisport event with its FIT file; with ``apply``, update it.
+    ``progress`` is called with (checked, total, changes so far) as it goes."""
     with Session(engine) as session:
         ids = session.exec(
             select(Activity.id).where(
@@ -146,11 +152,13 @@ def recalc_multisport(apply: bool = False) -> list[EventReport]:
             )
         ).all()
     reports = []
-    for event_id in ids:
+    for done, event_id in enumerate(ids, start=1):
         with Session(engine) as session:
             event = session.get(Activity, event_id)
             if event is not None:
                 reports.append(_recalculate_event(session, event, apply))
+        if progress:
+            progress(done, len(ids), sum(1 for r in reports if r.changes))
     return reports
 
 
@@ -168,7 +176,12 @@ class DurationReport:
 
 
 def _file_summaries(path: Path) -> tuple[list[dict], list[dict]]:
-    """The session and lap messages of a FIT file."""
+    """The session and lap messages of a FIT file: read quickly without decoding the records,
+    or with fitparse for a file the quick reader cannot follow."""
+    try:
+        return fit_summary.read_summaries(path.read_bytes())
+    except fit_summary.FitSummaryError:
+        pass
     import fitparse
 
     sessions: list[dict] = []
@@ -220,25 +233,56 @@ def _recalculate_duration(
     return report
 
 
-def recalc_durations(apply: bool = False) -> list[DurationReport]:
+def _paused(duration: float, distance: Optional[float], avg_speed: Optional[float]) -> bool:
+    """Whether the activity may have pauses to leave out, judged from its stored numbers.
+
+    The stored average speed comes from the file and leaves the pauses out, so when distance
+    over duration matches it, the timer ran the whole time and the file need not be read
+    (reading a FIT file takes seconds). Without a distance or a speed, only the file can tell.
+    """
+    if not distance or not avg_speed or duration <= 0:
+        return True
+    return abs(distance / duration - avg_speed) / avg_speed > _SAME_SPEED_SHARE
+
+
+def recalc_durations(
+    apply: bool = False, progress: Optional[Callable[[int, int, int], None]] = None
+) -> list[DurationReport]:
     """Compare every single-sport activity's duration with its FIT file; with ``apply``,
-    update it. Lists only the activities that change or are skipped."""
+    update it. Lists only the activities that change or are skipped. ``progress`` is called
+    with (checked, total, changes so far) as it goes."""
     with Session(engine) as session:
-        ids = session.exec(
-            select(Activity.id).where(
+        rows = session.exec(
+            select(
+                Activity.id,
+                Activity.duration_seconds,
+                Activity.distance_meters,
+                Activity.avg_speed_ms,
+            ).where(
                 col(Activity.parent_id).is_(None),
                 col(Activity.sport).not_in(MULTISPORT),
                 col(Activity.fit_file_path).is_not(None),
             )
         ).all()
+    ids = [
+        row.id
+        for row in rows
+        if _paused(row.duration_seconds, row.distance_meters, row.avg_speed_ms)
+    ]
     reports = []
-    for activity_id in ids:
+    for done, activity_id in enumerate(ids, start=1):
         with Session(engine) as session:
-            activity = session.get(Activity, activity_id)
+            activity = session.exec(
+                select(Activity)
+                .where(Activity.id == activity_id)
+                .options(defer(Activity.route_json), defer(Activity.map_route_json))
+            ).first()
             if activity is not None:
                 report = _recalculate_duration(session, activity, apply)
                 if report is not None:
                     reports.append(report)
+        if progress:
+            progress(done, len(ids), len(reports))
     return reports
 
 
@@ -306,6 +350,17 @@ def _size(paths: list[Path]) -> str:
     return f"{total / 1024 / 1024:.1f} MB"
 
 
+def _progress(what: str) -> Callable[[int, int, int], None]:
+    """Prints how far the run is, every 50 activities and at the end."""
+    print(f"Checking the {what} against their FIT files…", flush=True)
+
+    def report(done: int, total: int, changes: int) -> None:
+        if done % 50 == 0 or done == total:
+            print(f"  {done} of {total} checked, {changes} to change so far", flush=True)
+
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -327,7 +382,7 @@ def main(argv: list[str] | None = None) -> int:
     verb = "Updated" if args.apply else "Would update"
 
     if args.command == "recalc-multisport":
-        reports = recalc_multisport(args.apply)
+        reports = recalc_multisport(args.apply, _progress("events"))
         changed = [r for r in reports if r.changes]
         for r in changed:
             print(f"{verb} #{r.event_id} {r.name}: " + "; ".join(r.changes))
@@ -338,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{len(reports)} multisport events: {len(changed)} to update, {unchanged} already "
               f"right, {sum(1 for r in reports if r.skipped)} skipped")
     elif args.command == "recalc-durations":
-        reports = recalc_durations(args.apply)
+        reports = recalc_durations(args.apply, _progress("activities"))
         changed = [r for r in reports if not r.skipped]
         for r in changed:
             laps = f" ({r.laps} lap{'s' if r.laps != 1 else ''})" if r.laps else ""
