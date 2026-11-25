@@ -1,8 +1,11 @@
 import { useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { CSSProperties } from 'react'
 import Plotly from 'plotly.js-dist-min'
 import type { Data, Layout, PlotHoverEvent, PlotlyHTMLElement } from 'plotly.js-dist-min'
 import { noDataLayout, themedChart } from '@kinetic/shared/charts/theme'
+import { pointLink } from '@kinetic/shared/chartLinks'
+import type { ClickedPoint } from '@kinetic/shared/chartLinks'
 import { useDarkMode } from '../theme'
 
 interface PlotProps {
@@ -15,10 +18,18 @@ interface PlotProps {
   onUnhover?: () => void
 }
 
-/** A Plotly chart, like ui.plotly(); follows the light/dark theme (styling shared with mobile). */
+/**
+ * A Plotly chart, like ui.plotly(); follows the light/dark theme (styling shared with mobile).
+ * A point with a link (see chartLinks) opens it when clicked.
+ */
 export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
   const ref = useRef<HTMLDivElement>(null)
   const { dark } = useDarkMode()
+  const navigate = useNavigate()
+  const open = useRef(navigate)
+  useEffect(() => {
+    open.current = navigate
+  })
   // Keep the latest callbacks without rebinding Plotly's listeners on every render
   const hover = useRef({ onHover, onUnhover })
   useEffect(() => {
@@ -39,8 +50,19 @@ export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
     ).then((plot: PlotlyHTMLElement) => {
       if (bound.current) return
       bound.current = true
-      plot.on('plotly_hover', (event) => hover.current.onHover?.(event))
-      plot.on('plotly_unhover', () => hover.current.onUnhover?.())
+      plot.on('plotly_hover', (event) => {
+        // A pointer over points that open something
+        plot.classList.toggle('plot-linked', !!pointLink(event.points[0] as ClickedPoint))
+        hover.current.onHover?.(event)
+      })
+      plot.on('plotly_unhover', () => {
+        plot.classList.remove('plot-linked')
+        hover.current.onUnhover?.()
+      })
+      plot.on('plotly_click', (event) => {
+        const link = pointLink(event.points[0] as ClickedPoint)
+        if (link) open.current(link)
+      })
     })
   }, [data, layout, dark])
 

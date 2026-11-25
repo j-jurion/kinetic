@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import { Button, IconButton, ListItemIcon, Menu, MenuItem } from '@mui/material'
 import { api } from '../lib/api'
 import { friendRequestsChanged } from '../lib/friendRequests'
-import { formatDate } from '@kinetic/shared/format'
+import { formatDate, sportLabel } from '@kinetic/shared/format'
 import { togetherLabel } from '@kinetic/shared/friends'
-import type { Friend, FriendRequest, FriendRequests } from '@kinetic/shared/types'
+import type { Friend, FriendRequest, FriendRequests, TogetherSuggestion } from '@kinetic/shared/types'
 import { FriendAvatar } from '../components/FriendAvatar'
 import { AcceptDialog, EditFriendDialog, FindFriendsDialog, RemoveFriendDialog } from '../components/FriendDialogs'
 import { EmptyCard } from '../components/fields'
@@ -24,10 +24,12 @@ export function FriendsPage() {
   const [editing, setEditing] = useState<Partial<Friend> | null>(null)
   const [accepting, setAccepting] = useState<FriendRequest | null>(null)
   const [removing, setRemoving] = useState<Friend | null>(null)
+  const [together, setTogether] = useState<TogetherSuggestion[]>([])
 
   const refresh = useCallback(() => {
     api.get<Friend[]>('/friends').then(setFriends)
     api.get<FriendRequests>('/friend-requests').then(setRequests)
+    api.get<TogetherSuggestion[]>('/friends/together').then(setTogether, () => setTogether([]))
     friendRequestsChanged()
   }, [])
   useEffect(refresh, [refresh])
@@ -52,6 +54,19 @@ export function FriendsPage() {
       refresh()
     } catch (error) {
       notify(`Failed to decline: ${errorMessage(error)}`, 'error')
+    }
+  }
+  const answer = async (s: TogetherSuggestion, confirm: boolean) => {
+    const body = { activity_id: s.activity.id, friend_id: s.friend.id }
+    try {
+      await api.post(`/friends/together/${confirm ? 'confirm' : 'dismiss'}`, body)
+      setTogether((list) => list.filter((t) => t.activity.id !== s.activity.id || t.friend.id !== s.friend.id))
+      if (confirm) {
+        notify(`Tagged ${s.friend.name} on ${s.activity.name}`, 'success')
+        api.get<Friend[]>('/friends').then(setFriends)
+      }
+    } catch (error) {
+      notify(`Failed to save: ${errorMessage(error)}`, 'error')
     }
   }
   const cancel = async (request: FriendRequest) => {
@@ -108,7 +123,45 @@ export function FriendsPage() {
         </>
       )}
 
-      {(requests.incoming.length > 0 || requests.outgoing.length > 0) && (
+      {together.length > 0 && (
+        <>
+          <SectionHeading icon="group">
+            Trained together? <span className="friend-count-badge">{together.length}</span>
+          </SectionHeading>
+          <p className="text-caption text-grey-6 w-full q-my-none">
+            These activities started at the same time and place as one of a friend&apos;s. Tag them to keep track of
+            your sessions together.
+          </p>
+          <div className="friend-grid friend-grid--wide">
+            {together.map((s) => (
+              <div key={`${s.activity.id}-${s.friend.id}`} className="card friend-card friend-card--request together-card">
+                <FriendAvatar name={s.friend.name} />
+                <div className="column gap-0 together-card-text">
+                  <span className="text-body2" title={`${s.activity.name} with ${s.friend.name}?`}>
+                    <Link to={`/activity/${s.activity.id}`} className="text-weight-bold">
+                      {s.activity.name}
+                    </Link>{' '}
+                    with {s.friend.name}?
+                  </span>
+                  <span className="text-caption text-grey-6">
+                    {sportLabel(s.activity.sport)} · {formatDate(s.activity.date)}
+                  </span>
+                </div>
+                <div className="row no-wrap gap-1 together-card-actions">
+                  <Button size="small" variant="contained" onClick={() => answer(s, true)}>
+                    Tag {s.friend.name}
+                  </Button>
+                  <Button size="small" color="inherit" onClick={() => answer(s, false)}>
+                    Not together
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {(requests.incoming.length > 0 || requests.outgoing.length > 0 || together.length > 0) && (
         <SectionHeading icon="people">Your friends</SectionHeading>
       )}
       {friends === null && <PageLoading />}

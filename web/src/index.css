@@ -361,6 +361,8 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
 }
 .section-heading-title { font-size: 1.1rem; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
 .section-heading-line { flex: 1; height: 1px; background: var(--border); }
+/* A chart point that opens its activity or period (see Plot) */
+.plot-linked .nsewdrag, .plot-linked .draglayer * { cursor: pointer !important; }
 .card-title { font-size: 1rem; font-weight: 700; letter-spacing: -.01em; }
 .card-label {
   font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted);
@@ -458,6 +460,11 @@ a.card-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2
   font-weight: 700; font-size: 1.05rem; color: #fff;
 }
 .friend-card--request { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary-soft); }
+/* "Trained together?" suggestions: the buttons move below the text when there is no room */
+.together-card { flex-wrap: wrap; }
+.together-card-text { flex: 1 1 180px; min-width: 0; overflow: hidden; }
+.together-card-text > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.together-card-actions { margin-left: auto; }
 .friend-account {
   display: inline-flex; align-items: center; gap: 4px;
   font-size: .78rem; color: var(--grey-6);

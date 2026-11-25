@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { Icon } from './icons'
 
@@ -39,7 +40,8 @@ export function PageHeader({
 }
 
 /** A heading between sections of a page: icon, title and a rule filling the rest of the line. */
-export function SectionHeading({ icon, children }: { icon: string; children: ReactNode }) {
+/** A section title with a rule after it; ``more`` adds a link at the end ([label, path]). */
+export function SectionHeading({ icon, more, children }: { icon: string; more?: [string, string]; children: ReactNode }) {
   return (
     <div className="section-heading">
       <span className="section-heading-icon">
@@ -47,6 +49,11 @@ export function SectionHeading({ icon, children }: { icon: string; children: Rea
       </span>
       <span className="section-heading-title">{children}</span>
       <span className="section-heading-line" />
+      {more && (
+        <Link to={more[1]} className="dashboard-more">
+          {more[0]} <Icon name="chevron_right" size={16} />
+        </Link>
+      )}
     </div>
   )
 }

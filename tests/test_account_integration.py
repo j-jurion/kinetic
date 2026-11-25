@@ -13,6 +13,9 @@ class AccountIntegrationTests(unittest.TestCase):
     def test_friend_requests(self):
         self._run_scenario("friends_scenario.py")
 
+    def test_activities_done_together(self):
+        self._run_scenario("together_scenario.py")
+
     def test_account_deletion(self):
         self._run_scenario("account_deletion_scenario.py")
 

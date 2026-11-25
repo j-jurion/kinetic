@@ -142,6 +142,16 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
         "Run 7",
         "Run 6",
     ]
+    # A week or day clicked on a chart: both days included
+    period = "since=2026-01-03&until=2026-01-04"
+    assert [r["name"] for r in client.get(f"/api/activities?{period}").json()] == [
+        "Run 4",
+        "Tri",
+        "Run 3",
+    ]
+    assert client.get(f"/api/activities/totals?{period}").json()["count"] == 3
+    assert [r["name"] for r in client.get("/api/activities?until=2026-01-01").json()] == ["Run 1"]
+    assert client.get("/api/activities?until=someday").status_code == 422
     assert client.get("/api/activities?before=nonsense").status_code == 400
     assert client.get("/api/activities?limit=0").status_code == 422
 

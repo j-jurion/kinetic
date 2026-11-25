@@ -75,6 +75,16 @@ class ActivityFriend(SQLModel, table=True):
     friend_id: Optional[int] = Field(default=None, foreign_key="friend.id", primary_key=True)
 
 
+class TogetherDismissal(SQLModel, table=True):
+    """A "trained together?" suggestion the account answered with "not together", so it is
+    not suggested again. No foreign keys: a row left after its activity or friend is deleted
+    only hides a suggestion that can no longer be made."""
+
+    owner_id: str = Field(primary_key=True)
+    activity_id: int = Field(primary_key=True)
+    friend_id: int = Field(primary_key=True)
+
+
 # ── Activity ─────────────────────────────────────────────────────────────────
 
 
