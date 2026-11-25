@@ -32,6 +32,14 @@ _ENERGY_UNITS = {"kcal": 1.0, "cal": 1.0, "kj": 1 / 4.184}
 _LAP_METRES = {"running": 1000.0, "walking": 1000.0, "hiking": 1000.0, "cycling": 5000.0}
 # How far apart two samples may be for a value to be interpolated between them
 _MAX_GAP_SECONDS = 120.0
+# Step cadence and running dynamics come as averages over a minute or more
+_SLOW_SAMPLE_GAP_SECONDS = 300.0
+# Plausible ranges (the watch writes the occasional zero or outlier)
+_STEP_CADENCE_SPM = (60.0, 260.0)
+_STEP_LENGTH_M = (0.2, 3.0)
+_GROUND_CONTACT_MS = (100.0, 500.0)
+_VERTICAL_OSCILLATION_CM = (2.0, 25.0)
+_STEP_SPORTS = ("running", "walking", "hiking")
 _FAMILIES = {SportType.trail_running: SportType.running}
 
 
@@ -81,7 +89,13 @@ class Workout:
     heart_rate: list[tuple[datetime, float]] = field(default_factory=list)
     distance_samples: list[tuple[datetime, float]] = field(default_factory=list)
     power: list[tuple[datetime, float]] = field(default_factory=list)
-    cadence: list[tuple[datetime, float]] = field(default_factory=list)
+    cadence: list[tuple[datetime, float]] = field(default_factory=list)  # cycling, rpm
+    # Steps per minute, step length (m), ground contact (ms) and vertical oscillation (cm)
+    step_cadence_samples: list[tuple[datetime, float]] = field(default_factory=list)
+    step_length: list[tuple[datetime, float]] = field(default_factory=list)
+    ground_contact: list[tuple[datetime, float]] = field(default_factory=list)
+    vertical_oscillation: list[tuple[datetime, float]] = field(default_factory=list)
+    temperature: Optional[float] = None  # °C, the weather during an outdoor workout
     # The legs of a multisport workout (Apple's "Swim Bike Run"), in order; empty otherwise
     legs: list[Leg] = field(default_factory=list)
 
@@ -170,6 +184,26 @@ def _samples(items: Any, key: str = "qty", units: Optional[dict[str, float]] = N
             continue
     samples.sort(key=lambda sample: sample[0])
     return samples
+
+
+def _within(samples: list[tuple[datetime, float]], limits: tuple[float, float]):
+    low, high = limits
+    return [(moment, value) for moment, value in samples if low <= value <= high]
+
+
+def _celsius(value: Any) -> Optional[float]:
+    """A temperature (``{"qty": 59, "units": "degF"}``) in °C, when it is plausible."""
+    if not isinstance(value, dict):
+        return None
+    number = _number(value.get("qty"))
+    unit = str(value.get("units") or "degC").strip().lower().replace("°", "deg")
+    if number is None:
+        return None
+    if unit in ("degf", "f"):
+        number = (number - 32) * 5 / 9
+    elif unit not in ("degc", "c"):
+        return None
+    return round(number, 1) if -40 <= number <= 55 else None
 
 
 def _route(items: Any) -> list[RoutePoint]:
@@ -299,6 +333,15 @@ def parse_workout(data: Any) -> Workout:
         heart_rate=_samples(data.get("heartRateData"), key="Avg"),
         power=_samples(data.get("cyclingPower") or data.get("runningPower")),
         cadence=_samples(data.get("cyclingCadence")),
+        step_cadence_samples=_within(_samples(data.get("stepCadenceData")), _STEP_CADENCE_SPM),
+        step_length=_within(_samples(data.get("runningStrideLength")), _STEP_LENGTH_M),
+        ground_contact=_within(
+            _samples(data.get("runningGroundContactTime")), _GROUND_CONTACT_MS
+        ),
+        vertical_oscillation=_within(
+            _samples(data.get("runningVerticalOscillation")), _VERTICAL_OSCILLATION_CM
+        ),
+        temperature=_celsius(data.get("temperature")),
     )
     workout.legs = _legs(data.get("legs"), start, end)
     distance_keys = ("walkingAndRunningDistance", "cyclingDistance", "swimDistance")
@@ -431,6 +474,14 @@ def _ascent(altitudes: list[Optional[float]], threshold: float = 1.0) -> Optiona
     return climb
 
 
+def _half(value: Optional[float]) -> Optional[float]:
+    return value / 2 if value is not None else None
+
+
+def _scaled(value: Optional[float], factor: float) -> Optional[float]:
+    return value * factor if value is not None else None
+
+
 def build_records(workout: Workout) -> list[dict]:
     seconds = _timeline(workout)
     if not seconds:
@@ -442,6 +493,18 @@ def build_records(workout: Workout) -> list[dict]:
     power = _Series([(_seconds(workout, m), v) for m, v in workout.power])
     cadence = _Series([(_seconds(workout, m), v) for m, v in workout.cadence])
     distance = _distance_series(workout)
+
+    def slow(samples: list[tuple[datetime, float]]) -> _Series:
+        return _Series(
+            [(_seconds(workout, m), v) for m, v in samples], max_gap=_SLOW_SAMPLE_GAP_SECONDS
+        )
+
+    # FIT stores a runner's cadence per foot (strides per minute), like cycling's rpm
+    on_foot = workout.sport in _STEP_SPORTS or workout.sport == "multisport"
+    steps = slow(workout.step_cadence_samples) if on_foot else _Series([])
+    step_length = slow(workout.step_length)
+    ground_contact = slow(workout.ground_contact)
+    oscillation = slow(workout.vertical_oscillation)
 
     records = []
     for t in seconds:
@@ -455,8 +518,12 @@ def build_records(workout: Workout) -> list[dict]:
                 "speed": point.speed if point else None,
                 "heart_rate": heart.at(t),
                 "power": power.at(t),
-                "cadence": cadence.at(t),
+                "cadence": _half(steps.at(t)) if steps.at(t) is not None else cadence.at(t),
                 "distance": distance.at(t) if distance else None,
+                "step_length": step_length.at(t),
+                "ground_contact": ground_contact.at(t),
+                "vertical_oscillation": oscillation.at(t),
+                "temperature": workout.temperature,
             }
         )
 
@@ -527,6 +594,10 @@ def to_fit(workout: Workout) -> bytes:
             power=record["power"],
             enhanced_speed=record["speed"],
             enhanced_altitude=record["altitude"],
+            temperature=record["temperature"],
+            step_length=_scaled(record["step_length"], 1000),  # mm
+            stance_time=record["ground_contact"],
+            vertical_oscillation=_scaled(record["vertical_oscillation"], 10),  # mm
         )
     writer.write("event", timestamp=end, event=0, event_type=4)
 

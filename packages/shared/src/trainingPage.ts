@@ -183,7 +183,8 @@ export const TRAINING_CAPTIONS = {
   calendar: 'Each square is a day, darker for a higher training load.',
   efficiency:
     'Speed (metres per minute) per heartbeat on steady runs; races, intervals and tempo runs are left out. Higher = more speed per heartbeat.',
-  heat: "The watch's temperature sensor reads warm (body heat, sun), so values are higher than the air temperature.",
+  heat:
+    "A Garmin watch measures temperature on the wrist, which reads warm (body heat, sun); Apple Health workouts use the weather at the time.",
   gap: 'Grade-adjusted pace (GAP) is the flat-ground equivalent effort. Shown for trail runs and runs with at least 15 m of climbing per km.',
   bricks:
     'Runs straight off the bike: multisport run legs after a ride, or runs starting within 30 minutes of a ride ending. ' +

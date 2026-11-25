@@ -11,11 +11,11 @@ from unittest.mock import patch
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine, select
 
-from app import apple_health, garmin_sync, streams
+from app import apple_health, garmin_sync, metrics, streams
 from app.fit_parser import parse_fit_file
 from app.models import Activity, SportType
 from app.ownership import current_owner
-from tests.apple_health_samples import START, outdoor_run, swim_bike_run, treadmill_run
+from tests.apple_health_samples import START, fmt, outdoor_run, swim_bike_run, treadmill_run
 
 ALICE, BOB = str(uuid.uuid4()), str(uuid.uuid4())
 
@@ -59,6 +59,50 @@ class ConversionTests(unittest.TestCase):
         data = {**outdoor_run(seconds=2141), "duration": 1652}
         _, (activity, *_rest) = self.roundtrip(data)
         self.assertEqual(activity.duration_seconds, 1652)
+
+    def test_steps_running_dynamics_and_weather_reach_the_metrics(self):
+        # What the Apple Health export reader sends: per-minute step cadence and running
+        # dynamics from the watch, and the weather (59 °F) from the workout's metadata
+        data = outdoor_run()
+        del data["stepCadence"]
+        minutes = [fmt(START + timedelta(seconds=s)) for s in range(30, 1800, 60)]
+        data["stepCadenceData"] = [{"date": d, "qty": 172} for d in minutes]
+        data["runningStrideLength"] = [{"date": d, "qty": 1.15} for d in minutes]
+        data["runningGroundContactTime"] = [{"date": d, "qty": 245} for d in minutes]
+        data["runningVerticalOscillation"] = [{"date": d, "qty": 8.4} for d in minutes]
+        data["temperature"] = {"qty": 59, "units": "degF"}
+        path, (activity, *_rest) = self.roundtrip(data)
+
+        self.assertEqual(activity.avg_cadence, 86)  # per foot, like Garmin files
+        rows = streams.activity_rows(streams.read_fit(path), "running")
+        self.assertEqual(rows[900]["cadence"], 172)  # steps per minute again
+        self.assertAlmostEqual(rows[900]["step_length"], 1.15, places=2)
+        self.assertEqual(rows[900]["ground_contact"], 245)
+        self.assertAlmostEqual(rows[900]["vertical_oscillation"], 8.4, places=1)
+        self.assertEqual(rows[900]["temperature"], 15)
+
+        activity.id, activity.fit_file_path = 1, path.name
+        with patch.object(streams, "UPLOAD_DIR", path.parent):
+            stored = metrics.compute(activity)
+        self.assertEqual(
+            (stored.avg_step_length, stored.avg_ground_contact, stored.avg_vertical_oscillation,
+             stored.avg_temperature),
+            (1.15, 245, 8.4, 15),
+        )
+
+    def test_implausible_samples_and_temperatures_are_left_out(self):
+        data = outdoor_run()
+        del data["stepCadence"]
+        moment = fmt(START + timedelta(seconds=600))
+        data["stepCadenceData"] = [{"date": moment, "qty": 0}]
+        data["runningGroundContactTime"] = [{"date": moment, "qty": 5000}]
+        data["temperature"] = {"qty": 300, "units": "degC"}
+        workout = apple_health.parse_workout(data)
+        self.assertEqual((workout.step_cadence_samples, workout.ground_contact), ([], []))
+        self.assertIsNone(workout.temperature)
+        self.assertAlmostEqual(
+            apple_health.parse_workout({**data, "temperature": {"qty": -4, "units": "degC"}})
+            .temperature, -4)
 
     def test_swim_bike_run_becomes_a_triathlon_with_its_legs(self):
         _, (event, _, _, children) = self.roundtrip(swim_bike_run())
