@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Button, LinearProgress } from '@mui/material'
+import { Alert, Button, LinearProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatDate } from '@kinetic/shared/format'
@@ -9,13 +9,14 @@ import type { FormBand, Range, brickRuns } from '@kinetic/shared/training'
 import {
   DYNAMICS,
   TRAINING_CAPTIONS,
+  analyseSummary,
   dynamicsChart,
   signed,
   swimChart,
   thresholdText,
   trainingView,
 } from '@kinetic/shared/trainingPage'
-import type { AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
+import type { AnalyseFailure, AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
 import type { TrainingOverview } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ChartCard, Toggle } from '../components/ChartCard'
@@ -40,10 +41,13 @@ function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => voi
   const notify = useNotify()
   const [progress, setProgress] = useState<AnalyseProgress | null>(null)
   const [running, setRunning] = useState(false)
+  // Stays on screen until closed or the next analysis, so the names can be read
+  const [failures, setFailures] = useState<AnalyseFailure[]>([])
 
   const analyse = async () => {
     setRunning(true)
     setProgress(null)
+    setFailures([])
     try {
       const response = await fetch('/api/training/analyse', { method: 'POST', credentials: 'same-origin' })
       if (!response.ok || !response.body) {
@@ -65,8 +69,9 @@ function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => voi
           if (message.type === 'progress') {
             setProgress({ done: message.done, total: message.total, name: message.name ?? '' })
           } else if (message.type === 'result') {
-            const failed = message.failed ? `, ${message.failed} failed` : ''
-            notify(`Analysed ${message.computed} activities${failed}`, message.failed ? 'warning' : 'success')
+            const failed: AnalyseFailure[] = message.failures ?? []
+            setFailures(failed)
+            notify(analyseSummary(message.computed, failed), failed.length ? 'warning' : 'success')
           } else if (message.type === 'error') {
             notify(message.message, 'error', 8000)
           }
@@ -80,7 +85,21 @@ function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => voi
     }
   }
 
-  if (!pending && !running) return null
+  const failureList = failures.length > 0 && (
+    <Alert severity="warning" variant="outlined" className="w-full" onClose={() => setFailures([])}>
+      {failures.length === 1 ? 'This activity could not be analysed:' : 'These activities could not be analysed:'}
+      <ul className="q-my-xs" style={{ paddingLeft: 20 }}>
+        {failures.map((f) => (
+          <li key={f.id}>
+            <Link to={`/activity/${f.id}`}>{f.name}</Link>: {f.reason}
+          </li>
+        ))}
+      </ul>
+      Deleting and importing it again may help; otherwise let us know which activity it is.
+    </Alert>
+  )
+
+  if (!pending && !running) return failureList || null
   return (
     <div className="card w-full q-pa-md gap-2">
       <div className="row items-center justify-between w-full no-wrap gap-3">
@@ -105,6 +124,7 @@ function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => voi
           value={progress?.total ? (progress.done / progress.total) * 100 : 0}
         />
       )}
+      {failureList}
     </div>
   )
 }

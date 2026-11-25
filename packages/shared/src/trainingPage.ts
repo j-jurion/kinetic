@@ -61,6 +61,21 @@ export interface AnalyseProgress {
   name: string
 }
 
+/** An activity "Analyse now" could not analyse, and why (from the API). */
+export interface AnalyseFailure {
+  id: number
+  name: string
+  reason: string
+}
+
+/** The one-line result of "Analyse now". */
+export function analyseSummary(computed: number, failures: AnalyseFailure[] = []): string {
+  const analysed = `Analysed ${computed} ${computed === 1 ? 'activity' : 'activities'}`
+  if (!failures.length) return analysed
+  const which = failures.length === 1 ? '1 could not be analysed' : `${failures.length} could not be analysed`
+  return `${analysed}; ${which}`
+}
+
 export const signed = (n: number) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(Math.round(n))}`
 
 /** "Zones and load use max HR 192 bpm (watch) and threshold 175 bpm (watch)". */

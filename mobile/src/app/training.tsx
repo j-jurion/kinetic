@@ -12,6 +12,7 @@ import type { FormBand, Range } from '@kinetic/shared/training'
 import {
   DYNAMICS,
   TRAINING_CAPTIONS,
+  analyseSummary,
   dynamicsChart,
   intensityCaption,
   signed,
@@ -19,7 +20,7 @@ import {
   thresholdText,
   trainingView,
 } from '@kinetic/shared/trainingPage'
-import type { AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
+import type { AnalyseFailure, AnalyseProgress, Dynamics, SwimMetric, ZoneMode } from '@kinetic/shared/trainingPage'
 import type { TrainingOverview } from '@kinetic/shared/types'
 import { Icon } from '../components/Icon'
 import { useNotify } from '../components/Notify'
@@ -69,8 +70,10 @@ function AnalyseBanner({ pending, onDone }: { pending: number; onDone: () => voi
         if (message.type === 'progress') {
           setProgress({ done: message.done as number, total: message.total as number, name: (message.name as string) ?? '' })
         } else if (message.type === 'result') {
-          const failed = message.failed ? `, ${message.failed} failed` : ''
-          notify(`Analysed ${message.computed} activities${failed}`, message.failed ? 'warning' : 'success')
+          const failed = (message.failures as AnalyseFailure[] | undefined) ?? []
+          const summary = analyseSummary(message.computed as number, failed)
+          if (!failed.length) notify(summary, 'success')
+          else notify(`${summary}: ${failed.map((f) => `${f.name} (${f.reason})`).join('; ')}`, 'warning', 15000)
         } else if (message.type === 'error') {
           notify(String(message.message), 'error', 8000)
         }

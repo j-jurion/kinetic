@@ -16,7 +16,7 @@ Source: `Kinetic.pdf` (5 pages of notes with screenshots). Items are grouped by 
 - [x] **Bug**: On that same run, aerobic decoupling shows **-29.4%**. That's implausible and most likely caused by the pauses too.
 
 ## Training
-- [ ] **Bug**: "Analyse now" fails with the message "Analysed 0 activities, 2 failed". Find out why, and show the user a useful error.
+- [x] **Bug**: "Analyse now" fails with the message "Analysed 0 activities, 2 failed". Find out why, and show the user a useful error.
 - [ ] **Bug/Investigate**: The running dynamics **cadence** chart (and step length, ground contact, vertical oscillation) says "No data", even though cadence is in Apple Health. Check whether the import reads it, or whether it arrives under another type. Also look at "Heat vs pace", which says "No data".
 - [ ] **Feature (nice to have)**: Click from a chart point to its activity, or to the activities in that period (for example to explain outliers).
 

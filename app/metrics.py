@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from loguru import logger
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 
 from app import analysis, streams
@@ -82,17 +83,32 @@ def compute(activity: Activity) -> ActivityMetrics:
 
 
 def store(session, activity: Activity) -> ActivityMetrics:
-    """Compute and save the metrics of an activity, replacing older ones."""
+    """Compute and save the metrics of an activity, replacing older ones.
+
+    An import computes the metrics of its new activities right away, so another request can
+    save them between reading and writing here (for example "Analyse now" while an import is
+    running). The insert then fails on the existing row; that row is updated instead.
+    """
     fresh = compute(activity)
-    existing = session.get(ActivityMetrics, activity.id)
-    if existing:
-        for key, value in fresh.model_dump(exclude={"activity_id"}).items():
-            setattr(existing, key, value)
-        fresh = existing
     fresh.computed_at = datetime.now(timezone.utc)
-    session.add(fresh)
-    session.commit()
-    return fresh
+    values = fresh.model_dump(exclude={"activity_id"})
+    for attempt in range(2):
+        existing = session.get(ActivityMetrics, activity.id, populate_existing=True)
+        if existing:
+            for key, value in values.items():
+                setattr(existing, key, value)
+            row = existing
+        else:
+            row = ActivityMetrics(activity_id=activity.id, **values)
+            session.add(row)
+        try:
+            session.commit()
+            return row
+        except IntegrityError:
+            session.rollback()
+            if attempt:
+                raise
+    raise AssertionError("unreachable")
 
 
 def store_quietly(activity_ids: list[int]) -> None:
@@ -124,23 +140,48 @@ def pending_ids() -> list[int]:
         return [a.id for a in activities if a.id is not None and _needs_update(a, stored.get(a.id))]
 
 
+def _failure_reason(exc: Exception) -> str:
+    """A short reason an activity could not be analysed, safe to show to its owner."""
+    from fitparse.utils import FitParseError
+
+    if isinstance(exc, FitParseError):
+        return "its FIT file is damaged and cannot be read"
+    if isinstance(exc, OSError):
+        return "its FIT file could not be opened"
+    return "an unexpected error (logged for the developers)"
+
+
 def backfill(progress: Callable[[int, int, str], None]) -> dict:
-    """Compute the missing metrics of the account, reporting (done, total, name) as it goes."""
+    """Compute the missing metrics of the account, reporting (done, total, name) as it goes.
+
+    Returns the number computed, the number failed, and per failure the activity and why.
+    """
     ids = pending_ids()
-    failed = 0
+    computed = 0
+    failures: list[dict] = []
     with Session(engine) as session:
         for done, activity_id in enumerate(ids, start=1):
             activity = session.get(Activity, activity_id)
             if activity is None:
                 continue
+            name = activity.name
+            # An import may have computed them since the list was made
+            current = session.get(ActivityMetrics, activity_id, populate_existing=True)
+            if not _needs_update(activity, current):
+                computed += 1
+                progress(done, len(ids), name)
+                continue
             try:
                 store(session, activity)
-            except Exception:
+                computed += 1
+            except Exception as exc:
                 session.rollback()
-                failed += 1
                 logger.exception("Could not compute metrics for activity {}", activity_id)
-            progress(done, len(ids), activity.name)
-    return {"computed": len(ids) - failed, "failed": failed}
+                failures.append(
+                    {"id": activity_id, "name": name, "reason": _failure_reason(exc)}
+                )
+            progress(done, len(ids), name)
+    return {"computed": computed, "failed": len(failures), "failures": failures}
 
 
 # ── Training overview ─────────────────────────────────────────────────────────
