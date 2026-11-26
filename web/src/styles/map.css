@@ -66,3 +66,7 @@
   color: #fff; font: 700 12px Inter, Roboto, sans-serif; cursor: pointer;
   border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45);
 }
+
+/* "Show all routes" button under the zoom buttons */
+.kin-show-all { display: grid !important; place-items: center; color: #374151; }
+.kin-show-all .material-icons { font-size: 18px; }

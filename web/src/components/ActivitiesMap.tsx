@@ -4,6 +4,7 @@ import L from 'leaflet'
 import 'leaflet.markercluster'
 import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { formatDate, formatDistance, formatDuration, formatPace, sportColor } from '@kinetic/shared/format'
+import { RECENT_AREA_MAX_ZOOM, recentArea } from '@kinetic/shared/mapView'
 import type { MapRoute } from '@kinetic/shared/types'
 import { baseMap } from './RouteMap'
 import '../styles/map.css'
@@ -105,9 +106,27 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       const pin = L.marker(mid, { icon: pinIcon(color), interactive: false, keyboard: false, color } as L.MarkerOptions)
       return { r, color, line, pin, pinned: false, pts: [], bb: [0, 0, 0, 0] }
     })
-    if (items.length) {
-      const bounds = L.latLngBounds(routes.flatMap((r) => r.coords))
-      map.fitBounds(bounds, { padding: [20, 20], animate: false })
+    // Open on the area of the latest activity; the button below zooms out to every route
+    const area = recentArea(routes)
+    if (area.length) {
+      map.fitBounds(L.latLngBounds(area), { padding: [20, 20], maxZoom: RECENT_AREA_MAX_ZOOM, animate: false })
+      const showAll = new L.Control({ position: 'topleft' })
+      showAll.onAdd = () => {
+        const bar = L.DomUtil.create('div', 'leaflet-bar')
+        const btn = L.DomUtil.create('a', 'kin-show-all', bar)
+        btn.href = '#'
+        btn.role = 'button'
+        btn.title = 'Show all routes'
+        btn.setAttribute('aria-label', 'Show all routes')
+        btn.innerHTML = '<span class="material-icons" aria-hidden="true">zoom_out_map</span>'
+        L.DomEvent.disableClickPropagation(bar)
+        L.DomEvent.on(btn, 'click', (ev) => {
+          L.DomEvent.preventDefault(ev)
+          map.fitBounds(L.latLngBounds(routes.flatMap((r) => r.coords)), { padding: [20, 20] })
+        })
+        return bar
+      }
+      showAll.addTo(map)
     }
 
     const project = () => {

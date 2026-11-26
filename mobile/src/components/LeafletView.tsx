@@ -35,6 +35,12 @@ export interface MapSpec {
    * bubbles, so routes far from the rest stay findable when zoomed out.
    */
   pinSmall?: boolean
+  /**
+   * Open on these points (zoomed in no closer than `focusMaxZoom`) instead of on every line,
+   * with a button that zooms out to all lines.
+   */
+  focus?: LatLng[]
+  focusMaxZoom?: number
 }
 
 const HTML = `<!doctype html>
@@ -53,6 +59,8 @@ const HTML = `<!doctype html>
   .kin-cluster { display: grid; place-items: center; border-radius: 50%; box-sizing: border-box;
     color: #fff; font: 700 12px -apple-system, Roboto, sans-serif;
     border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45); }
+  .kin-show-all { display: grid !important; place-items: center; width: 36px !important; height: 36px !important; }
+  .kin-show-all svg { width: 20px; height: 20px; fill: #374151; }
 </style>
 </head>
 <body>
@@ -65,6 +73,7 @@ const HTML = `<!doctype html>
   }).addTo(map)
   var layers = L.layerGroup().addTo(map)
   var legend = null
+  var showAll = null
   var tappable = []
   var highlighted = []
   // A route smaller than this on screen becomes a pin (see MapSpec.pinSmall)
@@ -113,6 +122,8 @@ const HTML = `<!doctype html>
     clusters.clearLayers()
     pinSmall = !!spec.pinSmall
     if (legend) legend.remove()
+    if (showAll) showAll.remove()
+    showAll = null
     tappable = []
     highlighted = []
     var bounds = []
@@ -138,7 +149,27 @@ const HTML = `<!doctype html>
       legend.onAdd = function () { var box = L.DomUtil.create('div'); box.innerHTML = spec.legend; return box }
       legend.addTo(map)
     }
-    if (bounds.length) map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20], animate: false })
+    if (spec.focus && spec.focus.length) {
+      map.fitBounds(L.latLngBounds(spec.focus), { padding: [20, 20], maxZoom: spec.focusMaxZoom || 18, animate: false })
+      showAll = new L.Control({ position: 'topleft' })
+      showAll.onAdd = function () {
+        var bar = L.DomUtil.create('div', 'leaflet-bar')
+        var btn = L.DomUtil.create('a', 'kin-show-all', bar)
+        btn.href = '#'
+        btn.setAttribute('role', 'button')
+        btn.setAttribute('aria-label', 'Show all routes')
+        btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6z"/></svg>'
+        L.DomEvent.disableClickPropagation(bar)
+        L.DomEvent.on(btn, 'click', function (ev) {
+          L.DomEvent.preventDefault(ev)
+          map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] })
+        })
+        return bar
+      }
+      showAll.addTo(map)
+    } else if (bounds.length) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20], animate: false })
+    }
     layout()
   }
 
