@@ -49,6 +49,8 @@ export default function MapScreen() {
       // Open on the area of the latest activity; a button zooms out to every route
       focus: recentArea(routes),
       focusMaxZoom: RECENT_AREA_MAX_ZOOM,
+      // A filter change keeps the map where it is
+      keepView: true,
     }
   }, [data, selected])
   const byId = useMemo(() => new Map((data?.routes ?? []).map((r) => [r.id, r])), [data])
@@ -93,9 +95,8 @@ export default function MapScreen() {
 
       {!available.length ? (
         <Caption>No activities with GPS data yet.</Caption>
-      ) : !selected.length ? (
-        <Caption>Select at least one activity type to show routes.</Caption>
       ) : (
+        // Stays mounted with no sports selected, so the map keeps its place
         <View style={{ flex: 1 }}>
           <LeafletView spec={spec} height="100%" label="Map of all activities; tap a route to list the activities under it. They are also listed on the Activities tab." onTap={(ids) => setTapped(ids.map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
         </View>

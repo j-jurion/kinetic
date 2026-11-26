@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button, Chip } from '@mui/material'
 import { api, qs } from '../lib/api'
 import { sportColor, sportLabel } from '@kinetic/shared/format'
@@ -17,6 +17,7 @@ export function MapPage() {
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
   const latest = useLatestRequest()
+  const lastData = useRef<MapData | null>(null)
 
   // First load: every sport that has GPS data is selected.
   useEffect(() => {
@@ -38,6 +39,9 @@ export function MapPage() {
     select(selected.includes(sport) ? selected.filter((s) => s !== sport) : (available ?? []).filter((s) => s === sport || selected.includes(s)))
 
   if (!available) return <PageLoading />
+  // The last routes loaded; selecting no sports clears data but keeps the map on screen
+  const shown = data ?? lastData.current
+  if (data) lastData.current = data
 
   let summary = 'No activity types selected.'
   if (selected.length && data) {
@@ -103,13 +107,15 @@ export function MapPage() {
         </div>
       </div>
 
-      <div className="card w-full" style={{ padding: 0, height: '70vh', minHeight: 420, overflow: 'hidden' }}>
+      <div className="card w-full" style={{ padding: 0, height: '70vh', minHeight: 420, overflow: 'hidden', position: 'relative' }}>
         {!available.length ? (
           <div className="text-grey-6 text-center w-full q-pa-xl">No activities with GPS data yet.</div>
-        ) : !selected.length ? (
-          <div className="text-grey-6 text-center w-full q-pa-xl">Select at least one activity type to show routes.</div>
         ) : (
-          data && <ActivitiesMap routes={data.routes} />
+          // The map stays mounted while the filter changes, so it keeps its place
+          shown && <ActivitiesMap routes={selected.length ? shown.routes : []} />
+        )}
+        {available.length > 0 && !selected.length && (
+          <div className="map-empty-note">Select at least one activity type to show routes.</div>
         )}
       </div>
       <div className="row items-center no-wrap gap-1 text-caption text-grey-6" style={{ marginTop: -8 }}>

@@ -41,6 +41,8 @@ export interface MapSpec {
    */
   focus?: LatLng[]
   focusMaxZoom?: number
+  /** Place the map on the first lines only; later specs (a filter change) keep the view. */
+  keepView?: boolean
 }
 
 const HTML = `<!doctype html>
@@ -74,6 +76,7 @@ const HTML = `<!doctype html>
   var layers = L.layerGroup().addTo(map)
   var legend = null
   var showAll = null
+  var placed = false
   var tappable = []
   var highlighted = []
   // A route smaller than this on screen becomes a pin (see MapSpec.pinSmall)
@@ -149,8 +152,10 @@ const HTML = `<!doctype html>
       legend.onAdd = function () { var box = L.DomUtil.create('div'); box.innerHTML = spec.legend; return box }
       legend.addTo(map)
     }
+    var place = !(spec.keepView && placed)
+    if (bounds.length) placed = true
     if (spec.focus && spec.focus.length) {
-      map.fitBounds(L.latLngBounds(spec.focus), { padding: [20, 20], maxZoom: spec.focusMaxZoom || 18, animate: false })
+      if (place) map.fitBounds(L.latLngBounds(spec.focus), { padding: [20, 20], maxZoom: spec.focusMaxZoom || 18, animate: false })
       showAll = new L.Control({ position: 'topleft' })
       showAll.onAdd = function () {
         var bar = L.DomUtil.create('div', 'leaflet-bar')
@@ -167,7 +172,7 @@ const HTML = `<!doctype html>
         return bar
       }
       showAll.addTo(map)
-    } else if (bounds.length) {
+    } else if (bounds.length && place) {
       map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20], animate: false })
     }
     layout()
