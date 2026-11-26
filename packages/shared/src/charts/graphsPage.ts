@@ -4,6 +4,7 @@
 // changes the page in both. The apps only supply the UI around each chart: the card, the
 // controls and the Plotly renderer.
 import type { Data } from 'plotly.js-dist-min'
+import { activityUrl, withLinks } from '../chartLinks'
 import { qs } from '../api'
 import {
   ALL_RUNNING,
@@ -343,7 +344,7 @@ const distanceResults: GraphDefinition = {
 
     return chart(
       [
-        {
+        withLinks({
           type: 'scatter',
           mode: 'markers',
           x: others.map((r) => r.date),
@@ -352,8 +353,8 @@ const distanceResults: GraphDefinition = {
           marker: { color, size: 8, opacity: 0.6 },
           customdata: custom(others),
           hovertemplate: hover,
-        },
-        {
+        } as Data, others.map((r) => activityUrl(r.activity_id))),
+        withLinks({
           type: 'scatter',
           mode: 'markers',
           x: races.map((r) => r.date),
@@ -362,7 +363,7 @@ const distanceResults: GraphDefinition = {
           marker: { color: GOLD, size: 12, symbol: 'diamond', line: { color: '#7e4a18', width: 1 } },
           customdata: custom(races),
           hovertemplate: hover,
-        },
+        } as Data, races.map((r) => activityUrl(r.activity_id))),
         {
           type: 'scatter',
           mode: 'lines',
@@ -416,7 +417,7 @@ const paceAndHeartRate: GraphDefinition = {
     const axis = paceAxis(trend.map((t) => t.pace))
     return chart(
       [
-        {
+        withLinks({
           type: 'scatter',
           mode: 'markers',
           x,
@@ -429,7 +430,7 @@ const paceAndHeartRate: GraphDefinition = {
             formatPace(t.point.distance_meters!, t.point.duration_seconds, sport),
           ]) as never,
           hovertemplate: '<b>%{customdata[0]}</b><br>%{customdata[1]}<br>Pace: %{customdata[2]}<extra></extra>',
-        },
+        } as Data, trend.map((t) => activityUrl(t.point.id))),
         {
           type: 'scatter',
           mode: 'lines',

@@ -2,7 +2,7 @@
 // prepared data from ../training.ts.
 
 import type { Data, Layout, Shape } from 'plotly.js-dist-min'
-import { activityUrl, dayUrl, weekUrl, withLinks } from '../chartLinks'
+import { activityUrl, dayActivitiesUrl, weekUrl, withLinks } from '../chartLinks'
 import { formatDate, sportColor, sportLabel } from '../format'
 import { rollingAverage } from '../graphs'
 import { formatClock, paceAxis } from '../speed'
@@ -11,6 +11,7 @@ import {
   DISCIPLINE_COLORS,
   RAMP_WARNING_PCT,
   ZONE_COLORS,
+  dayActivityNames,
   dayKey,
   inRange,
   linearFit,
@@ -46,13 +47,15 @@ export const TREND_WINDOW = 10
 const activityHover = (a: TrainingActivity) => [a.name, formatDate(a.date)]
 
 /** Fitness and fatigue lines with form as a shaded area underneath, on its own axis. */
-export function fitnessChart(days: FitnessDay[]): Chart {
+export function fitnessChart(days: FitnessDay[], byDay: Map<string, TrainingActivity[]> = new Map()): Chart {
   const title = 'Fitness & form'
   if (!days.length) return [[], noDataLayout(title)]
   const x = days.map((d) => dayKey(d.date))
   const tsb = days.map((d) => d.tsb)
-  // A day with training opens its activities
-  const links = days.map((d) => (d.load > 0 ? dayUrl(d.date) : null))
+  // A day with training names its activities in the tooltip and opens them
+  const dayActivities = x.map((key) => byDay.get(key) ?? [])
+  const names = dayActivities.map((list) => (list.length ? `<b>${dayActivityNames(list)}</b><br>` : ''))
+  const links = days.map((d, i) => dayActivitiesUrl(d.date, dayActivities[i].map((a) => a.id)))
   const lo = Math.min(-35, Math.floor(Math.min(...tsb) - 5))
   const hi = Math.max(15, Math.ceil(Math.max(...tsb) + 5))
   // Form bands, clipped to the axis range: fresh, productive and overreaching
@@ -78,7 +81,8 @@ export function fitnessChart(days: FitnessDay[]): Chart {
         y: days.map((d) => d.ctl),
         name: 'Fitness (CTL)',
         line: { color: FITNESS_COLOR, width: 2.5 },
-        hovertemplate: 'Fitness: %{y:.0f}<extra></extra>',
+        customdata: names as never,
+        hovertemplate: '%{customdata}Fitness: %{y:.0f}<extra></extra>',
       }, links),
       withLinks({
         type: 'scatter',
@@ -267,20 +271,26 @@ export function balanceDonut(weeks: Week<Record<Discipline, number>>[]): Chart {
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
 /** GitHub-style calendar: a column per week, a row per weekday, coloured by daily load. */
-export function calendarChart(grid: CalendarGrid): Chart {
+export function calendarChart(grid: CalendarGrid, byDay: Map<string, TrainingActivity[]> = new Map()): Chart {
   const values = grid.z.flat().filter((v): v is number => v !== null && v > 0).sort((a, b) => a - b)
   // Cap the scale at the 95th percentile so one huge day does not wash out the rest
   const zmax = values.length ? Math.max(values[Math.floor((values.length - 1) * 0.95)], 1) : 1
   const text = grid.z.map((row, weekday) =>
     row.map((v, week) => {
-      const date = formatDate(grid.keys[weekday][week])
+      const key = grid.keys[weekday][week]
+      const day = `${WEEKDAYS[weekday]} ${formatDate(key)}`
+      const list = byDay.get(key) ?? []
       if (v === null) return ''
-      return v > 0 ? `${WEEKDAYS[weekday]} ${date}<br>Load ${Math.round(v)}` : `${WEEKDAYS[weekday]} ${date}<br>Rest`
+      if (list.length) return `<b>${dayActivityNames(list)}</b><br>${day} · Load ${Math.round(v)}`
+      return v > 0 ? `${day}<br>Load ${Math.round(v)}` : `${day}<br>Rest`
     }),
   )
-  // A day with training opens its activities
+  // A day with training opens its activity, or its activities
   const links = grid.z.map((row, weekday) =>
-    row.map((v, week) => (v ? dayUrl(new Date(`${grid.keys[weekday][week]}T12:00:00`)) : null)),
+    row.map((_, week) => {
+      const key = grid.keys[weekday][week]
+      return dayActivitiesUrl(new Date(`${key}T12:00:00`), (byDay.get(key) ?? []).map((a) => a.id))
+    }),
   )
   return [
     [
@@ -454,21 +464,21 @@ export function brickChart(bricks: BrickRun[]): Chart {
   const x = compared.map((b) => `${formatDate(b.activity.date)} · ${((b.activity.distance_meters ?? 0) / 1000).toFixed(1)} km`)
   const axis = paceAxis(compared.flatMap((b) => [b.pace, b.normalPace!]), true)
   const links = compared.map((b) => activityUrl(b.activity.id))
-  const bar = (name: string, values: number[], color: string): Data => withLinks({
+  const bar = (name: string, paces: number[], color: string): Data => withLinks({
     type: 'bar',
     x,
-    y: values,
+    // Bars grow up from the slow end of the reversed axis
+    y: paces.map((p) => p - (axis?.slow ?? 0)),
     name,
     marker: { color },
-    customdata: values.map(formatClock) as never,
-    hovertemplate: `${name}: %{customdata} /km<extra></extra>`,
-    // Bars grow up from the slow end of the reversed axis
-    base: axis ? (values.map(() => axis.slow) as never) : undefined,
+    customdata: compared.map((b, i) => [formatClock(paces[i]), b.activity.name, formatDate(b.activity.date)]) as never,
+    hovertemplate: `<b>%{customdata[1]}</b><br>%{customdata[2]}<br>${name}: %{customdata[0]} /km<extra></extra>`,
+    base: axis ? (paces.map(() => axis.slow) as never) : undefined,
   } as Data, links)
   return [
     [
-      bar('Brick run', compared.map((b) => b.pace - (axis?.slow ?? 0)), sportColor('triathlon')),
-      bar('Normal runs, similar distance', compared.map((b) => b.normalPace! - (axis?.slow ?? 0)), NEUTRAL),
+      bar('Brick run', compared.map((b) => b.pace), sportColor('triathlon')),
+      bar('Normal runs, similar distance', compared.map((b) => b.normalPace!), NEUTRAL),
     ],
     {
       title: { text: title },

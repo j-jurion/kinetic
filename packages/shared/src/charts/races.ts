@@ -1,6 +1,7 @@
 // Multisport race charts, shared by the web and mobile apps: the stacked breakdown per event
 // and the transition times over time.
 import type { Data, Layout } from 'plotly.js-dist-min'
+import { activityUrl, withLinks } from '../chartLinks'
 import { formatDate, formatDuration } from '../format'
 import { KIND_COLORS, OTHER_COLORS, isTransition, segmentColors, segmentLabels, segmentSeconds, splitKind } from '../performance'
 import type { BreakdownEvent } from '../performance'
@@ -35,7 +36,7 @@ export function breakdownChart(events: BreakdownEvent[], single: boolean): Chart
   const traces: Data[] = []
   for (let i = 0; i < positions; i++) {
     const segments = events.map((e) => e.segments[i])
-    traces.push({
+    traces.push(withLinks({
       type: 'bar',
       orientation: 'h',
       name: `Segment ${i + 1}`,
@@ -49,7 +50,7 @@ export function breakdownChart(events: BreakdownEvent[], single: boolean): Chart
       insidetextanchor: 'middle',
       customdata: segments.map((s) => (s ? [s.label, formatDuration(s.seconds)] : ['', ''])) as never,
       hovertemplate: '<b>%{y}</b><br>%{customdata[0]}: %{customdata[1]}<extra></extra>',
-    })
+    } as Data, events.map((e) => activityUrl(e.id))))
   }
   // Legend entries only, for the disciplines that occur
   const labels = segmentLabels(events)
@@ -91,7 +92,7 @@ export function transitionChart(events: BreakdownEvent[]): Chart {
     if (!rows.length) return []
     const name = kind.toUpperCase()
     return [
-      {
+      withLinks({
         type: 'scatter',
         mode: 'lines+markers',
         name,
@@ -101,7 +102,7 @@ export function transitionChart(events: BreakdownEvent[]): Chart {
         marker: { color: KIND_COLORS[kind], size: 8 },
         customdata: rows.map((p) => [formatClock(p.seconds), p.event.name]) as never,
         hovertemplate: `<b>${name}: %{customdata[0]}</b><br>%{customdata[1]} · %{x|%d-%m-%Y}<extra></extra>`,
-      },
+      } as Data, rows.map((p) => activityUrl(p.event.id))),
     ]
   })
   const all = events
