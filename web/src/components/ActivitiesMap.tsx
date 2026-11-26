@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import L from 'leaflet'
+import 'leaflet.markercluster'
+import 'leaflet.markercluster/dist/MarkerCluster.css'
 import { formatDate, formatDistance, formatDuration, formatPace, sportColor } from '@kinetic/shared/format'
+import { RECENT_AREA_MAX_ZOOM, recentArea } from '@kinetic/shared/mapView'
 import type { MapRoute } from '@kinetic/shared/types'
 import { baseMap } from './RouteMap'
 import '../styles/map.css'
@@ -9,6 +12,9 @@ import '../styles/map.css'
 // Routes are drawn as non-interactive polylines; hit-testing is done by hand so that every
 // route under the cursor is found, not just the topmost one.
 const TOL = 10
+// A route smaller than this on screen becomes a pin, so routes far from home stay findable when
+// zoomed out; nearby pins are grouped into a bubble with their count.
+const PIN_PX = 24
 const MAX_LIST = 15
 const CHEVRON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="kin-chev"><polyline points="9 18 15 12 9 6"></polyline></svg>'
@@ -39,8 +45,38 @@ interface Item {
   r: MapRoute
   color: string
   line: L.Polyline
+  pin: L.Marker
+  pinned: boolean
   pts: L.Point[]
   bb: [number, number, number, number]
+}
+
+function pinIcon(color: string): L.DivIcon {
+  return L.divIcon({
+    html: `<div class="kin-pin" style="background:${esc(color)}"></div>`,
+    className: '',
+    iconSize: [18, 18],
+  })
+}
+
+/** A bubble for several pins, in the colour of its most common sport. */
+function clusterIcon(cluster: L.MarkerCluster): L.DivIcon {
+  const markers = cluster.getAllChildMarkers()
+  const counts = new Map<string, number>()
+  for (const m of markers) {
+    const color = (m.options as { color?: string }).color ?? '#6b7280'
+    counts.set(color, (counts.get(color) ?? 0) + 1)
+  }
+  const color = [...counts].sort((a, b) => b[1] - a[1])[0][0]
+  const n = markers.length
+  const size = n < 10 ? 26 : n < 100 ? 32 : 38
+  return L.divIcon({
+    html:
+      `<div class="kin-cluster" title="${n} activities · click to zoom in" ` +
+      `style="width:${size}px;height:${size}px;background:${esc(color)}">${n}</div>`,
+    className: '',
+    iconSize: [size, size],
+  })
 }
 
 /** Every route on one map; hovering lists all routes under the cursor. */
@@ -55,14 +91,42 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
     if (!container) return
     const map = baseMap(container)
 
+    const clusters = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: false,
+      maxClusterRadius: 45,
+      iconCreateFunction: clusterIcon,
+    }).addTo(map)
+
     const items: Item[] = routes.map((r) => {
       const color = sportColor(r.sport, '#6b7280')
-      const line = L.polyline(r.coords, { color, weight: 3, opacity: 0.75, interactive: false }).addTo(map)
-      return { r, color, line, pts: [], bb: [0, 0, 0, 0] }
+      const line = L.polyline(r.coords, { color, weight: 3, opacity: 0.75, interactive: false })
+      const mid = r.coords[Math.floor(r.coords.length / 2)]
+      // Pins are found by the same hand-made hit-testing as lines, so they let events through
+      const pin = L.marker(mid, { icon: pinIcon(color), interactive: false, keyboard: false, color } as L.MarkerOptions)
+      return { r, color, line, pin, pinned: false, pts: [], bb: [0, 0, 0, 0] }
     })
-    if (items.length) {
-      const bounds = L.latLngBounds(routes.flatMap((r) => r.coords))
-      map.fitBounds(bounds, { padding: [20, 20], animate: false })
+    // Open on the area of the latest activity; the button below zooms out to every route
+    const area = recentArea(routes)
+    if (area.length) {
+      map.fitBounds(L.latLngBounds(area), { padding: [20, 20], maxZoom: RECENT_AREA_MAX_ZOOM, animate: false })
+      const showAll = new L.Control({ position: 'topleft' })
+      showAll.onAdd = () => {
+        const bar = L.DomUtil.create('div', 'leaflet-bar')
+        const btn = L.DomUtil.create('a', 'kin-show-all', bar)
+        btn.href = '#'
+        btn.role = 'button'
+        btn.title = 'Show all routes'
+        btn.setAttribute('aria-label', 'Show all routes')
+        btn.innerHTML = '<span class="material-icons" aria-hidden="true">zoom_out_map</span>'
+        L.DomEvent.disableClickPropagation(bar)
+        L.DomEvent.on(btn, 'click', (ev) => {
+          L.DomEvent.preventDefault(ev)
+          map.fitBounds(L.latLngBounds(routes.flatMap((r) => r.coords)), { padding: [20, 20] })
+        })
+        return bar
+      }
+      showAll.addTo(map)
     }
 
     const project = () => {
@@ -81,12 +145,34 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
         })
         it.bb = [minX, minY, maxX, maxY]
       }
+      // Swap routes between line and pin to match their size at this zoom
+      const toPins: L.Marker[] = []
+      const fromPins: L.Marker[] = []
+      for (const it of items) {
+        const pinned = Math.max(it.bb[2] - it.bb[0], it.bb[3] - it.bb[1]) < PIN_PX
+        if (pinned === it.pinned && (pinned || map.hasLayer(it.line))) continue
+        it.pinned = pinned
+        if (pinned) {
+          it.line.remove()
+          toPins.push(it.pin)
+        } else {
+          it.line.addTo(map)
+          fromPins.push(it.pin)
+        }
+      }
+      if (fromPins.length) clusters.removeLayers(fromPins)
+      if (toPins.length) clusters.addLayers(toPins)
     }
     project()
     map.on('zoomend moveend', project)
 
     const hitsAt = (p: L.Point) =>
       items.filter((it) => {
+        if (it.pinned) {
+          // Only a pin shown on its own counts; one inside a bubble is reached by zooming in
+          if (clusters.getVisibleParent(it.pin) !== it.pin) return false
+          return map.latLngToLayerPoint(it.pin.getLatLng()).distanceTo(p) <= TOL
+        }
         const bb = it.bb
         if (p.x < bb[0] - TOL || p.x > bb[2] + TOL || p.y < bb[1] - TOL || p.y > bb[3] + TOL) return false
         for (let j = 1; j < it.pts.length; j++) {
@@ -114,11 +200,15 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
 
     let highlighted: Item[] = []
     const highlight = (list: Item[]) => {
-      highlighted.forEach((it) => it.line.setStyle({ weight: 3, opacity: 0.75 }))
+      highlighted.forEach((it) => {
+        it.line.setStyle({ weight: 3, opacity: 0.75 })
+        it.pin.getElement()?.classList.remove('is-hl')
+      })
       highlighted = list
       highlighted.forEach((it) => {
         it.line.setStyle({ weight: 7, opacity: 1 })
-        it.line.bringToFront()
+        if (map.hasLayer(it.line)) it.line.bringToFront()
+        it.pin.getElement()?.classList.add('is-hl')
       })
     }
 
@@ -247,6 +337,8 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       }
     })
     map.on('mouseout', scheduleHide)
+    // Bubbles keep their mouse events to themselves, so the map would not notice the cursor leaving a route
+    clusters.on('mouseover', scheduleHide)
     map.on('movestart zoomstart', () => {
       if (!locked) hide()
     })

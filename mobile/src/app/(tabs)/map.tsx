@@ -3,6 +3,7 @@ import { router } from 'expo-router'
 import { Pressable, View } from 'react-native'
 import { qs } from '@kinetic/shared/api'
 import { formatDate, formatDistance, formatDuration, sportColor, sportLabel } from '@kinetic/shared/format'
+import { RECENT_AREA_MAX_ZOOM, recentArea } from '@kinetic/shared/mapView'
 import type { MapData, MapRoute } from '@kinetic/shared/types'
 import { Icon, SportIcon } from '../../components/Icon'
 import { LeafletView } from '../../components/LeafletView'
@@ -40,12 +41,16 @@ export default function MapScreen() {
   const toggle = (sport: string) =>
     select(selected.includes(sport) ? selected.filter((s) => s !== sport) : (available ?? []).filter((s) => s === sport || selected.includes(s)))
 
-  const spec = useMemo(
-    (): MapSpec => ({
-      lines: (selected.length ? data?.routes ?? [] : []).map((r) => ({ coords: r.coords, color: sportColor(r.sport, '#6b7280'), weight: 3, opacity: 0.75, id: r.id })),
-    }),
-    [data, selected],
-  )
+  const spec = useMemo((): MapSpec => {
+    const routes = selected.length ? data?.routes ?? [] : []
+    return {
+      lines: routes.map((r) => ({ coords: r.coords, color: sportColor(r.sport, '#6b7280'), weight: 3, opacity: 0.75, id: r.id })),
+      pinSmall: true,
+      // Open on the area of the latest activity; a button zooms out to every route
+      focus: recentArea(routes),
+      focusMaxZoom: RECENT_AREA_MAX_ZOOM,
+    }
+  }, [data, selected])
   const byId = useMemo(() => new Map((data?.routes ?? []).map((r) => [r.id, r])), [data])
 
   if (!available) return null

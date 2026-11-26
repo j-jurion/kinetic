@@ -6,8 +6,9 @@ import type { WebViewMessageEvent } from 'react-native-webview'
 import type { LatLng } from '@kinetic/shared/routeMap'
 import { ORIGIN } from '../lib/api'
 
-// Same Leaflet version as web/package.json
+// Same Leaflet and marker-cluster versions as web/package.json
 const LEAFLET = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet'
+const CLUSTER = 'https://unpkg.com/leaflet.markercluster@1.5.3/dist'
 
 export interface MapLine {
   coords: LatLng[]
@@ -29,6 +30,17 @@ export interface MapSpec {
   markers?: MapMarker[]
   /** HTML of a legend box in the bottom-left corner. */
   legend?: string | null
+  /**
+   * Draw tappable lines too small to see at the current zoom as pins, grouped into numbered
+   * bubbles, so routes far from the rest stay findable when zoomed out.
+   */
+  pinSmall?: boolean
+  /**
+   * Open on these points (zoomed in no closer than `focusMaxZoom`) instead of on every line,
+   * with a button that zooms out to all lines.
+   */
+  focus?: LatLng[]
+  focusMaxZoom?: number
 }
 
 const HTML = `<!doctype html>
@@ -37,7 +49,19 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link rel="stylesheet" href="${LEAFLET}.css">
 <script src="${LEAFLET}.js"></script>
-<style>html, body, #map { margin: 0; height: 100%; }</style>
+<link rel="stylesheet" href="${CLUSTER}/MarkerCluster.css">
+<script src="${CLUSTER}/leaflet.markercluster.js"></script>
+<style>
+  html, body, #map { margin: 0; height: 100%; }
+  .kin-pin { width: 14px; height: 14px; margin: 2px; border-radius: 50%; box-sizing: border-box;
+    border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45); transition: transform .1s ease; }
+  .is-hl > .kin-pin { transform: scale(1.4); }
+  .kin-cluster { display: grid; place-items: center; border-radius: 50%; box-sizing: border-box;
+    color: #fff; font: 700 12px -apple-system, Roboto, sans-serif;
+    border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45); }
+  .kin-show-all { display: grid !important; place-items: center; width: 36px !important; height: 36px !important; }
+  .kin-show-all svg { width: 20px; height: 20px; fill: #374151; }
+</style>
 </head>
 <body>
 <div id="map"></div>
@@ -49,8 +73,43 @@ const HTML = `<!doctype html>
   }).addTo(map)
   var layers = L.layerGroup().addTo(map)
   var legend = null
+  var showAll = null
   var tappable = []
   var highlighted = []
+  // A route smaller than this on screen becomes a pin (see MapSpec.pinSmall)
+  var PIN_PX = 24
+  var clusters = L.markerClusterGroup({
+    showCoverageOnHover: false, spiderfyOnMaxZoom: false, maxClusterRadius: 45,
+    iconCreateFunction: function (cluster) {
+      var markers = cluster.getAllChildMarkers()
+      var counts = {}
+      markers.forEach(function (m) { counts[m.options.color] = (counts[m.options.color] || 0) + 1 })
+      var color = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a] })[0]
+      var n = markers.length
+      var size = n < 10 ? 26 : n < 100 ? 32 : 38
+      return L.divIcon({ className: '', iconSize: [size, size],
+        html: '<div class="kin-cluster" style="width:' + size + 'px;height:' + size + 'px;background:' + color + '">' + n + '</div>' })
+    },
+  }).addTo(map)
+  var pinSmall = false
+
+  // Swap routes between line and pin to match their size at this zoom
+  function layout() {
+    if (!pinSmall) return
+    var toPins = []
+    var fromPins = []
+    tappable.forEach(function (t) {
+      var a = map.latLngToLayerPoint(t.bounds.getNorthWest())
+      var b = map.latLngToLayerPoint(t.bounds.getSouthEast())
+      var pinned = Math.max(b.x - a.x, b.y - a.y) < PIN_PX
+      if (pinned === t.pinned) return
+      t.pinned = pinned
+      if (pinned) { t.line.remove(); toPins.push(t.pin) } else { t.line.addTo(layers); fromPins.push(t.pin) }
+    })
+    if (fromPins.length) clusters.removeLayers(fromPins)
+    if (toPins.length) clusters.addLayers(toPins)
+  }
+  map.on('zoomend', layout)
 
   function pin(color, label, at) {
     var html = '<div style="width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);' +
@@ -60,7 +119,11 @@ const HTML = `<!doctype html>
 
   window.renderMap = function (spec) {
     layers.clearLayers()
+    clusters.clearLayers()
+    pinSmall = !!spec.pinSmall
     if (legend) legend.remove()
+    if (showAll) showAll.remove()
+    showAll = null
     tappable = []
     highlighted = []
     var bounds = []
@@ -68,7 +131,16 @@ const HTML = `<!doctype html>
       var drawn = L.polyline(line.coords, {
         color: line.color, weight: line.weight || 3, opacity: line.opacity == null ? 0.85 : line.opacity, interactive: false,
       }).addTo(layers)
-      if (line.id != null) tappable.push({ id: line.id, line: drawn, coords: line.coords, weight: line.weight || 3 })
+      if (line.id != null) {
+        var mid = line.coords[Math.floor(line.coords.length / 2)]
+        tappable.push({
+          id: line.id, line: drawn, coords: line.coords, weight: line.weight || 3, pinned: false,
+          bounds: L.latLngBounds(line.coords),
+          // Pins are found by the same hit-testing as lines, so they let taps through
+          pin: L.marker(mid, { color: line.color, interactive: false, keyboard: false,
+            icon: L.divIcon({ className: '', iconSize: [18, 18], html: '<div class="kin-pin" style="background:' + line.color + '"></div>' }) }),
+        })
+      }
       for (var i = 0; i < line.coords.length; i++) bounds.push(line.coords[i])
     })
     ;(spec.markers || []).forEach(function (m) { pin(m.color, m.label, m.at).addTo(layers) })
@@ -77,7 +149,28 @@ const HTML = `<!doctype html>
       legend.onAdd = function () { var box = L.DomUtil.create('div'); box.innerHTML = spec.legend; return box }
       legend.addTo(map)
     }
-    if (bounds.length) map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20], animate: false })
+    if (spec.focus && spec.focus.length) {
+      map.fitBounds(L.latLngBounds(spec.focus), { padding: [20, 20], maxZoom: spec.focusMaxZoom || 18, animate: false })
+      showAll = new L.Control({ position: 'topleft' })
+      showAll.onAdd = function () {
+        var bar = L.DomUtil.create('div', 'leaflet-bar')
+        var btn = L.DomUtil.create('a', 'kin-show-all', bar)
+        btn.href = '#'
+        btn.setAttribute('role', 'button')
+        btn.setAttribute('aria-label', 'Show all routes')
+        btn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3l2.3 2.3-2.89 2.87 1.42 1.42L18.7 6.7 21 9V3zM3 9l2.3-2.3 2.87 2.89 1.42-1.42L6.7 5.3 9 3H3zm6 12l-2.3-2.3 2.89-2.87-1.42-1.42L5.3 17.3 3 15v6zm12-6l-2.3 2.3-2.87-2.89-1.42 1.42 2.89 2.87L15 21h6z"/></svg>'
+        L.DomEvent.disableClickPropagation(bar)
+        L.DomEvent.on(btn, 'click', function (ev) {
+          L.DomEvent.preventDefault(ev)
+          map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20] })
+        })
+        return bar
+      }
+      showAll.addTo(map)
+    } else if (bounds.length) {
+      map.fitBounds(L.latLngBounds(bounds), { padding: [20, 20], animate: false })
+    }
+    layout()
   }
 
   // Every tappable route within a finger's width of the tap, not just the topmost one
@@ -85,6 +178,10 @@ const HTML = `<!doctype html>
     if (!tappable.length) return
     var at = e.layerPoint
     var hits = tappable.filter(function (t) {
+      if (t.pinned) {
+        // Only a pin shown on its own counts; one inside a bubble is reached by zooming in
+        return clusters.getVisibleParent(t.pin) === t.pin && map.latLngToLayerPoint(t.pin.getLatLng()).distanceTo(at) <= 14
+      }
       for (var i = 1; i < t.coords.length; i++) {
         var a = map.latLngToLayerPoint(t.coords[i - 1])
         var b = map.latLngToLayerPoint(t.coords[i])
@@ -92,9 +189,18 @@ const HTML = `<!doctype html>
       }
       return false
     })
-    highlighted.forEach(function (t) { t.line.setStyle({ weight: t.weight }) })
+    highlighted.forEach(function (t) {
+      t.line.setStyle({ weight: t.weight })
+      var el = t.pin.getElement()
+      if (el) el.classList.remove('is-hl')
+    })
     highlighted = hits
-    hits.forEach(function (t) { t.line.setStyle({ weight: 7 }); t.line.bringToFront() })
+    hits.forEach(function (t) {
+      t.line.setStyle({ weight: 7 })
+      if (!t.pinned) t.line.bringToFront()
+      var el = t.pin.getElement()
+      if (el) el.classList.add('is-hl')
+    })
     window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'tap', ids: hits.map(function (t) { return t.id }) }))
   })
 
