@@ -17,6 +17,10 @@
         activity removed its file), cached streams whose FIT file is gone, and unfinished
         temporary files.
 
+    python -m app.maintenance mark-races USERNAME START... [--apply]
+        Mark the account's activities that start at these minutes (as stored, in UTC, e.g.
+        2024-10-20T07:01) as races. Nothing changes unless each matches exactly one activity.
+
 On Fly: fly ssh console -a <app> -C "python -m app.maintenance clean-uploads"
 """
 
@@ -34,7 +38,7 @@ from sqlmodel import Session, col, select
 from app import fit_parser, fit_summary, streams
 from app.database import engine
 from app.fit_parser import parse_fit_file
-from app.models import Activity, ActivityMetrics, BestEffort, Lap, SportType
+from app.models import Activity, ActivityKind, ActivityMetrics, BestEffort, Lap, SportType
 from app.ownership import current_owner
 
 MULTISPORT = (SportType.triathlon, SportType.duathlon, SportType.multisport)
@@ -361,6 +365,69 @@ def _progress(what: str) -> Callable[[int, int, int], None]:
     return report
 
 
+# ── Races ─────────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class RaceMark:
+    start: str
+    activity: Optional[Activity] = None
+    problem: str = ""
+
+
+def _parse_start(text: str) -> datetime:
+    try:
+        return datetime.fromisoformat(text.replace(" ", "T"))
+    except ValueError:
+        raise SystemExit(f"Not a start time: {text!r} (use e.g. 2024-10-20T07:01)") from None
+
+
+def mark_races(username: str, starts: list[str], apply: bool = False) -> list[RaceMark]:
+    """Mark the activities of ``username`` starting at these minutes as races.
+
+    Nothing changes unless ``apply`` and every start time matched exactly one activity.
+    """
+    from app.auth import User
+
+    times = [_parse_start(text) for text in starts]
+    with Session(engine) as session:
+        user = session.exec(select(User).where(User.username == username)).first()
+        if user is None:
+            raise SystemExit(f"No account named {username!r}")
+        activities = session.exec(
+            select(Activity)
+            .where(Activity.owner_id == user.id, col(Activity.parent_id).is_(None))
+            .options(defer(Activity.route_json), defer(Activity.map_route_json))
+        ).all()
+        marks = []
+        for text, start in zip(starts, times):
+            minute = start.replace(second=0, microsecond=0, tzinfo=None)
+            found = [
+                a for a in activities
+                if a.date.replace(second=0, microsecond=0, tzinfo=None) == minute
+            ]
+            mark = RaceMark(text)
+            if len(found) == 1:
+                mark.activity = found[0]
+            else:
+                mark.problem = "no activity starts then" if not found else (
+                    "several activities start then: "
+                    + ", ".join(f"#{a.id} {a.name}" for a in found)
+                )
+            marks.append(mark)
+        if apply and not any(m.problem for m in marks):
+            for mark in marks:
+                if mark.activity.kind != ActivityKind.race:
+                    mark.activity.kind = ActivityKind.race
+                    session.add(mark.activity)
+            session.commit()
+        for mark in marks:  # readable after the session closes
+            if mark.activity is not None:
+                session.refresh(mark.activity)
+                session.expunge(mark.activity)
+    return marks
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -371,6 +438,10 @@ def main(argv: list[str] | None = None) -> int:
     ):
         command = sub.add_parser(name, help=text)
         command.add_argument("--apply", action="store_true", help="make the changes")
+    races = sub.add_parser("mark-races", help="mark an account's activities as races")
+    races.add_argument("username")
+    races.add_argument("starts", nargs="+", metavar="START", help="e.g. 2024-10-20T07:01 (UTC)")
+    races.add_argument("--apply", action="store_true", help="make the changes")
     args = parser.parse_args(argv)
 
     import app.models  # noqa: F401  (registers the tables)
@@ -402,6 +473,22 @@ def main(argv: list[str] | None = None) -> int:
             if r.skipped:
                 print(f"Skipped #{r.activity_id} {r.name}: {r.skipped}")
         print(f"{len(changed)} activities to update, {len(reports) - len(changed)} skipped")
+    elif args.command == "mark-races":
+        marks = mark_races(args.username, args.starts, args.apply)
+        problems = [m for m in marks if m.problem]
+        for m in marks:
+            a = m.activity
+            if m.problem:
+                print(f"{m.start}: {m.problem}")
+            elif a.kind == ActivityKind.race and not args.apply:
+                print(f"{m.start}: #{a.id} {a.name} is already a race")
+            else:
+                verb_race = "Marked" if args.apply else "Would mark"
+                print(f"{m.start}: {verb_race} #{a.id} {a.name} ({a.sport.value}, "
+                      f"{(a.distance_meters or 0) / 1000:.2f} km) as a race")
+        if problems:
+            print(f"{len(problems)} start times did not match one activity: nothing was changed")
+            return 1
     else:
         report = clean_uploads()  # sizes are listed before anything is deleted
         verb = "Deleted" if args.apply else "Would delete"

@@ -310,6 +310,10 @@ fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance
 # hour are left alone, as an import may be saving them
 fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance clean-uploads"
 fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance clean-uploads --apply"
+
+# Mark an account's activities as races, by start minute as stored (UTC); nothing changes
+# unless every time matches exactly one of the account's activities
+fly ssh console -a kinetic-api-coral-mountain-1380 -C "python -m app.maintenance mark-races joeri 2024-10-20T07:01 2026-04-19T07:03"
 ```
 
 Events whose FIT file is not on the server, or whose legs no longer match the file (a leg was

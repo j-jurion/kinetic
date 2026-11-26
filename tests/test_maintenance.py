@@ -199,3 +199,42 @@ class CleanUploadsTests(MaintenanceTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MarkRacesTests(MaintenanceTestCase):
+    def setUp(self):
+        super().setUp()
+        from app.auth import AuthBase, User
+
+        AuthBase.metadata.create_all(self.engine)
+        with Session(self.engine) as session:
+            for owner, name in ((OWNER, "joeri"), ("other", "bob")):
+                session.add(User(id=owner, username=name, hashed_password="x"))
+            for owner, name, start in (
+                (OWNER, "Marathon", datetime(2024, 10, 20, 7, 1, 31)),
+                (OWNER, "Training", datetime(2024, 10, 22, 7, 1)),
+                ("other", "Bob's marathon", datetime(2024, 10, 20, 7, 1)),
+            ):
+                session.add(Activity(owner_id=owner, name=name, sport=SportType.running,
+                                     date=start, duration_seconds=3600, distance_meters=10000))
+            session.commit()
+
+    def kinds(self):
+        with Session(self.engine) as session:
+            return {a.name: a.kind for a in session.exec(select(Activity)).all()}
+
+    def test_previews_then_marks_only_the_accounts_activity(self):
+        marks = maintenance.mark_races("joeri", ["2024-10-20T07:01"])
+        self.assertEqual([m.activity.name for m in marks], ["Marathon"])
+        self.assertEqual(self.kinds()["Marathon"], ActivityKind.training)
+
+        maintenance.mark_races("joeri", ["2024-10-20 07:01"], apply=True)
+        kinds = self.kinds()
+        self.assertEqual(kinds["Marathon"], ActivityKind.race)
+        self.assertEqual(kinds["Training"], ActivityKind.training)
+        self.assertEqual(kinds["Bob's marathon"], ActivityKind.training)
+
+    def test_changes_nothing_when_a_time_matches_no_activity(self):
+        marks = maintenance.mark_races("joeri", ["2024-10-20T07:01", "2024-10-21T07:01"], True)
+        self.assertEqual(marks[1].problem, "no activity starts then")
+        self.assertEqual(self.kinds()["Marathon"], ActivityKind.training)
