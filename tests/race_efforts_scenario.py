@@ -90,7 +90,11 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
         json={"official_time_seconds": 12590, "splits": []},
     )
     assert saved.status_code == 200, saved.text
-    assert marathons() == [("Meerdaal marathon", 12600, "race")]
+    # ... with its official time; anything else keeps the moving time
+    assert marathons() == [("Meerdaal marathon", 12590, "official")]
+    detail = client.get(f"/api/activities/{meerdaal}/detail").json()
+    assert detail["best_efforts"][0]["duration_seconds"] == 12590
+    assert detail["activity"]["duration_seconds"] == 12600
     client.delete(f"/api/activities/{meerdaal}/race-result", headers=origin)
     assert marathons() == []
     client.patch(f"/api/activities/{meerdaal}", json={"kind": "race"}, headers=origin)
@@ -129,6 +133,20 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
         )
         session.commit()
     assert [s for n, _, s in marathons() if n == "Meerdaal marathon"] == ["gps"]
+
+    # An official time takes the place of the GPS effort, also when GPS measured long
+    result = {"official_time_seconds": 3 * 3600 + 41 * 60, "splits": []}
+    client.put(f"/api/activities/{full}/race-result", headers=origin, json=result)
+    assert [(n, d, s) for n, d, s in marathons() if n == "Full distance"] == [
+        ("Full distance", 3 * 3600 + 41 * 60, "official")
+    ]
+    detail = client.get(f"/api/activities/{full}/detail").json()["best_efforts"]
+    assert [(e["source"], e["rank"]) for e in detail] == [("official", 2)]
+    # behind Meerdaal's GPS effort; its own GPS effort, now replaced, does not count
+    # ... but not when the race is a different distance (here 5% too long)
+    far = add("Long trail", 44400, 5 * 3600, ActivityKind.race, day=12)
+    client.put(f"/api/activities/{far}/race-result", headers=origin, json=result)
+    assert "Long trail" not in [n for n, _, _ in marathons()]
 
     # A triathlon's run leg counts when the event is a race
     tri = add("Olympic tri", 51400, 9000, ActivityKind.race, SportType.triathlon, day=20)

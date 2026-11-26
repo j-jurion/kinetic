@@ -194,5 +194,6 @@ describe('measuredShortNote', () => {
     expect(measuredShortNote({ source: 'race', distance_meters: 42195, measured_meters: 42150 })).toBe('GPS measured 45 m short')
     expect(measuredShortNote({ source: 'gps', distance_meters: 42195, measured_meters: null })).toBeNull()
     expect(measuredShortNote({ distance_meters: 5000 })).toBeNull()
+    expect(measuredShortNote({ source: 'official', distance_meters: 42195, measured_meters: 42600 })).toBe('Official race time')
   })
 })

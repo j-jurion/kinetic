@@ -269,8 +269,9 @@ export function inDateRange(ms: number, range: DateRange): boolean {
   return (range.sinceMs === null || ms >= range.sinceMs) && (range.untilMs === null || ms < range.untilMs)
 }
 
-/** "GPS measured 45 m short" for a race counted at its official distance; null otherwise. */
+/** How a race's best effort was timed: "Official race time" or "GPS measured 45 m short"; null for a GPS effort. */
 export function measuredShortNote(effort: { source?: string; distance_meters: number; measured_meters?: number | null }): string | null {
-  if (effort.source !== 'race' || effort.measured_meters == null) return null
+  if (effort.source === 'official') return 'Official race time'
+  if (effort.source !== 'race' || effort.measured_meters == null || effort.measured_meters >= effort.distance_meters) return null
   return `GPS measured ${Math.round(effort.distance_meters - effort.measured_meters)} m short`
 }

@@ -43,8 +43,8 @@ export interface BestEffort {
   duration_seconds: number
   date: string
   year: number
-  /** "race": the whole time of a race whose GPS measured it slightly short (see measured_meters). */
-  source?: 'gps' | 'race'
+  /** "official": a race result's official time; "race": the whole time of a race whose GPS measured it slightly short. */
+  source?: 'gps' | 'race' | 'official'
   /** The distance a "race" effort's activity measured. */
   measured_meters?: number | null
 }
