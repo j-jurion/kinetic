@@ -23,6 +23,40 @@ import { Icon } from './Icon'
 
 export { useColors }
 
+/**
+ * A label that switches something on or off, such as a sport in a filter or a friend on an
+ * activity. On: in its colour, tinted, with a check. Off: grey text and a dashed border, while its
+ * icon keeps its colour so the row stays easy to scan. Like FilterChip in the web app.
+ */
+export function FilterChip({ label, on, color, icon, onPress }: {
+  label: string
+  on: boolean
+  color: string
+  /** Shown while off; a check replaces it while on. */
+  icon?: ReactNode
+  onPress: () => void
+}) {
+  const c = useColors()
+  const textColor = useTextColor()
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: on }}
+      accessibilityLabel={label}
+      style={{
+        flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
+        borderColor: on ? color : c.border,
+        borderStyle: on ? 'solid' : 'dashed',
+        backgroundColor: on ? `${color}26` : 'transparent',
+      }}
+    >
+      {on ? <Icon name="check" size={14} color={color} /> : icon}
+      <T style={{ color: on ? textColor(color) : c.muted, fontWeight: on ? '600' : '500', fontSize: 12 }}>{label}</T>
+    </Pressable>
+  )
+}
+
 /** A scrolling page with the standard padding; pull to refresh when onRefresh is given. */
 export function Screen({ children, onRefresh }: { children: ReactNode; onRefresh?: () => void }) {
   const c = useColors()

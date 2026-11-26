@@ -70,3 +70,10 @@
 /* "Show all routes" button under the zoom buttons */
 .kin-show-all { display: grid !important; place-items: center; color: #374151; }
 .kin-show-all .material-icons { font-size: 18px; }
+
+/* Shown over the map when no sport is selected */
+.map-empty-note {
+  position: absolute; z-index: 1000; left: 50%; top: 16px; transform: translateX(-50%);
+  background: #fff; color: #374151; border-radius: 999px; padding: 6px 14px;
+  font-size: 13px; box-shadow: 0 2px 10px rgba(0,0,0,.18); white-space: nowrap;
+}

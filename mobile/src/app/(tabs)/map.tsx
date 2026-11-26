@@ -8,14 +8,12 @@ import type { MapData, MapRoute } from '@kinetic/shared/types'
 import { Icon, SportIcon } from '../../components/Icon'
 import { LeafletView } from '../../components/LeafletView'
 import type { MapSpec } from '../../components/LeafletView'
-import { Button, Caption, Card, T, useColors } from '../../components/ui'
+import { Button, Caption, Card, FilterChip, T, useColors } from '../../components/ui'
 import { api } from '../../lib/api'
-import { useTextColor } from '../../lib/theme'
 
 /** Every route on one map, coloured by sport; tap a route to list the activities under it. */
 export default function MapScreen() {
   const c = useColors()
-  const textColor = useTextColor()
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
@@ -49,6 +47,8 @@ export default function MapScreen() {
       // Open on the area of the latest activity; a button zooms out to every route
       focus: recentArea(routes),
       focusMaxZoom: RECENT_AREA_MAX_ZOOM,
+      // A filter change keeps the map where it is
+      keepView: true,
     }
   }, [data, selected])
   const byId = useMemo(() => new Map((data?.routes ?? []).map((r) => [r.id, r])), [data])
@@ -68,23 +68,14 @@ export default function MapScreen() {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
           return (
-            <Pressable
+            <FilterChip
               key={sport}
+              label={sportLabel(sport)}
+              on={on}
+              color={color}
+              icon={<SportIcon sport={sport} size={14} color={color} />}
               onPress={() => toggle(sport)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={sportLabel(sport)}
-              // Shown sports are filled in their colour with a check; hidden ones are grey and dashed
-              style={{
-                flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
-                borderColor: on ? color : c.border,
-                borderStyle: on ? 'solid' : 'dashed',
-                backgroundColor: on ? `${color}26` : 'transparent',
-              }}
-            >
-              {on ? <Icon name="check" size={14} color={color} /> : <SportIcon sport={sport} size={14} color={c.muted} />}
-              <T style={{ color: on ? textColor(color) : c.muted, fontWeight: on ? '600' : '500', fontSize: 12 }}>{sportLabel(sport)}</T>
-            </Pressable>
+            />
           )
         })}
         <Button title="All" variant="text" onPress={() => select(available)} />
@@ -93,9 +84,8 @@ export default function MapScreen() {
 
       {!available.length ? (
         <Caption>No activities with GPS data yet.</Caption>
-      ) : !selected.length ? (
-        <Caption>Select at least one activity type to show routes.</Caption>
       ) : (
+        // Stays mounted with no sports selected, so the map keeps its place
         <View style={{ flex: 1 }}>
           <LeafletView spec={spec} height="100%" label="Map of all activities; tap a route to list the activities under it. They are also listed on the Activities tab." onTap={(ids) => setTapped(ids.map((id) => byId.get(id)).filter((r): r is MapRoute => !!r))} />
         </View>

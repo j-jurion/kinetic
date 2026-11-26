@@ -42,6 +42,21 @@ function modernTrace(trace: Data, surface: string): Data {
 }
 
 /** The chart with the app's light or dark styling applied to its traces and layout. */
+/**
+ * Gives every named trace an id from its name, so a sport hidden by clicking the legend stays
+ * hidden when the chart is redrawn, even if the sports come in another order.
+ */
+function withIds(data: Data[]): Data[] {
+  const seen = new Map<string, number>()
+  return data.map((trace) => {
+    const named = trace as Data & { uid?: string; name?: string }
+    if (named.uid || !named.name) return trace
+    const n = seen.get(named.name) ?? 0
+    seen.set(named.name, n + 1)
+    return { ...trace, uid: n ? `${named.name}#${n}` : named.name } as Data
+  })
+}
+
 export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSpec {
   const theme = dark ? DARK : LIGHT
   // Theme every axis, including extra ones such as yaxis2 in stacked or dual-axis charts
@@ -77,7 +92,7 @@ export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSp
       ? { x: 0.01, xanchor: 'left' as const, ...layout.title, font: { size: 15, weight: 600, color: theme.text, ...layout.title.font } }
       : layout.title
   return {
-    data: data.map((trace) => modernTrace(trace, theme.surface)),
+    data: withIds(data).map((trace) => modernTrace(trace, theme.surface)),
     layout: {
       plot_bgcolor: 'rgba(0,0,0,0)',
       paper_bgcolor: 'rgba(0,0,0,0)',
@@ -92,6 +107,9 @@ export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSp
       ...layout,
       ...themedAxes,
       dragmode: false,
+      // Keep what the viewer changed (sports hidden via the legend) when the chart is redrawn
+      // for a filter, a toggle or the theme
+      uirevision: layout.uirevision ?? 'keep',
       title,
       legend: { font: { size: 11, color: theme.muted }, ...layout.legend },
       font: { family: 'Inter, sans-serif', color: theme.text, ...(layout.font ?? {}) },

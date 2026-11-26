@@ -1,22 +1,21 @@
-import { useEffect, useState } from 'react'
-import { Button, Chip } from '@mui/material'
+import { useEffect, useRef, useState } from 'react'
+import { Button } from '@mui/material'
 import { api, qs } from '../lib/api'
 import { sportColor, sportLabel } from '@kinetic/shared/format'
 import type { MapData } from '@kinetic/shared/types'
 import { useLatestRequest } from '../lib/useLatestRequest'
 import { ActivitiesMap } from '../components/ActivitiesMap'
+import { FilterChip } from '../components/FilterChip'
 import { Icon, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading } from '../components/PageLoading'
-
-// Icon colour of a hidden sport's chip
-const MUTED = '#9ca3af'
 
 export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
   const latest = useLatestRequest()
+  const lastData = useRef<MapData | null>(null)
 
   // First load: every sport that has GPS data is selected.
   useEffect(() => {
@@ -38,6 +37,9 @@ export function MapPage() {
     select(selected.includes(sport) ? selected.filter((s) => s !== sport) : (available ?? []).filter((s) => s === sport || selected.includes(s)))
 
   if (!available) return <PageLoading />
+  // The last routes loaded; selecting no sports clears data but keeps the map on screen
+  const shown = data ?? lastData.current
+  if (data) lastData.current = data
 
   let summary = 'No activity types selected.'
   if (selected.length && data) {
@@ -58,37 +60,14 @@ export function MapPage() {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
           return (
-            // Shown sports are filled in their colour with a check; hidden ones are grey and
-            // dashed, so the difference does not rest on colour alone
-            <Chip
+            <FilterChip
               key={sport}
               label={sportLabel(sport)}
-              size="small"
-              variant="outlined"
-              aria-pressed={on}
+              on={on}
+              color={color}
+              icon={<SportIcon sport={sport} size={16} color={color} />}
               title={on ? `Hide ${sportLabel(sport)} routes` : `Show ${sportLabel(sport)} routes`}
-              icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={MUTED} />}
               onClick={() => toggle(sport)}
-              sx={
-                on
-                  ? {
-                      color,
-                      borderColor: color,
-                      fontWeight: 600,
-                      bgcolor: `${color}26`,
-                      '&&:hover': { bgcolor: `${color}40` },
-                      '& .MuiChip-icon': { color, ml: '6px' },
-                    }
-                  : {
-                      color: 'text.secondary',
-                      borderColor: 'divider',
-                      borderStyle: 'dashed',
-                      fontWeight: 500,
-                      bgcolor: 'transparent',
-                      '&&:hover': { bgcolor: 'action.hover', borderColor: color },
-                      '& .MuiChip-icon': { ml: '6px', opacity: 0.7 },
-                    }
-              }
             />
           )
         })}
@@ -103,13 +82,15 @@ export function MapPage() {
         </div>
       </div>
 
-      <div className="card w-full" style={{ padding: 0, height: '70vh', minHeight: 420, overflow: 'hidden' }}>
+      <div className="card w-full" style={{ padding: 0, height: '70vh', minHeight: 420, overflow: 'hidden', position: 'relative' }}>
         {!available.length ? (
           <div className="text-grey-6 text-center w-full q-pa-xl">No activities with GPS data yet.</div>
-        ) : !selected.length ? (
-          <div className="text-grey-6 text-center w-full q-pa-xl">Select at least one activity type to show routes.</div>
         ) : (
-          data && <ActivitiesMap routes={data.routes} />
+          // The map stays mounted while the filter changes, so it keeps its place
+          shown && <ActivitiesMap routes={selected.length ? shown.routes : []} />
+        )}
+        {available.length > 0 && !selected.length && (
+          <div className="map-empty-note">Select at least one activity type to show routes.</div>
         )}
       </div>
       <div className="row items-center no-wrap gap-1 text-caption text-grey-6" style={{ marginTop: -8 }}>

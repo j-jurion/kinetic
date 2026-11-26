@@ -85,11 +85,52 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
   const navigate = useNavigate()
   const navigateRef = useRef(navigate)
   navigateRef.current = navigate
+  const routesRef = useRef(routes)
+  routesRef.current = routes
+  const mapRef = useRef<L.Map | null>(null)
+  // Whether the map has been placed on the routes yet: only the first routes move it, so
+  // changing the sport filter keeps the map where it is
+  const placed = useRef(false)
 
+  // The map itself lives as long as the component; the effect below swaps the routes on it
   useEffect(() => {
     const container = ref.current
     if (!container) return
     const map = baseMap(container)
+    mapRef.current = map
+
+    // Zooms out to every route shown, wherever the map is now
+    const showAll = new L.Control({ position: 'topleft' })
+    showAll.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar')
+      const btn = L.DomUtil.create('a', 'kin-show-all', bar)
+      btn.href = '#'
+      btn.role = 'button'
+      btn.title = 'Show all routes'
+      btn.setAttribute('aria-label', 'Show all routes')
+      btn.innerHTML = '<span class="material-icons" aria-hidden="true">zoom_out_map</span>'
+      L.DomEvent.disableClickPropagation(bar)
+      L.DomEvent.on(btn, 'click', (ev) => {
+        L.DomEvent.preventDefault(ev)
+        const coords = routesRef.current.flatMap((r) => r.coords)
+        if (coords.length) map.fitBounds(L.latLngBounds(coords), { padding: [20, 20] })
+      })
+      return bar
+    }
+    showAll.addTo(map)
+
+    return () => {
+      map.remove()
+      mapRef.current = null
+      placed.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    const container = ref.current
+    const map = mapRef.current
+    if (!container || !map) return
+    const lines = L.layerGroup().addTo(map)
 
     const clusters = L.markerClusterGroup({
       showCoverageOnHover: false,
@@ -106,27 +147,11 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       const pin = L.marker(mid, { icon: pinIcon(color), interactive: false, keyboard: false, color } as L.MarkerOptions)
       return { r, color, line, pin, pinned: false, pts: [], bb: [0, 0, 0, 0] }
     })
-    // Open on the area of the latest activity; the button below zooms out to every route
+    // Open on the area of the latest activity; later route changes leave the map where it is
     const area = recentArea(routes)
-    if (area.length) {
+    if (area.length && !placed.current) {
+      placed.current = true
       map.fitBounds(L.latLngBounds(area), { padding: [20, 20], maxZoom: RECENT_AREA_MAX_ZOOM, animate: false })
-      const showAll = new L.Control({ position: 'topleft' })
-      showAll.onAdd = () => {
-        const bar = L.DomUtil.create('div', 'leaflet-bar')
-        const btn = L.DomUtil.create('a', 'kin-show-all', bar)
-        btn.href = '#'
-        btn.role = 'button'
-        btn.title = 'Show all routes'
-        btn.setAttribute('aria-label', 'Show all routes')
-        btn.innerHTML = '<span class="material-icons" aria-hidden="true">zoom_out_map</span>'
-        L.DomEvent.disableClickPropagation(bar)
-        L.DomEvent.on(btn, 'click', (ev) => {
-          L.DomEvent.preventDefault(ev)
-          map.fitBounds(L.latLngBounds(routes.flatMap((r) => r.coords)), { padding: [20, 20] })
-        })
-        return bar
-      }
-      showAll.addTo(map)
     }
 
     const project = () => {
@@ -150,13 +175,13 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       const fromPins: L.Marker[] = []
       for (const it of items) {
         const pinned = Math.max(it.bb[2] - it.bb[0], it.bb[3] - it.bb[1]) < PIN_PX
-        if (pinned === it.pinned && (pinned || map.hasLayer(it.line))) continue
+        if (pinned === it.pinned && (pinned || lines.hasLayer(it.line))) continue
         it.pinned = pinned
         if (pinned) {
           it.line.remove()
           toPins.push(it.pin)
         } else {
-          it.line.addTo(map)
+          it.line.addTo(lines)
           fromPins.push(it.pin)
         }
       }
@@ -207,7 +232,7 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       highlighted = list
       highlighted.forEach((it) => {
         it.line.setStyle({ weight: 7, opacity: 1 })
-        if (map.hasLayer(it.line)) it.line.bringToFront()
+        if (lines.hasLayer(it.line)) it.line.bringToFront()
         it.pin.getElement()?.classList.add('is-hl')
       })
     }
@@ -281,7 +306,7 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
     }
     const cancelHide = () => window.clearTimeout(hideTimer)
 
-    map.on('click', (e: L.LeafletMouseEvent) => {
+    const onClick = (e: L.LeafletMouseEvent) => {
       const list = hitsAt(e.layerPoint)
       if (list.length) {
         cancelHide()
@@ -290,7 +315,8 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       } else if (locked) {
         hide()
       }
-    })
+    }
+    map.on('click', onClick)
     closeBtn.addEventListener('click', (ev) => {
       ev.preventDefault()
       hide()
@@ -323,7 +349,7 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
     })
 
     let throttled = false
-    map.on('mousemove', (e: L.LeafletMouseEvent) => {
+    const onMove = (e: L.LeafletMouseEvent) => {
       if (locked || panel.contains(e.originalEvent.target as Node) || throttled) return
       throttled = true
       window.setTimeout(() => (throttled = false), 40)
@@ -335,19 +361,28 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
       } else if (current.length) {
         scheduleHide()
       }
-    })
+    }
+    map.on('mousemove', onMove)
     map.on('mouseout', scheduleHide)
     // Bubbles keep their mouse events to themselves, so the map would not notice the cursor leaving a route
     clusters.on('mouseover', scheduleHide)
-    map.on('movestart zoomstart', () => {
+    const onMoveStart = () => {
       if (!locked) hide()
-    })
+    }
+    map.on('movestart zoomstart', onMoveStart)
 
     return () => {
       window.clearTimeout(hideTimer)
       document.removeEventListener('keydown', onKey)
-      map.remove()
+      map.off('zoomend moveend', project)
+      map.off('click', onClick)
+      map.off('mousemove', onMove)
+      map.off('mouseout', scheduleHide)
+      map.off('movestart zoomstart', onMoveStart)
+      lines.remove()
+      clusters.remove()
       panel.remove()
+      container.style.cursor = ''
     }
   }, [routes])
 
