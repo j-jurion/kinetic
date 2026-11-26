@@ -8,6 +8,7 @@ import {
   formatDuration,
   formatPace,
   markYearBests,
+  measuredShortNote,
   sportLabel,
 } from '@kinetic/shared/format'
 import { attemptsChart } from '@kinetic/shared/charts/records'
@@ -110,7 +111,17 @@ export function BestEffortDistancePage() {
                   label: 'Time',
                   align: 'right',
                   sortValue: (r) => r.duration_seconds,
-                  render: (r) => formatDuration(r.duration_seconds),
+                  render: (r) => {
+                    const note = measuredShortNote(r)
+                    return note ? (
+                      <span title={note}>
+                        {formatDuration(r.duration_seconds)}
+                        <div className="text-caption text-grey-7">{note}</div>
+                      </span>
+                    ) : (
+                      formatDuration(r.duration_seconds)
+                    )
+                  },
                 },
                 {
                   name: 'pace',

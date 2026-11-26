@@ -14,6 +14,7 @@ from app.models import (
 )
 from app.ownership import UserSession as Session
 from app.queries import multisport_parent_sports, multisport_parents
+from app.race_efforts import effort_fields, with_race_efforts
 from app.routes.common import (
     activity_dump,
     dump,
@@ -48,8 +49,13 @@ def _best_effort_rows(
             stmt = stmt.where(col(BestEffort.sport).in_(sport_types))
         if year:
             stmt = stmt.where(BestEffort.year == year)
-        stmt = stmt.order_by(col(BestEffort.distance_meters), col(BestEffort.duration_seconds))
-        results = session.exec(stmt).all()
+        # Races count their official time, or their whole time when measured just short of
+        # a distance (see app/race_efforts.py)
+        results = with_race_efforts(
+            session, list(session.exec(stmt).all()), sports=sport_types, year=year,
+            distance=distance,
+        )
+        results.sort(key=lambda row: (row[0].distance_meters, row[0].duration_seconds))
         parents = multisport_parents(session, (a.parent_id for _, a in results))
         raced = set(session.exec(select(RaceResult.activity_id)).all())
 
@@ -59,6 +65,7 @@ def _best_effort_rows(
         return [
             {
                 **dump(effort),
+                **effort_fields(effort, activity),
                 # A multisport leg is named after its event, e.g. the triathlon it belongs to
                 "activity_name": (parent_of(activity) or activity).name,
                 "kind": activity.kind.value,

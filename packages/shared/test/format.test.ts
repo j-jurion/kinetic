@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  measuredShortNote,
   distanceLabel,
   distanceSlug,
   filteredUrl,
@@ -185,5 +186,14 @@ describe('date ranges', () => {
     expect(parseDateRange('', '05-03-2025').sinceMs).toBeNull()
     expect(() => parseDateRange('31-02-2025', '')).toThrow('Invalid date')
     expect(() => parseDateRange('05-03-2025', '01-03-2025')).toThrow('before the start')
+  })
+})
+
+describe('measuredShortNote', () => {
+  it('notes how far short a race counted at its distance measured', () => {
+    expect(measuredShortNote({ source: 'race', distance_meters: 42195, measured_meters: 42150 })).toBe('GPS measured 45 m short')
+    expect(measuredShortNote({ source: 'gps', distance_meters: 42195, measured_meters: null })).toBeNull()
+    expect(measuredShortNote({ distance_meters: 5000 })).toBeNull()
+    expect(measuredShortNote({ source: 'official', distance_meters: 42195, measured_meters: 42600 })).toBe('Official race time')
   })
 })

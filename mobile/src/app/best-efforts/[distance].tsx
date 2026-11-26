@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Stack, router, useLocalSearchParams } from 'expo-router'
 import { qs } from '@kinetic/shared/api'
 import { attemptsChart } from '@kinetic/shared/charts/records'
-import { ALL_RUNNING, distanceLabel, formatDate, formatDuration, formatPace, markYearBests, sportLabel } from '@kinetic/shared/format'
+import { ALL_RUNNING, distanceLabel, formatDate, formatDuration, formatPace, markYearBests, measuredShortNote, sportLabel } from '@kinetic/shared/format'
 import type { BestEffortRow } from '@kinetic/shared/types'
 import { Medal, YearBestDate } from '../../components/Icon'
 import { ChartView } from '../../components/PlotView'
@@ -57,7 +57,7 @@ export default function BestEffortDistanceScreen() {
               columns={[
                 { label: '#', width: 52, render: (r) => (r.rank <= 3 ? <Medal rank={r.rank} /> : `#${r.rank}`) },
                 { label: 'Date', width: 100, render: (r) => <YearBestDate date={formatDate(r.date)} best={r.yearBest} /> },
-                { label: 'Activity', width: 150, render: (r) => r.activity_name },
+                { label: 'Activity', width: 150, render: (r) => (measuredShortNote(r) ? `${r.activity_name} (${measuredShortNote(r)})` : r.activity_name) },
                 { label: 'Time', width: 76, align: 'right', render: (r) => formatDuration(r.duration_seconds) },
                 { label: 'Pace', width: 84, align: 'right', render: (r) => formatPace(r.distance_meters, r.duration_seconds, r.sport) },
                 { label: 'Elevation', width: 76, align: 'right', render: (r) => (r.elevation_gain_meters ? `${r.elevation_gain_meters.toFixed(0)} m` : '–') },

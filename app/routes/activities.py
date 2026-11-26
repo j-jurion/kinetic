@@ -29,6 +29,13 @@ from app.models import (
 )
 from app.ownership import UserSession as Session
 from app.queries import multisport_parent_sports
+from app.race_efforts import (
+    effort_fields,
+    is_replaced,
+    race_efforts,
+    replaced_by,
+    with_race_efforts,
+)
 from app.routes.common import (
     activity_dump,
     dump,
@@ -412,21 +419,40 @@ def get_activity_detail(activity_id: int) -> dict:
         laps = session.exec(
             select(Lap).where(Lap.activity_id == activity_id).order_by(col(Lap.lap_number))
         ).all()
-        efforts = session.exec(
-            select(BestEffort)
-            .where(BestEffort.activity_id == activity_id)
-            .order_by(col(BestEffort.distance_meters))
-        ).all()
+        # Races count their official time, or their whole time when measured just short of
+        # a distance, like on the best efforts pages (see app/race_efforts.py)
+        efforts = with_race_efforts(
+            session,
+            [
+                (effort, activity)
+                for effort in session.exec(
+                    select(BestEffort).where(BestEffort.activity_id == activity_id)
+                ).all()
+            ],
+            activity_id=activity_id,
+        )
+        efforts.sort(key=lambda row: row[0].distance_meters)
+        races = [effort for effort, _ in race_efforts(session)] if efforts else []
+        replaced = replaced_by([(race, None) for race in races])
         ranked = []
-        for effort in efforts:
-            faster = session.exec(
-                select(func.count(BestEffort.id)).where(
+        for effort, owner in efforts:
+            faster_stored = session.exec(
+                select(BestEffort).where(
                     BestEffort.sport == effort.sport,
                     BestEffort.distance_meters == effort.distance_meters,
                     BestEffort.duration_seconds < effort.duration_seconds,
                 )
-            ).one()
-            ranked.append({**dump(effort), "rank": faster + 1})
+            ).all()
+            faster = sum(1 for e in faster_stored if not is_replaced(e, replaced)) + sum(
+                1
+                for race in races
+                if race.sport == effort.sport
+                and race.distance_meters == effort.distance_meters
+                and race.duration_seconds < effort.duration_seconds
+            )
+            ranked.append(
+                {**dump(effort), **effort_fields(effort, owner), "rank": faster + 1}
+            )
 
         children: list[dict] = []
         parent: Optional[dict] = None
