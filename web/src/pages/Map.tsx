@@ -9,9 +9,6 @@ import { Icon, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading } from '../components/PageLoading'
 
-// Icon colour of a hidden sport's chip
-const MUTED = '#9ca3af'
-
 export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
@@ -62,8 +59,9 @@ export function MapPage() {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
           return (
-            // Shown sports are filled in their colour with a check; hidden ones are grey and
-            // dashed, so the difference does not rest on colour alone
+            // Shown sports are filled in their colour with a check; hidden ones keep a coloured
+            // sport icon but have grey text and a dashed border, so the difference does not rest
+            // on colour alone
             <Chip
               key={sport}
               label={sportLabel(sport)}
@@ -71,7 +69,7 @@ export function MapPage() {
               variant="outlined"
               aria-pressed={on}
               title={on ? `Hide ${sportLabel(sport)} routes` : `Show ${sportLabel(sport)} routes`}
-              icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={MUTED} />}
+              icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={color} />}
               onClick={() => toggle(sport)}
               sx={
                 on
@@ -90,7 +88,7 @@ export function MapPage() {
                       fontWeight: 500,
                       bgcolor: 'transparent',
                       '&&:hover': { bgcolor: 'action.hover', borderColor: color },
-                      '& .MuiChip-icon': { ml: '6px', opacity: 0.7 },
+                      '& .MuiChip-icon': { color, ml: '6px' },
                     }
               }
             />

@@ -76,7 +76,7 @@ export default function MapScreen() {
               accessibilityRole="checkbox"
               accessibilityState={{ checked: on }}
               accessibilityLabel={sportLabel(sport)}
-              // Shown sports are filled in their colour with a check; hidden ones are grey and dashed
+              // Shown sports are filled in their colour with a check; hidden ones keep a coloured icon, with grey text and a dashed border
               style={{
                 flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
                 borderColor: on ? color : c.border,
@@ -84,7 +84,7 @@ export default function MapScreen() {
                 backgroundColor: on ? `${color}26` : 'transparent',
               }}
             >
-              {on ? <Icon name="check" size={14} color={color} /> : <SportIcon sport={sport} size={14} color={c.muted} />}
+              {on ? <Icon name="check" size={14} color={color} /> : <SportIcon sport={sport} size={14} color={color} />}
               <T style={{ color: on ? textColor(color) : c.muted, fontWeight: on ? '600' : '500', fontSize: 12 }}>{sportLabel(sport)}</T>
             </Pressable>
           )
