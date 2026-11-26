@@ -77,9 +77,9 @@ const HTML = `<!doctype html>
   var tappable = []
   var highlighted = []
   // A route smaller than this on screen becomes a pin (see MapSpec.pinSmall)
-  var PIN_PX = 24
+  var PIN_PX = 12
   var clusters = L.markerClusterGroup({
-    showCoverageOnHover: false, spiderfyOnMaxZoom: false, maxClusterRadius: 45,
+    showCoverageOnHover: false, spiderfyOnMaxZoom: false, maxClusterRadius: 35,
     iconCreateFunction: function (cluster) {
       var markers = cluster.getAllChildMarkers()
       var counts = {}

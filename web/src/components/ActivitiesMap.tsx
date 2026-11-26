@@ -14,7 +14,7 @@ import '../styles/map.css'
 const TOL = 10
 // A route smaller than this on screen becomes a pin, so routes far from home stay findable when
 // zoomed out; nearby pins are grouped into a bubble with their count.
-const PIN_PX = 24
+const PIN_PX = 12
 const MAX_LIST = 15
 const CHEVRON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="kin-chev"><polyline points="9 18 15 12 9 6"></polyline></svg>'
@@ -94,7 +94,7 @@ export function ActivitiesMap({ routes }: { routes: MapRoute[] }) {
     const clusters = L.markerClusterGroup({
       showCoverageOnHover: false,
       spiderfyOnMaxZoom: false,
-      maxClusterRadius: 45,
+      maxClusterRadius: 35,
       iconCreateFunction: clusterIcon,
     }).addTo(map)
 
