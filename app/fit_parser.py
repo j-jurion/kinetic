@@ -42,9 +42,6 @@ MAX_EFFORT_SPEED_MS: dict[SportType, float] = {
     SportType.cycling: 25.0,
     SportType.swimming: _MAX_SWIM_SPEED_MS,
 }
-# A timer time under this share of the elapsed time is a watch that paused by itself, not
-# the athlete pausing
-_MIN_TIMER_SHARE = 0.25
 # In files Kinetic writes itself (Apple Health and Strava imports), distance comes from raw
 # GPS or batched samples. Faster than this between two points is a jump in that data, not
 # movement: a GPS fix that lands far away, or distance that arrives in one batch after a
@@ -62,16 +59,18 @@ def moving_duration(summary: dict, sport: Optional[SportType] = None) -> float:
 
     Watches and apps stop the timer when the athlete pauses (or auto-pause kicks in), so the
     timer time is what they show as the workout's time and base its pace on. The elapsed time
-    also counts the pauses. The elapsed time is used instead when the file has no timer time,
-    or when the timer time cannot be right: longer than the elapsed time, under a quarter of
-    it, or faster than a world record over the distance. A watch can auto-pause an open-water
-    swim for most of its length (the wrist under water), leaving a minute of timer time.
+    also counts the pauses, and can run on for weeks: a Garmin activity saved with "resume
+    later", or a watch whose clock jumped, shows hundreds of hours for an hour's ride. The
+    elapsed time is used only when the file has no timer time, or when the timer time cannot
+    be right: longer than the elapsed time, or faster than a world record over the distance.
+    (Open-water swims, where the watch pauses itself under water, are handled by
+    ``activity_duration``.)
     """
     elapsed = float(summary.get("total_elapsed_time") or 0)
     timer = float(summary.get("total_timer_time") or 0)
     if timer <= 0 or elapsed <= 0:
         return timer or elapsed
-    if timer > elapsed or timer < elapsed * _MIN_TIMER_SHARE:
+    if timer > elapsed:
         return elapsed
     distance = float(summary.get("total_distance") or 0)
     limit = MAX_EFFORT_SPEED_MS.get(sport) if sport else None
