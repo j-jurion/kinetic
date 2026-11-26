@@ -17,8 +17,8 @@ from sqlmodel import col, select
 from app.fit_parser import BEST_EFFORT_DISTANCES
 from app.models import Activity, ActivityKind, BestEffort, RaceResult, SportType
 
-# A race may measure this much short of its distance (1%: 422 m of a marathon)
-RACE_SHORTFALL = 0.01
+# A race may measure this much short of its distance (2%: 844 m of a marathon)
+RACE_SHORTFALL = 0.02
 
 
 def race_distance(sport: SportType, distance: Optional[float]) -> Optional[float]:

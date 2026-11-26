@@ -63,7 +63,7 @@ with TestClient(fastapi_app, base_url="http://localhost:5173") as client:
 
     meerdaal = add("Meerdaal marathon", 42150, 3 * 3600 + 30 * 60, ActivityKind.race, day=5)
     add("Long run", 42150, 4 * 3600)  # training: a long run is not a marathon
-    add("Too short", 41700, 3 * 3600, ActivityKind.race)  # 1.2% short is too far
+    add("Too short", 41300, 3 * 3600, ActivityKind.race)  # 2.1% short is too far
     login("alice")
 
     # A race 45 m short is a marathon, with its whole time, wherever best efforts are shown
