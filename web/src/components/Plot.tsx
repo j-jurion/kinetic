@@ -69,7 +69,12 @@ export function Plot({ data, layout, style, onHover, onUnhover }: PlotProps) {
   useEffect(() => {
     const el = ref.current
     return () => {
-      if (el) Plotly.purge(el)
+      // Removing a chart must never take the page down with it
+      try {
+        if (el) Plotly.purge(el)
+      } catch (error) {
+        console.error('Removing a chart failed', error)
+      }
       bound.current = false // purge drops the hover listeners too
     }
   }, [])

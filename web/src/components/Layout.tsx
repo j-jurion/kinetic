@@ -173,9 +173,9 @@ export function Layout() {
 
       <main id="main" tabIndex={-1} className="app-main">
         <div className="app-content column gap-4">
-          {/* A page that fails to show leaves the menu working, instead of blanking the app.
-              Keyed by the path, so going to another page tries again. */}
-          <ErrorBoundary key={location.pathname} fallback={<PageFailed />}>
+          {/* A page that fails to show leaves the menu working, instead of blanking the app;
+              going to another page tries again */}
+          <ErrorBoundary resetKey={location.pathname} fallback={<PageFailed />}>
             <Outlet />
           </ErrorBoundary>
         </div>
