@@ -1,5 +1,6 @@
 // Plotly styling shared by the web and mobile apps, so a chart looks the same on both.
 import type { Data, Layout } from 'plotly.js-dist-min'
+import { traceIds } from './traceIds'
 
 /** A Plotly chart as a [traces, layout] pair, as the chart builders return it. */
 export type Chart = [Data[], Partial<Layout>]
@@ -42,19 +43,10 @@ function modernTrace(trace: Data, surface: string): Data {
 }
 
 /** The chart with the app's light or dark styling applied to its traces and layout. */
-/**
- * Gives every named trace an id from its name, so a sport hidden by clicking the legend stays
- * hidden when the chart is redrawn, even if the sports come in another order.
- */
 function withIds(data: Data[]): Data[] {
-  const seen = new Map<string, number>()
-  return data.map((trace) => {
-    const named = trace as Data & { uid?: string; name?: string }
-    if (named.uid || !named.name) return trace
-    const n = seen.get(named.name) ?? 0
-    seen.set(named.name, n + 1)
-    return { ...trace, uid: n ? `${named.name}#${n}` : named.name } as Data
-  })
+  const named = data as (Data & { uid?: string; name?: string })[]
+  const ids = traceIds(named.map((t) => (t.uid ? undefined : t.name)))
+  return data.map((trace, i) => (ids[i] ? ({ ...trace, uid: ids[i] } as Data) : trace))
 }
 
 export function themedChart({ data, layout }: ChartSpec, dark: boolean): ChartSpec {
