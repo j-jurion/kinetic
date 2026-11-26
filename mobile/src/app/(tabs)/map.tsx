@@ -43,6 +43,7 @@ export default function MapScreen() {
   const spec = useMemo(
     (): MapSpec => ({
       lines: (selected.length ? data?.routes ?? [] : []).map((r) => ({ coords: r.coords, color: sportColor(r.sport, '#6b7280'), weight: 3, opacity: 0.75, id: r.id })),
+      pinSmall: true,
     }),
     [data, selected],
   )

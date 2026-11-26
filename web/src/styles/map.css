@@ -53,3 +53,16 @@
 .kin-close:hover { color: #f97316; background: rgba(249,115,22,.1); }
 .kin-hover.is-locked .kin-close { display: flex; }
 .kin-hover.is-locked .kin-body { padding-right: 16px; }
+
+/* Routes too small to see at the current zoom, drawn as pins and grouped into bubbles */
+.kin-pin {
+  width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box;
+  border: 2.5px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  margin: 2px; transition: transform .1s ease;
+}
+.is-hl > .kin-pin { transform: scale(1.4); }
+.kin-cluster {
+  display: grid; place-items: center; border-radius: 50%; box-sizing: border-box;
+  color: #fff; font: 700 12px Inter, Roboto, sans-serif; cursor: pointer;
+  border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,.45);
+}
