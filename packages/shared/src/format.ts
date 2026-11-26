@@ -268,3 +268,9 @@ export function parseDateRange(since: string, until: string): DateRange {
 export function inDateRange(ms: number, range: DateRange): boolean {
   return (range.sinceMs === null || ms >= range.sinceMs) && (range.untilMs === null || ms < range.untilMs)
 }
+
+/** "GPS measured 45 m short" for a race counted at its official distance; null otherwise. */
+export function measuredShortNote(effort: { source?: string; distance_meters: number; measured_meters?: number | null }): string | null {
+  if (effort.source !== 'race' || effort.measured_meters == null) return null
+  return `GPS measured ${Math.round(effort.distance_meters - effort.measured_meters)} m short`
+}

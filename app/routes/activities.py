@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.ownership import UserSession as Session
 from app.queries import multisport_parent_sports
+from app.race_efforts import effort_fields, race_efforts
 from app.routes.common import (
     activity_dump,
     dump,
@@ -412,21 +413,35 @@ def get_activity_detail(activity_id: int) -> dict:
         laps = session.exec(
             select(Lap).where(Lap.activity_id == activity_id).order_by(col(Lap.lap_number))
         ).all()
-        efforts = session.exec(
-            select(BestEffort)
-            .where(BestEffort.activity_id == activity_id)
-            .order_by(col(BestEffort.distance_meters))
-        ).all()
+        efforts = [
+            (effort, activity)
+            for effort in session.exec(
+                select(BestEffort).where(BestEffort.activity_id == activity_id)
+            ).all()
+        ]
+        # A race measured just short of a distance counts for it, like on the best efforts
+        # pages, and races of other activities count when ranking (see app/race_efforts.py)
+        efforts += race_efforts(session, activity_id=activity_id)
+        efforts.sort(key=lambda row: row[0].distance_meters)
+        races = [effort for effort, _ in race_efforts(session)] if efforts else []
         ranked = []
-        for effort in efforts:
+        for effort, owner in efforts:
             faster = session.exec(
                 select(func.count(BestEffort.id)).where(
                     BestEffort.sport == effort.sport,
                     BestEffort.distance_meters == effort.distance_meters,
                     BestEffort.duration_seconds < effort.duration_seconds,
                 )
-            ).one()
-            ranked.append({**dump(effort), "rank": faster + 1})
+            ).one() + sum(
+                1
+                for race in races
+                if race.sport == effort.sport
+                and race.distance_meters == effort.distance_meters
+                and race.duration_seconds < effort.duration_seconds
+            )
+            ranked.append(
+                {**dump(effort), **effort_fields(effort, owner), "rank": faster + 1}
+            )
 
         children: list[dict] = []
         parent: Optional[dict] = None
