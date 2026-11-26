@@ -21,12 +21,19 @@ class MovingDurationTests(unittest.TestCase):
     def test_uses_the_timer_time(self):
         self.assertEqual(moving_duration(PAUSED_RUN, SportType.running), 1652)
 
+    def test_elapsed_time_that_ran_on_for_weeks(self):
+        # A 31 km ride of an hour whose elapsed time says 48 days ("resume later")
+        ride = {"total_elapsed_time": 4_153_605, "total_timer_time": 3717, "total_distance": 31348}
+        self.assertEqual(moving_duration(ride, SportType.cycling), 3717)
+        # A hike with long breaks: most of the day stopped
+        hike = {"total_elapsed_time": 28800, "total_timer_time": 5400, "total_distance": 9000}
+        self.assertEqual(moving_duration(hike, SportType.hiking), 5400)
+
     def test_falls_back_to_the_elapsed_time(self):
         cases = {
             "no timer time": {"total_elapsed_time": 2141},
             "no elapsed time": {"total_timer_time": 2141},
             "timer longer than elapsed": {"total_elapsed_time": 2141, "total_timer_time": 2500},
-            "timer under a quarter": {"total_elapsed_time": 2141, "total_timer_time": 500},
             # 5 km in 10 minutes is faster than the world record
             "impossible pace": {
                 "total_elapsed_time": 2141, "total_timer_time": 600, "total_distance": 5000,
