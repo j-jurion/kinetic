@@ -1,4 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react'
+import { reloadIfStale } from '../lib/staleVersion'
 import type { CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Button, IconButton } from '@mui/material'
@@ -39,7 +40,7 @@ import '../styles/detail.css'
 import { PageLoading } from '../components/PageLoading'
 
 // The charts pull in Plotly (several MB), so they load only once an activity is opened
-const ActivityCharts = lazy(() => import('../components/ActivityCharts'))
+const ActivityCharts = lazy(reloadIfStale(() => import('../components/ActivityCharts')))
 
 function StatCard({ label, value, color }: { label: string; value: string; color?: string }) {
   const textColor = useTextColor()

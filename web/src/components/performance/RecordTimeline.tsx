@@ -1,4 +1,5 @@
 import { Suspense, lazy, useMemo, useState } from 'react'
+import { reloadIfStale } from '../../lib/staleVersion'
 import { Link } from 'react-router-dom'
 import { distanceLabel, formatDate, formatDuration } from '@kinetic/shared/format'
 import { formatImprovement, recordTimeline } from '@kinetic/shared/performance'
@@ -8,7 +9,7 @@ import { SectionHeading } from './SectionHeading'
 import { Toggle } from './Toggle'
 
 // Plotly is large: only load it when the chart is shown
-const RecordTimelineChart = lazy(() => import('./RecordTimelineChart'))
+const RecordTimelineChart = lazy(reloadIfStale(() => import('./RecordTimelineChart')))
 
 // Records shown per distance before "show all"
 const COLLAPSED = 4

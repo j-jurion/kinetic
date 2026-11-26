@@ -19,14 +19,17 @@ import { FriendsPage } from './pages/Friends'
 import { FriendDetailPage } from './pages/FriendDetail'
 import { SyncPage } from './pages/Sync'
 import { PageLoading } from './components/PageLoading'
+import { reloadIfStale, reloadOnFailedPreload } from './lib/staleVersion'
 
 // The dashboard and chart pages pull in Plotly (several MB), so they load on first visit only
-const GraphsPage = lazy(() => import('./pages/Graphs').then((m) => ({ default: m.GraphsPage })))
-const DashboardPage = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.DashboardPage })))
-const TrainingPage = lazy(() => import('./pages/Training').then((m) => ({ default: m.TrainingPage })))
-const BestEffortDistancePage = lazy(() =>
-  import('./pages/BestEffortDistance').then((m) => ({ default: m.BestEffortDistancePage })),
+const GraphsPage = lazy(reloadIfStale(() => import('./pages/Graphs').then((m) => ({ default: m.GraphsPage }))))
+const DashboardPage = lazy(reloadIfStale(() => import('./pages/Dashboard').then((m) => ({ default: m.DashboardPage }))))
+const TrainingPage = lazy(reloadIfStale(() => import('./pages/Training').then((m) => ({ default: m.TrainingPage }))))
+const BestEffortDistancePage = lazy(
+  reloadIfStale(() => import('./pages/BestEffortDistance').then((m) => ({ default: m.BestEffortDistancePage }))),
 )
+
+reloadOnFailedPreload()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
