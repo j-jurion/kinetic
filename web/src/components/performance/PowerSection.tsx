@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { reloadIfStale } from '../../lib/staleVersion'
 import { Link } from 'react-router-dom'
 import { api } from '../../lib/api'
 import { formatDate } from '@kinetic/shared/format'
@@ -11,7 +12,7 @@ import { SectionHeading } from './SectionHeading'
 import { Toggle } from './Toggle'
 
 // Plotly is large: only load it when there is power data to chart
-const PowerCharts = lazy(() => import('./PowerCharts'))
+const PowerCharts = lazy(reloadIfStale(() => import('./PowerCharts')))
 
 /** Power curve, FTP history and W/kg; hidden when no activity has a power curve. */
 export function PowerSection({ preferRunning }: { preferRunning: boolean }) {

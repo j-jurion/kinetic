@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
+import { reloadIfStale } from '../lib/staleVersion'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { formatDate, formatDuration, kindLabel } from '@kinetic/shared/format'
@@ -12,7 +13,7 @@ import '../styles/races.css'
 import { PageLoading } from '../components/PageLoading'
 
 // Plotly is large: the multisport charts load only when there are such races
-const RaceBreakdownCharts = lazy(() => import('../components/performance/RaceBreakdownCharts'))
+const RaceBreakdownCharts = lazy(reloadIfStale(() => import('../components/performance/RaceBreakdownCharts')))
 
 export function RacesPage() {
   const [results, setResults] = useState<RaceRow[] | null>(null)

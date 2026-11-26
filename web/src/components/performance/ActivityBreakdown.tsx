@@ -1,4 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from 'react'
+import { reloadIfStale } from '../../lib/staleVersion'
 import { api } from '../../lib/api'
 import { eventFromSplits } from '@kinetic/shared/charts/races'
 import { eventFromLegs } from '@kinetic/shared/performance'
@@ -7,7 +8,7 @@ import type { Activity, MultisportEvent, RaceResult } from '@kinetic/shared/type
 import { useLatestRequest } from '../../lib/useLatestRequest'
 
 // Plotly is large: the chart loads only on multisport activities
-const RaceBreakdownCharts = lazy(() => import('./RaceBreakdownCharts'))
+const RaceBreakdownCharts = lazy(reloadIfStale(() => import('./RaceBreakdownCharts')))
 
 interface Props {
   activity: Activity

@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Badge, IconButton, ListItemIcon, Menu, MenuItem, Tooltip } from '@mui/material'
+import { Badge, Button, IconButton, ListItemIcon, Menu, MenuItem, Tooltip } from '@mui/material'
 import { NAV_SECTIONS, pageTitle } from '@kinetic/shared/navigation'
 import { api } from '../lib/api'
 import { useIncomingFriendRequests } from '../lib/friendRequests'
 import { jobStatuses, useBackgroundJobs } from '../lib/backgroundJobs'
 import { useDarkMode } from '../theme'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
+import { ErrorBoundary } from './ErrorBoundary'
+import { EmptyCard } from './fields'
 import { Icon } from './icons'
 import { useNotify } from './Notify'
 import { SyncStatus } from './SyncStatus'
@@ -171,9 +173,27 @@ export function Layout() {
 
       <main id="main" tabIndex={-1} className="app-main">
         <div className="app-content column gap-4">
-          <Outlet />
+          {/* A page that fails to show leaves the menu working, instead of blanking the app.
+              Keyed by the path, so going to another page tries again. */}
+          <ErrorBoundary key={location.pathname} fallback={<PageFailed />}>
+            <Outlet />
+          </ErrorBoundary>
         </div>
       </main>
     </>
+  )
+}
+
+/** Shown instead of a page that failed to show, with a way out that does not lose the menu. */
+function PageFailed() {
+  return (
+    <EmptyCard icon="error_outline">
+      <div className="column items-center gap-2">
+        <span>This page could not be shown. A newer version of Kinetic may have been released.</span>
+        <Button variant="contained" size="small" onClick={() => window.location.reload()}>
+          Reload
+        </Button>
+      </div>
+    </EmptyCard>
   )
 }
