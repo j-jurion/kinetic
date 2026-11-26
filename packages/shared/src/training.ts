@@ -243,6 +243,28 @@ export function weeklyDisciplines(
 // ── Consistency ──────────────────────────────────────────────────────────────
 
 /** Day keys with at least one top-level activity. */
+/** The activities of each day ("yyyy-mm-dd"), in the order they started; multisport legs are
+ * left out, their event stands for them. */
+export function activitiesByDay(activities: TrainingActivity[]): Map<string, TrainingActivity[]> {
+  const days = new Map<string, TrainingActivity[]>()
+  const sorted = [...topLevel(activities)].sort((a, b) => a.date.localeCompare(b.date))
+  for (const a of sorted) {
+    const date = parseDate(a.date)
+    if (!date) continue
+    const key = dayKey(date)
+    const list = days.get(key)
+    if (list) list.push(a)
+    else days.set(key, [a])
+  }
+  return days
+}
+
+/** "Morning run", "Run, Ride" or "Run, Ride +1 more": a day's activities for a tooltip. */
+export function dayActivityNames(list: { name: string }[]): string {
+  if (list.length <= 2) return list.map((a) => a.name).join(', ')
+  return `${list[0].name}, ${list[1].name} +${list.length - 2} more`
+}
+
 export function activeDays(activities: TrainingActivity[]): Set<string> {
   const days = new Set<string>()
   for (const a of topLevel(activities)) {

@@ -1,5 +1,6 @@
 // Power curve and FTP history charts, shared by the web and mobile apps.
 import type { Data, Layout } from 'plotly.js-dist-min'
+import { activityUrl, withLinks } from '../chartLinks'
 import { GOLD, formatDate, toIsoLocal } from '../format'
 import { POWER_DURATIONS, bestCurve, durationLabel, monthsBefore } from '../performance'
 import type { CurvePoint, FtpPoint } from '../performance'
@@ -23,7 +24,7 @@ export function curveChart(activities: TrainingActivity[], weight: number | null
 
   const traces: Data[] = lines
     .filter(([, points]) => points.length > 0)
-    .map(([name, points, color, width]) => ({
+    .map(([name, points, color, width]) => withLinks({
       type: 'scatter',
       mode: 'lines+markers',
       name,
@@ -38,7 +39,7 @@ export function curveChart(activities: TrainingActivity[], weight: number | null
         formatDate(p.activity.date),
       ]) as never,
       hovertemplate: `<b>${name}</b><br>%{customdata[0]}: %{y:.0f} W%{customdata[1]}<br>%{customdata[2]} · %{customdata[3]}<extra></extra>`,
-    }))
+    } as Data, points.map((p) => activityUrl(p.activity.id))))
 
   const top = Math.max(...allTime.map((p) => p.watts)) * 1.1
   const layout: Partial<Layout> = {
@@ -84,7 +85,7 @@ export function ftpChart(monthly: FtpPoint[], settings: { date: string; ftp: num
   const perKg = (w: number) => (weight ? ` (${(w / weight).toFixed(2)} W/kg)` : '')
   const traces: Data[] = []
   if (monthly.length) {
-    traces.push({
+    traces.push(withLinks({
       type: 'scatter',
       mode: 'lines+markers',
       name: 'Estimated FTP (95% of best 20 min, 6 weeks)',
@@ -95,7 +96,7 @@ export function ftpChart(monthly: FtpPoint[], settings: { date: string; ftp: num
       customdata: monthly.map((m) => [perKg(m.ftp), m.activity.name, formatDate(m.activity.date)]) as never,
       hovertemplate:
         '<b>%{x|%b %Y}</b><br>Estimated FTP: %{y:.0f} W%{customdata[0]}<br>From %{customdata[1]} · %{customdata[2]}<extra></extra>',
-    })
+    } as Data, monthly.map((m) => activityUrl(m.activity.id))))
   }
   if (settings.length) {
     // Carry the latest setting through to today

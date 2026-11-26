@@ -4,6 +4,7 @@ import { sportColor } from './format'
 import {
   RAMP_WARNING_PCT,
   activeDays,
+  activitiesByDay,
   addDays,
   aerobicEfficiency,
   brickRuns,
@@ -93,6 +94,7 @@ export function trainingView(overview: TrainingOverview, range: Range, today = n
 
   // ── Consistency: the calendar spans at least the last 52 weeks ──
   const days = activeDays(all)
+  const byDay = activitiesByDay(all)
   const yearAgo = addDays(startOfDay(today), -7 * 52 + 1)
   const calendarFrom = from && from > yearAgo ? from : yearAgo
   // Day keys sort like dates
@@ -112,13 +114,13 @@ export function trainingView(overview: TrainingOverview, range: Range, today = n
 
   return {
     now,
-    fitness: fitnessChart(fitnessShown),
+    fitness: fitnessChart(fitnessShown, byDay),
     weeklyLoad: weeklyLoadChart(weeklyLoad(all, from, today)),
     zoneWeeks,
     split: intensitySplit(zoneWeeks),
     balance: balanceChart(balanceWeeks),
     donut: balanceDonut(balanceWeeks),
-    calendar: calendarChart(calendarGrid(dailyLoads(all), days, calendarFrom, today)),
+    calendar: calendarChart(calendarGrid(dailyLoads(all), days, calendarFrom, today), byDay),
     streaks: {
       current: currentStreak(days, today),
       longest: longestStreak(days),

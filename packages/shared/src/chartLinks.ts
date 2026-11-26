@@ -22,6 +22,12 @@ export const activityUrl = (id: number) => `/activity/${id}`
 /** The activities list for one day. */
 export const dayUrl = (day: Date) => periodActivitiesUrl(day, day)
 
+/** What a day opens: its activity when there is one, the day's list when there are several. */
+export function dayActivitiesUrl(day: Date, activityIds: number[]): string | null {
+  if (!activityIds.length) return null
+  return activityIds.length === 1 ? activityUrl(activityIds[0]) : dayUrl(day)
+}
+
 /** The activities list for the week that starts on `start`. */
 export function weekUrl(start: Date): string {
   const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6)
