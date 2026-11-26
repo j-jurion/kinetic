@@ -8,14 +8,12 @@ import type { MapData, MapRoute } from '@kinetic/shared/types'
 import { Icon, SportIcon } from '../../components/Icon'
 import { LeafletView } from '../../components/LeafletView'
 import type { MapSpec } from '../../components/LeafletView'
-import { Button, Caption, Card, T, useColors } from '../../components/ui'
+import { Button, Caption, Card, FilterChip, T, useColors } from '../../components/ui'
 import { api } from '../../lib/api'
-import { useTextColor } from '../../lib/theme'
 
 /** Every route on one map, coloured by sport; tap a route to list the activities under it. */
 export default function MapScreen() {
   const c = useColors()
-  const textColor = useTextColor()
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
   const [data, setData] = useState<MapData | null>(null)
@@ -70,23 +68,14 @@ export default function MapScreen() {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
           return (
-            <Pressable
+            <FilterChip
               key={sport}
+              label={sportLabel(sport)}
+              on={on}
+              color={color}
+              icon={<SportIcon sport={sport} size={14} color={color} />}
               onPress={() => toggle(sport)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              accessibilityLabel={sportLabel(sport)}
-              // Shown sports are filled in their colour with a check; hidden ones keep a coloured icon, with grey text and a dashed border
-              style={{
-                flexDirection: 'row', alignItems: 'center', gap: 4, borderWidth: 1, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5,
-                borderColor: on ? color : c.border,
-                borderStyle: on ? 'solid' : 'dashed',
-                backgroundColor: on ? `${color}26` : 'transparent',
-              }}
-            >
-              {on ? <Icon name="check" size={14} color={color} /> : <SportIcon sport={sport} size={14} color={color} />}
-              <T style={{ color: on ? textColor(color) : c.muted, fontWeight: on ? '600' : '500', fontSize: 12 }}>{sportLabel(sport)}</T>
-            </Pressable>
+            />
           )
         })}
         <Button title="All" variant="text" onPress={() => select(available)} />

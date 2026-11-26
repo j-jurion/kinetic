@@ -4,7 +4,7 @@ import type { Friend } from '@kinetic/shared/types'
 import { api } from '../lib/api'
 import { Icon } from './Icon'
 import { useNotify } from './Notify'
-import { Field, T, useColors } from './ui'
+import { Field, FilterChip, T, useColors } from './ui'
 
 /**
  * Pick friends by tapping them; a search field filters the list, and a name that is not a
@@ -53,15 +53,7 @@ export function FriendPicker({ friends, selected, onToggle, onCreated, hideSelec
         {shown.map((f) => {
           const on = selected.includes(f.id)
           return (
-            <Pressable
-              key={f.id}
-              onPress={() => onToggle(f)}
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: on }}
-              style={{ borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, borderColor: on ? c.primary : c.border, backgroundColor: on ? c.primarySoft : c.card }}
-            >
-              <T style={{ color: on ? c.primaryText : c.text }}>{f.name}</T>
-            </Pressable>
+            <FilterChip key={f.id} label={f.name} on={on} color={c.primary} icon={<Icon name="person" size={14} color={c.primary} />} onPress={() => onToggle(f)} />
           )
         })}
         {q && !exists && (
