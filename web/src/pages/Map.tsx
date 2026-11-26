@@ -9,6 +9,9 @@ import { Icon, SportIcon } from '../components/icons'
 import { PageHeader } from '../components/PageHeader'
 import { PageLoading } from '../components/PageLoading'
 
+// Icon colour of a hidden sport's chip
+const MUTED = '#9ca3af'
+
 export function MapPage() {
   const [available, setAvailable] = useState<string[] | null>(null)
   const [selected, setSelected] = useState<string[]>([])
@@ -55,21 +58,37 @@ export function MapPage() {
           const color = sportColor(sport, '#6b7280')
           const on = selected.includes(sport)
           return (
+            // Shown sports are filled in their colour with a check; hidden ones are grey and
+            // dashed, so the difference does not rest on colour alone
             <Chip
               key={sport}
               label={sportLabel(sport)}
               size="small"
-              variant={on ? 'filled' : 'outlined'}
-              icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={color} />}
+              variant="outlined"
+              aria-pressed={on}
+              title={on ? `Hide ${sportLabel(sport)} routes` : `Show ${sportLabel(sport)} routes`}
+              icon={on ? <Icon name="check" size={16} color={color} /> : <SportIcon sport={sport} size={16} color={MUTED} />}
               onClick={() => toggle(sport)}
-              sx={{
-                color,
-                borderColor: color,
-                fontWeight: 600,
-                bgcolor: on ? `${color}1f` : 'transparent',
-                '&:hover': { bgcolor: `${color}33` },
-                '& .MuiChip-icon': { color, ml: '6px' },
-              }}
+              sx={
+                on
+                  ? {
+                      color,
+                      borderColor: color,
+                      fontWeight: 600,
+                      bgcolor: `${color}26`,
+                      '&&:hover': { bgcolor: `${color}40` },
+                      '& .MuiChip-icon': { color, ml: '6px' },
+                    }
+                  : {
+                      color: 'text.secondary',
+                      borderColor: 'divider',
+                      borderStyle: 'dashed',
+                      fontWeight: 500,
+                      bgcolor: 'transparent',
+                      '&&:hover': { bgcolor: 'action.hover', borderColor: color },
+                      '& .MuiChip-icon': { ml: '6px', opacity: 0.7 },
+                    }
+              }
             />
           )
         })}
